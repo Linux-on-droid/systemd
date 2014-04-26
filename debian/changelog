@@ -15,6 +15,9 @@ systemd (228-4ubuntu1) UNRELEASED; urgency=medium
     - Change systemd-sysv's conflicts to upstart-sysv. (LP: #1422681)
     - Build using libseccomp on powerpc and ppc64el (See Debian #800818).
 
+    Upgrade fixes, keep until 16.04 LTS release:
+    - systemd Conflicts/Replaces/Provides systemd-services.
+
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 03 Jan 2016 12:00:32 +0100
 
 systemd (228-5) UNRELEASED; urgency=medium
