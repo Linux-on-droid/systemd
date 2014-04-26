@@ -59,3 +59,4 @@ debian/Revert-core-one-step-back-again-for-nspawn-we-actual.patch
 debian/Revert-core-set-RLIMIT_CORE-to-unlimited-by-default.patch
 debian/Revert-Revert-networkd-ndisc-revert-to-letting-the-k.patch
 debian/Revert-core-enable-TasksMax-for-all-services-by-default-a.patch
+ubuntu/Support-system-image-read-only-etc.patch
