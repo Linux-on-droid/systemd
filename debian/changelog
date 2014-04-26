@@ -44,6 +44,9 @@ systemd (220-6ubuntu1) UNRELEASED; urgency=medium
     - Lower apparmor Breaks: to the Ubuntu version that dropped $remote_fs.
     - Change systemd-sysv's conflicts to upstart-sysv. (LP: #1422681)
 
+    Upgrade fixes, keep until 16.04 LTS release:
+    - systemd Conflicts/Replaces/Provides systemd-services.
+
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 07 Jun 2015 17:14:34 +0200
 
 systemd (220-6) unstable; urgency=medium
