@@ -46,6 +46,7 @@ systemd (220-6ubuntu1) UNRELEASED; urgency=medium
 
     Upgrade fixes, keep until 16.04 LTS release:
     - systemd Conflicts/Replaces/Provides systemd-services.
+    - Remove obsolete systemd-logind upstart job.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 07 Jun 2015 17:14:34 +0200
 
