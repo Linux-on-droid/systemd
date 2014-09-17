@@ -40,3 +40,4 @@ Revert-sd_pid_notify_with_fds-fix-computing-msg_cont.patch
 
 ## Ubuntu patches:
 Support-system-image-read-only-etc.patch
+Provide-shutdown-fallback-for-upstart.patch
