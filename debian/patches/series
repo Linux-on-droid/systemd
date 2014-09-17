@@ -41,3 +41,4 @@ Revert-rules-fix-tests-for-removable-state.patch
 
 ## Ubuntu patches:
 Support-system-image-read-only-etc.patch
+Provide-shutdown-fallback-for-upstart.patch
