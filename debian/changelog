@@ -5,6 +5,7 @@ systemd (228-4ubuntu1) UNRELEASED; urgency=medium
       /etc/writable/ instead.
     - Simpler udev maintainer scripts (all platforms must support udev, no
       debconf).
+    - Provide shutdown fallback for upstart. (LP: #1370329)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 03 Jan 2016 12:00:32 +0100
 
