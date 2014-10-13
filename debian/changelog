@@ -34,6 +34,8 @@ systemd (227-2ubuntu1) UNRELEASED; urgency=medium
     - Don't attempt to migrate pid 1 itself when migrating cgroups for started
       units; works around some not yet understood cgproxy/systemd interaction.
       This particularly unbreaks cgproxy in LXC. (LP: #1491557)
+    - Lower Breaks: to plymouth version which has the udev inotify fix in
+      Ubuntu.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 08 Oct 2015 09:22:12 +0200
 
