@@ -33,6 +33,8 @@ systemd (219-6ubuntu1) UNRELEASED; urgency=medium
       upstart's Restart() always reexec'ing /sbin/init on Restart(), even if
       that changes to point to systemd during the upgrade. This avoids running
       systemd during a dist-upgrade. (LP: #1430479)
+    - Lower Breaks: to plymouth version which has the udev inotify fix in
+      Ubuntu.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 27 Mar 2015 14:23:13 +0100
 
