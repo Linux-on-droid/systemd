@@ -6,6 +6,10 @@ systemd (228-4ubuntu1) UNRELEASED; urgency=medium
     - Simpler udev maintainer scripts (all platforms must support udev, no
       debconf).
     - Provide shutdown fallback for upstart. (LP: #1370329)
+    - Add Get-RTC-is-in-local-time-setting-from-etc-default-rc.patch: In
+      Ubuntu we currently keep the setting whether the RTC is in local or UTC
+      time in /etc/default/rcS "UTC=yes|no", instead of /etc/adjtime.
+      (LP: #1377258)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 03 Jan 2016 12:00:32 +0100
 
