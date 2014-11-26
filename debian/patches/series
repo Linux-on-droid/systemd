@@ -73,3 +73,4 @@ udev-Drop-hwdb-update-dependency.patch
 Support-system-image-read-only-etc.patch
 Provide-shutdown-fallback-for-upstart.patch
 Get-RTC-is-in-local-time-setting-from-etc-default-rc.patch
+core-Put-session-scopes-into-all-cgroup-controllers.patch
