@@ -1,0 +1,18 @@
+#!/bin/sh
+# Check user session cgroup "systemd" controller directory is writable so that
+# unprivileged LXC user containers work
+# See core-Make-logind-session-cgroup-user-writable.patch
+
+set -e
+if [ -z "$XDG_SESSION_ID" ]; then
+    echo 'Not running in logind session, skipping'
+    exit 0
+fi
+
+echo "---- cgroups for session $XDG_SESSION_ID -----"
+cat /proc/self/cgroup
+echo "----------------------------------------------"
+
+cgpath=$(awk -F: "{if (\$2 == \"name=systemd\") print \"/sys/fs/cgroup/systemd\"\$3 }" /proc/self/cgroup)
+mkdir "$cgpath/mysubgroup"
+rmdir "$cgpath/mysubgroup"
