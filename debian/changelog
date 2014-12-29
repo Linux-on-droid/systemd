@@ -1,3 +1,9 @@
+systemd (220-6ubuntu2) UNRELEASED; urgency=medium
+
+  * Merge with Debian packaging git head. Remaining Ubuntu changes:
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 07 Jun 2015 17:14:34 +0200
+
 systemd (220-7) UNRELEASED; urgency=medium
 
   [ Michael Biebl ]
