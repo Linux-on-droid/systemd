@@ -35,6 +35,7 @@ systemd (219-5ubuntu1) UNRELEASED; urgency=medium
       systemd during a dist-upgrade. (LP: #1430479)
     - Lower Breaks: to plymouth version which has the udev inotify fix in
       Ubuntu.
+    - Lower libappamor1 dep to the Ubuntu version where it moved to /lib.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 27 Mar 2015 14:23:13 +0100
 
