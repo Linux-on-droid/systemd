@@ -32,3 +32,4 @@ Revert-core-one-step-back-again-for-nspawn-we-actual.patch
 
 ## Ubuntu patches:
 Support-system-image-read-only-etc.patch
+systemctl-Don-t-forward-telinit-u-to-upstart.patch
