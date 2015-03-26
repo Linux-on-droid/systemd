@@ -1,3 +1,13 @@
+systemd (219-4ubuntu10) UNRELEASED; urgency=medium
+
+  * Cherry-pick a couple of upstream commits for adding transient state,
+    fixing a race where mounts become available before the device being
+    available.
+  * Refresh core-mount-ensure-that-we-parse-proc-self-mountinfo.patch for
+    the above cherry-pick.
+
+ -- Didier Roche <didrocks@ubuntu.com>  Tue, 24 Mar 2015 16:02:25 +0100
+
 systemd (219-4ubuntu9) vivid; urgency=medium
 
   * debian/control:
