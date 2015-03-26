@@ -1,4 +1,4 @@
-systemd (219-4ubuntu8) UNRELEASED; urgency=medium
+systemd (219-4ubuntu8) vivid; urgency=medium
 
   * force ifup@ to run after systemd-tmpfiles-setup as ifupdown
     operations require /run/network which is being created by tmpfiles
