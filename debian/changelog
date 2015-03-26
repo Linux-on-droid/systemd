@@ -32,6 +32,7 @@ systemd (228-1ubuntu1) UNRELEASED; urgency=medium
       This particularly unbreaks cgproxy in LXC. (LP: #1491557)
     - Lower Breaks: to plymouth version which has the udev inotify fix in
       Ubuntu.
+    - Change systemd-sysv's conflicts to upstart-sysv. (LP: #1422681)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 13 Nov 2015 08:45:51 +0100
 
