@@ -1,3 +1,11 @@
+systemd (219-4ubuntu8) UNRELEASED; urgency=medium
+
+  * force ifup@ to run after systemd-tmpfiles-setup as ifupdown
+    operations require /run/network which is being created by tmpfiles
+    (LP: #1434020).
+
+ -- Scott Moser <smoser@ubuntu.com>  Fri, 20 Mar 2015 09:48:23 -0400
+
 systemd (219-4ubuntu7) vivid; urgency=medium
 
   * use systemd-ifupdown-helper script to handle ifup and ifdown

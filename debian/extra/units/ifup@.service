@@ -1,6 +1,6 @@
 [Unit]
 Description=ifup for %I
-After=local-fs.target network-pre.target
+After=local-fs.target network-pre.target systemd-tmpfiles-setup.service
 Before=network.target
 BindsTo=sys-subsystem-net-devices-%i.device
 DefaultDependencies=no
