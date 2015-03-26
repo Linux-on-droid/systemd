@@ -7,7 +7,6 @@ DefaultDependencies=no
 
 [Service]
 Type=oneshot
-RuntimeDirectory=network
 ExecStart=/sbin/ifup --allow=hotplug %I
 ExecStartPost=/sbin/ifup --allow=auto %I
 # only fail if ifupdown knows about the iface AND it's not up

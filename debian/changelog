@@ -1,3 +1,12 @@
+systemd (219-4ubuntu6) UNRELEASED; urgency=medium
+
+  * d/extra/units/ifup@.service, d/extra/tmpfiles.d/debian.conf:
+    use tmpfiles.d population of /run/network rather than
+    'RuntimeDirectory' in the ifup service.  This way files created
+    in initramfs are not deleted. (LP: #1432821)
+
+ -- Scott Moser <smoser@ubuntu.com>  Tue, 17 Mar 2015 19:40:45 -0400
+
 systemd (219-4ubuntu5) vivid; urgency=medium
 
   * Merge from experimental branch:
