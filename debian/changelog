@@ -1,4 +1,4 @@
-systemd (219-4ubuntu10) UNRELEASED; urgency=medium
+systemd (219-4ubuntu10) vivid; urgency=medium
 
   * Cherry-pick a couple of upstream commits for adding transient state,
     fixing a race where mounts become available before the device being
