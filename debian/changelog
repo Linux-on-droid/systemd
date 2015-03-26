@@ -1,3 +1,13 @@
+systemd (219-4ubuntu7) UNRELEASED; urgency=medium
+
+  * use systemd-ifupdown-helper script to handle ifup and ifdown
+    of auto or hotplug devices.  This allows iscsi root volumes
+    to work again. (LP: #1432829)
+  * debian/control/tests: disable running of upstart tests until
+    upstart packaging bug 1422681 is resolved.
+
+ -- Scott Moser <smoser@ubuntu.com>  Thu, 19 Mar 2015 11:43:14 -0400
+
 systemd (219-4ubuntu6) vivid; urgency=medium
 
   * d/extra/units/ifup@.service, d/extra/tmpfiles.d/debian.conf:
