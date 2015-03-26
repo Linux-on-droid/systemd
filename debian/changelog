@@ -1,4 +1,4 @@
-systemd (219-4ubuntu6) UNRELEASED; urgency=medium
+systemd (219-4ubuntu6) vivid; urgency=medium
 
   * d/extra/units/ifup@.service, d/extra/tmpfiles.d/debian.conf:
     use tmpfiles.d population of /run/network rather than
