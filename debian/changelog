@@ -39,6 +39,7 @@ systemd (224-2ubuntu1) UNRELEASED; urgency=medium
     - Lower Breaks: to plymouth version which has the udev inotify fix in
       Ubuntu.
     - Lower apparmor Breaks: to the Ubuntu version that dropped $remote_fs.
+    - Change systemd-sysv's conflicts to upstart-sysv. (LP: #1422681)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 27 Aug 2015 08:08:12 +0200
 
