@@ -1,4 +1,4 @@
-systemd (219-4ubuntu9) UNRELEASED; urgency=medium
+systemd (219-4ubuntu9) vivid; urgency=medium
 
   * debian/control:
     - systemd-sysv now conflicts with upstart-sysv, not upstart itself
