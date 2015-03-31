@@ -46,6 +46,9 @@ systemd (219-6ubuntu1) UNRELEASED; urgency=medium
     - Remove obsolete systemd-logind upstart job.
     - Clean up obsolete /etc/udev/rules.d/README.
 
+  * Add debian/udev.lvm2.service to avoid running the dummy lvm2 init script.
+    (LP: #1431107)
+
  -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 27 Mar 2015 14:23:13 +0100
 
 systemd (219-6) experimental; urgency=medium
