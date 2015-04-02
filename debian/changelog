@@ -1,4 +1,4 @@
-systemd (219-6ubuntu1) UNRELEASED; urgency=medium
+systemd (219-6ubuntu1) vivid; urgency=medium
 
   * Merge with Debian experimental branch. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
@@ -49,7 +49,7 @@ systemd (219-6ubuntu1) UNRELEASED; urgency=medium
   * Add debian/udev.lvm2.service to avoid running the dummy lvm2 init script.
     (LP: #1431107)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 27 Mar 2015 14:23:13 +0100
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 02 Apr 2015 10:08:44 +0200
 
 systemd (219-6) experimental; urgency=medium
 
