@@ -3,6 +3,11 @@ systemd (219-6ubuntu2) UNRELEASED; urgency=medium
   * Merge fixes from Debian experimental branch.
   * ifup@.service: Run ifup in the background during boot, to avoid blocking
     network.target. (LP: #1425376)
+  * Drop hwdb-update dependency from udev-trigger.service, which got
+    introduced in v219-stable. This causes udev and plymouth to start too late
+    and isn't really needed in Ubuntu yet as we don't support stateless
+    systems yet and handle hwdb.bin updates through dpkg triggers. This can be
+    dropped again with initramfs-tools 0.117.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 07 Apr 2015 08:51:56 +0200
 
