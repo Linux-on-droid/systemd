@@ -1,9 +1,28 @@
 systemd (219-6ubuntu2) UNRELEASED; urgency=medium
 
+  * Merge fixes from Debian experimental branch.
   * ifup@.service: Run ifup in the background during boot, to avoid blocking
     network.target. (LP: #1425376)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 07 Apr 2015 08:51:56 +0200
+
+systemd (219-7) UNRELEASED; urgency=medium
+
+  [ Martin Pitt ]
+  * Make systemd-sysv's dependency to systemd unversioned. The package just
+    contains 6 symlinks and thus isn't sensitive at all against version
+    mismatches. This avoids running into circular dependencies when testing
+    local debs.
+  * Revert "udev: Drop hwdb-update dependency" and replace with upstream patch
+    which moves it to systemd-udev-trigger.service.
+  * display-managers autopkgtest: Properly wait until all jobs are finished,
+    instead of a static sleep.
+
+  [ Adam Conrad ]
+  * debian/systemd.{triggers,postinst}: Trigger a systemctl daemon-reload
+    when init scripts are installed or removed (Closes: #766429)
+
+ -- Martin Pitt <mpitt@debian.org>  Mon, 06 Apr 2015 13:19:37 +0200
 
 systemd (219-6ubuntu1) vivid; urgency=medium
 
