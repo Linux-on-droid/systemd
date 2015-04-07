@@ -1,4 +1,4 @@
-systemd (219-6ubuntu2) UNRELEASED; urgency=medium
+systemd (219-6ubuntu2) vivid; urgency=medium
 
   * Merge fixes from Debian experimental branch.
   * ifup@.service: Run ifup in the background during boot, to avoid blocking
@@ -9,7 +9,7 @@ systemd (219-6ubuntu2) UNRELEASED; urgency=medium
     systems yet and handle hwdb.bin updates through dpkg triggers. This can be
     dropped again with initramfs-tools 0.117.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 07 Apr 2015 08:51:56 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 07 Apr 2015 16:38:30 +0200
 
 systemd (219-7) UNRELEASED; urgency=medium
 
