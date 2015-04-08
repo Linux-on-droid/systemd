@@ -1,4 +1,4 @@
-systemd (219-6ubuntu3) UNRELEASED; urgency=medium
+systemd (219-6ubuntu3) vivid; urgency=medium
 
   * Merge fixes from Debian experimental branch:
     - Fix display-managers autopkgtest race.
@@ -7,7 +7,7 @@ systemd (219-6ubuntu3) UNRELEASED; urgency=medium
       suppresses "Couldn't connect to plymouth" errors if plymouth is not
       running. (LP: #1429171)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 08 Apr 2015 15:13:31 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 08 Apr 2015 16:50:28 +0200
 
 systemd (219-6ubuntu2) vivid; urgency=medium
 
