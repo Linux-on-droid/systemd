@@ -41,6 +41,7 @@ systemd (220-6ubuntu1) UNRELEASED; urgency=medium
       be dropped again with initramfs-tools 0.117.
     - Lower Breaks: to plymouth version which has the udev inotify fix in
       Ubuntu.
+    - Lower apparmor Breaks: to the Ubuntu version that dropped $remote_fs.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 07 Jun 2015 17:14:34 +0200
 
