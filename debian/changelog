@@ -1,4 +1,4 @@
-systemd (222-2ubuntu1) UNRELEASED; urgency=medium
+systemd (222-2ubuntu1) wily; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
@@ -53,7 +53,7 @@ systemd (222-2ubuntu1) UNRELEASED; urgency=medium
     ExecStartPost, as it spawns a long-running dhclient daemon which we can
     only do in ExecStart. (LP: #1466790)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 28 Jun 2015 12:30:17 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 16 Jul 2015 11:33:54 +0200
 
 systemd (222-3) UNRELEASED; urgency=medium
 
