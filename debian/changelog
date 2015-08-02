@@ -1,4 +1,4 @@
-systemd (224-1ubuntu1) UNRELEASED; urgency=medium
+systemd (224-1ubuntu1) wily; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
@@ -48,7 +48,7 @@ systemd (224-1ubuntu1) UNRELEASED; urgency=medium
     - systemd.postinst: Migrate mountall specific fstab options to standard
       util-linux "nofail" option.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 28 Jun 2015 12:30:17 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 02 Aug 2015 12:43:42 +0200
 
 systemd (224-1) unstable; urgency=medium
 
