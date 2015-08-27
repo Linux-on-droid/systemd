@@ -1,4 +1,4 @@
-systemd (224-2ubuntu1) UNRELEASED; urgency=medium
+systemd (224-2ubuntu1) wily; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
@@ -51,7 +51,7 @@ systemd (224-2ubuntu1) UNRELEASED; urgency=medium
   * Don't build new systemd-journal-remote package and drop libmicrohttpd-dev.
     This is blocked by the MIR (LP #1488341) and feature freeze.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 27 Aug 2015 08:08:12 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 27 Aug 2015 10:19:12 +0200
 
 systemd (224-3) UNRELEASED; urgency=medium
 
