@@ -1,8 +1,8 @@
-systemd (224-2ubuntu2) UNRELEASED; urgency=medium
+systemd (224-2ubuntu2) wily; urgency=medium
 
   * Cherry-pick FTBFS (with pkg-create-dbgsym) fix from Debian master branch.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 27 Aug 2015 13:41:47 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 27 Aug 2015 14:23:04 +0200
 
 systemd (224-2ubuntu1) wily; urgency=medium
 
