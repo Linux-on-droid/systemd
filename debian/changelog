@@ -33,6 +33,8 @@ systemd (228-1ubuntu1) UNRELEASED; urgency=medium
     - Lower Breaks: to plymouth version which has the udev inotify fix in
       Ubuntu.
     - Change systemd-sysv's conflicts to upstart-sysv. (LP: #1422681)
+    - Don't build new systemd-journal-remote package and drop
+      libmicrohttpd-dev. This is blocked by the MIR (LP #1488341).
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 13 Nov 2015 08:45:51 +0100
 
