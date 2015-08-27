@@ -52,7 +52,7 @@ CONFFLAGS_deb += --enable-libcryptsetup \
                  --enable-apparmor \
                  --enable-libcurl \
                  --enable-importd \
-                 --enable-microhttpd
+                 --disable-microhttpd
 else
 CONFFLAGS_deb += --disable-audit
 endif
@@ -160,6 +160,10 @@ override_dh_install:
 	rm -f debian/install/*/lib/*/libsystemd-*.so.*
 	# remove symlinks enabling default-on services
 	rm -rf debian/install/*/etc/systemd/system/*.target.wants/
+	# blocked by MIR/FF in Ubuntu
+	rm -rf debian/install/*/lib/systemd/systemd-journal-upload
+	rm -rf debian/install/*/lib/systemd/system/systemd-journal-upload*
+	rm -rf debian/install/*/etc/systemd/journal-upload.conf
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
 	dh_install -pudev-udeb -plibudev1-udeb --sourcedir=debian/install/udeb
 endif
@@ -264,6 +268,9 @@ endif
 ifneq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
 dh_options = -Nudev-udeb -Nlibudev1-udeb
 endif
+
+# blocked by MIR LP #1488341 and wily FF
+dh_options += -Nsystemd-journal-remote
 
 %:
 	dh $@ $(dh_options) --with autoreconf --parallel
