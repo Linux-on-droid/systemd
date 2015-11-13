@@ -3,6 +3,7 @@ systemd (228-6ubuntu1) UNRELEASED; urgency=medium
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
       /etc/writable/ instead.
+    - Build using libseccomp on powerpc and ppc64el (See Debian #800818).
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 03 Feb 2016 13:34:43 +0100
 
