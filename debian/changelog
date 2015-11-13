@@ -13,6 +13,7 @@ systemd (228-5ubuntu1) UNRELEASED; urgency=medium
     - Chown the "systemd" controller of user scropes to the user. This makes
       unprivileged user LXC containers work under systemd, together with
       libpam-cgfs. (LP: #1346734)
+    - Build using libseccomp on powerpc and ppc64el (See Debian #800818).
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 03 Feb 2016 13:34:43 +0100
 
