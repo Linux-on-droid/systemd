@@ -1,4 +1,4 @@
-systemd (228-1ubuntu1) UNRELEASED; urgency=medium
+systemd (228-1ubuntu1) xenial; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
@@ -48,7 +48,7 @@ systemd (228-1ubuntu1) UNRELEASED; urgency=medium
       that changes to point to systemd during the upgrade. This avoids running
       systemd during a dist-upgrade. (LP: #1430479)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Fri, 13 Nov 2015 08:45:51 +0100
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 18 Nov 2015 18:11:38 +0100
 
 systemd (228-1) unstable; urgency=medium
 
