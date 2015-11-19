@@ -1,3 +1,26 @@
+systemd (228-1ubuntu2) UNRELEASED; urgency=medium
+
+  * Merge with Debian to fix FTBFS.
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 18 Nov 2015 18:11:38 +0100
+
+systemd (228-3) UNRELEASED; urgency=medium
+
+  * debian/rules: Remove temporary debug output from test failures again. All
+    Debian buildd kernels are recent enough now, but add a check for kernels
+    older than 3.13 and ignore test failures for those.
+
+ -- Martin Pitt <mpitt@debian.org>  Thu, 19 Nov 2015 12:09:17 +0100
+
+systemd (228-2) unstable; urgency=medium
+
+  * Remove wrong endianess conversion in test-siphash24 to fix FTBFS on
+    big-endian machines.
+  * Bump libseccomp-dev build dependency to indicate required versions for
+    backporting to jessie. (Closes: #805497)
+
+ -- Martin Pitt <mpitt@debian.org>  Thu, 19 Nov 2015 11:37:45 +0100
+
 systemd (228-1ubuntu1) xenial; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
