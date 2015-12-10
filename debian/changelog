@@ -15,6 +15,8 @@ systemd (229-3ubuntu1) UNRELEASED; urgency=medium
       that changes to point to systemd during the upgrade. This avoids running
       systemd during a dist-upgrade. (LP: #1430479)
     - Provide shutdown fallback for upstart. (LP: #1370329)
+    - Break lvm (<< 2.02.133-1ubuntu1) and remove our dummy /etc/init.d/lvm2
+      on upgrades, as it's shipped by lvm2 now.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 11 Feb 2016 21:39:13 +0100
 
