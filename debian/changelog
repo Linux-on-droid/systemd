@@ -25,6 +25,8 @@ systemd (228-4ubuntu1) UNRELEASED; urgency=medium
       upstart's Restart() always reexec'ing /sbin/init on Restart(), even if
       that changes to point to systemd during the upgrade. This avoids running
       systemd during a dist-upgrade. (LP: #1430479)
+    - Break lvm (<< 2.02.133-1ubuntu1) and remove our dummy /etc/init.d/lvm2
+      on upgrades, as it's shipped by lvm2 now.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 03 Jan 2016 12:00:32 +0100
 
