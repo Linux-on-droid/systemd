@@ -27,6 +27,8 @@ systemd (228-5ubuntu1) UNRELEASED; urgency=medium
       systemd during a dist-upgrade. (LP: #1430479)
     - Break lvm (<< 2.02.133-1ubuntu1) and remove our dummy /etc/init.d/lvm2
       on upgrades, as it's shipped by lvm2 now.
+    - Make udev break on mdadm << 3.3-2ubuntu3, as udev's init script dropped
+      the "Provides: raid-mdadm".
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 03 Feb 2016 13:34:43 +0100
 
