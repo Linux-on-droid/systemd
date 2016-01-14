@@ -30,6 +30,10 @@ systemd (228-4ubuntu1) UNRELEASED; urgency=medium
     - Make udev break on mdadm << 3.3-2ubuntu3, as udev's init script dropped
       the "Provides: raid-mdadm". This needs to be kept until after 16.04 LTS.
 
+  * Adjust our user LXC support patch to only chown the "systemd" controller
+    to the user. Other controllers are now being handled by libpam-cgm. Adjust
+    debian/tests/user-session-cgroups accordingly.
+
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 03 Jan 2016 12:00:32 +0100
 
 systemd (228-5) UNRELEASED; urgency=medium

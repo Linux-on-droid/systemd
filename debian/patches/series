@@ -41,5 +41,5 @@ Revert-core-one-step-back-again-for-nspawn-we-actual.patch
 Support-system-image-read-only-etc.patch
 Provide-shutdown-fallback-for-upstart.patch
 Get-RTC-is-in-local-time-setting-from-etc-default-rc.patch
-core-Put-session-scopes-into-all-cgroup-controllers.patch
+core-Make-logind-session-cgroup-user-writable.patch
 systemctl-Don-t-forward-telinit-u-to-upstart.patch
