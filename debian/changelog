@@ -20,6 +20,8 @@ systemd (228-6ubuntu1) UNRELEASED; urgency=medium
       on upgrades, as it's shipped by lvm2 now.
     - Make udev break on mdadm << 3.3-2ubuntu3, as udev's init script dropped
       the "Provides: raid-mdadm".
+    - Clean up /var/log/udev on upgrade (which is written under upstart, but
+      not under systemd). (LP: #1537211)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 03 Feb 2016 13:34:43 +0100
 
