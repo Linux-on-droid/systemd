@@ -2,6 +2,9 @@ systemd (228-5ubuntu3) UNRELEASED; urgency=medium
 
   * Revert Ubuntu delta about setting UTC in /etc/default/rcS instead of
     /etc/adjtime. (LP: #1541532)
+  * Upgrade fix: systemd.postinst: Bump Version comparison for migrating the
+    UTC setting from /etc/default/rcS to /etc/adjtime, to run it for upgrades
+    to 16.04.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 04 Feb 2016 22:42:31 +0100
 
