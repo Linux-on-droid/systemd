@@ -1,3 +1,10 @@
+systemd (228-5ubuntu3) UNRELEASED; urgency=medium
+
+  * Revert Ubuntu delta about setting UTC in /etc/default/rcS instead of
+    /etc/adjtime. (LP: #1541532)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 04 Feb 2016 22:42:31 +0100
+
 systemd (228-5ubuntu2) xenial; urgency=medium
 
   * Make-run-lock-tmpfs-an-API-fs.patch: Drop /run/lock from
