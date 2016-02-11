@@ -1,4 +1,4 @@
-systemd (229-1ubuntu1) UNRELEASED; urgency=medium
+systemd (229-1ubuntu1) xenial; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
@@ -25,7 +25,7 @@ systemd (229-1ubuntu1) UNRELEASED; urgency=medium
     - systemd.postinst: Bump Version comparison for migrating the UTC setting
       from /etc/default/rcS to /etc/adjtime, to run it for upgrades to 16.04.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 11 Feb 2016 21:39:13 +0100
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 11 Feb 2016 22:01:48 +0100
 
 systemd (229-1) unstable; urgency=medium
 
