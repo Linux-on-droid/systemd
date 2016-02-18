@@ -1,11 +1,11 @@
-systemd (229-1ubuntu4) UNRELEASED; urgency=medium
+systemd (229-1ubuntu4) xenial; urgency=medium
 
   * debian/tests/systemd-fsckd: Use grub.d/50-cloudimg-settings.cfg as a
     template for generating our custom one instead of 90-autopkgtest.cfg. The
     latter does not exist on non-x86 architectures and is not relevant for
     this test.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Feb 2016 18:01:06 +0100
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Feb 2016 18:01:52 +0100
 
 systemd (229-1ubuntu2) xenial; urgency=medium
 
