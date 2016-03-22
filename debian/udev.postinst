@@ -106,7 +106,7 @@ EOF
   # ifupdown accordingly
   if dpkg --compare-versions "$2" lt-nl "229-2ubuntu2"; then
     for i in /sys/class/net/eno*; do
-        if [ "${i#*/eno}" -gt 16383 ]; then
+        if [ "${i#*/eno}" -gt 16383 ] 2>/dev/null; then
             if slotname=$(udevadm info --query=property $i | grep '^ID_NET_NAME_SLOT='); then
                 slotname=${slotname#*=}
                 echo "Migrating broken onboard-based network interface name ${i##*/} to slot-based name $slotname in /etc/network/interfaces and interfaces.d/..."
