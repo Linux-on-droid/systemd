@@ -2,6 +2,11 @@ systemd (229-3ubuntu2) UNRELEASED; urgency=medium
 
   * udev.postinst: Quiesce error message if /sys/class/net/eno* does not
     exist. (LP: #1560112)
+  * Fix assertion crash when processing a (broken) device without a sysfs
+    path. (Closes: #819290, LP: #1560695)
+  * Fix crash when shutdown is issued from a non-tty. (LP: #1553040)
+  * networkd: Stay running while any non-loopback interface is up.
+    (Closes: #819414)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 22 Mar 2016 08:53:32 +0100
 
