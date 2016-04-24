@@ -92,7 +92,7 @@ EOF
   # this is being written under upstart, but not under systemd; clean up
   # obsolete files
   if [ -d /run/systemd/system ]; then
-      rm -f /var/log/udev
+      rm -f /var/log/udev || true
   fi
 
   # transition existing interface names on s390x for #1526808
