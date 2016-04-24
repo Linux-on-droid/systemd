@@ -15,6 +15,7 @@ systemd (229-4ubuntu5) UNRELEASED; urgency=medium
     accessible to the user session. This avoids having to install libu2f-host0
     (which isn't discoverable at all) to make those devices work.
     (LP: #1387908)
+  * On shutdown, unmount /tmp before disabling swap. (Closes: #788303)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 24 Apr 2016 20:59:08 +0200
 

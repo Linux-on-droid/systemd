@@ -30,6 +30,7 @@ man-update-links-to-kernel.org-cgroup-documentation.patch
 man-fix-cgroup-attributes-for-device-throttling.patch
 rules-set-SYSTEMD_READY-0-on-DM_UDEV_DISABLE_OTHER_RULES_.patch
 Install-correctly-report-symlink-creations.patch
+tmp.mount.hm4-After-swap.target-3087.patch
 
 ## Debian specific patches
 Add-back-support-for-Debian-specific-config-files.patch
