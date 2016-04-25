@@ -2,6 +2,12 @@ systemd (229-4ubuntu5) UNRELEASED; urgency=medium
 
   * debian/udev.postinst: Don't fail if /var/log/udev is a directory.
     (LP: #1574004)
+  * Set MAC based name for USB network interfaces only for universally
+    administered (i. e. stable) MACs, not for locally administered (i. e.
+    randomly generated) ones. Drop /lib/systemd/network/90-mac-for-usb.link
+    (as link files don't currently support globs for MACAddress=) and replace
+    with an udev rule in /lib/udev/rules.d/73-special-net-names.rules.
+    (Closes: #812575, LP: #1574483)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 24 Apr 2016 20:59:08 +0200
 
