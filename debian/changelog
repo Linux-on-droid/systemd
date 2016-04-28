@@ -8,6 +8,9 @@ systemd (229-4ubuntu5) UNRELEASED; urgency=medium
     (as link files don't currently support globs for MACAddress=) and replace
     with an udev rule in /lib/udev/rules.d/73-special-net-names.rules.
     (Closes: #812575, LP: #1574483)
+  * debian/extra/init-functions.d/40-systemd: Invoke status command with
+    --no-pager, to avoid blocking scripts that call an init.d script with
+    "status" with an unexpected pager process. (Closes: #765175, LP: #1576409)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 24 Apr 2016 20:59:08 +0200
 
@@ -27,7 +30,6 @@ systemd (229-4ubuntu3) xenial; urgency=medium
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 12 Apr 2016 10:43:34 +0200
 
 systemd (229-4ubuntu2) xenial; urgency=medium
-
   * debian/tests/unit-config: Call "daemon-reload" to clean up generated units
     in between tests.
   * debian/tests/unit-config: Check that enable/disable commands are
