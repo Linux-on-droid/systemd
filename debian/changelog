@@ -1,4 +1,4 @@
-systemd (229-4ubuntu5) UNRELEASED; urgency=medium
+systemd (229-4ubuntu5) xenial-proposed; urgency=medium
 
   * debian/udev.postinst: Don't fail if /var/log/udev is a directory.
     (LP: #1574004)
@@ -17,7 +17,7 @@ systemd (229-4ubuntu5) UNRELEASED; urgency=medium
     (LP: #1387908)
   * On shutdown, unmount /tmp before disabling swap. (Closes: #788303)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 24 Apr 2016 20:59:08 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Mon, 02 May 2016 15:04:42 -0500
 
 systemd (229-4ubuntu4) xenial; urgency=medium
 
