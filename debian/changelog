@@ -1,10 +1,10 @@
-systemd (229-6ubuntu1) UNRELEASED; urgency=medium
+systemd (229-6ubuntu1) yakkety; urgency=medium
 
   * Merge with Debian unstable. Remaining Ubuntu changes:
     - Hack to support system-image read-only /etc, and modify files in
       /etc/writable/ instead.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Mon, 25 Apr 2016 11:52:55 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 12 May 2016 10:30:59 +0200
 
 systemd (229-6) unstable; urgency=medium
 
