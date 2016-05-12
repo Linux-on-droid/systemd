@@ -1,4 +1,4 @@
-systemd (229-4ubuntu6) UNRELEASED; urgency=medium
+systemd (229-4ubuntu6) xenial-proposed; urgency=medium
 
   * Add a DHCP exit hook for pushing received NTP servers into timesyncd.
     (LP: #1578663)
@@ -12,7 +12,7 @@ systemd (229-4ubuntu6) UNRELEASED; urgency=medium
     (Closes: #823530, LP: #1578080)
   * debian/gbp.conf: Switch to ubuntu-xenial branch.
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Mon, 02 May 2016 15:04:42 -0500
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 12 May 2016 10:39:30 +0200
 
 systemd (229-4ubuntu5) xenial-proposed; urgency=medium
 
