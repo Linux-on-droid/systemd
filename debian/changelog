@@ -10,6 +10,7 @@ systemd (229-4ubuntu6) UNRELEASED; urgency=medium
     too little for the ones mentioned above. Effective (and much stricter)
     limits should instead be put into units individually.
     (Closes: #823530, LP: #1578080)
+  * debian/gbp.conf: Switch to ubuntu-xenial branch.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Mon, 02 May 2016 15:04:42 -0500
 
