@@ -295,7 +295,8 @@ Section: admin
 Priority: important
 Architecture: linux-any
 Multi-Arch: foreign
-Pre-Depends: ${misc:Pre-Depends}
+Pre-Depends: ${misc:Pre-Depends},
+         dpkg (>= 1.17.14),
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
