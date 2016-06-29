@@ -54,7 +54,7 @@ index edc6df9..0227347 100644
  
        <varlistentry>
 diff --git a/src/core/main.c b/src/core/main.c
-index 77f9239..1da388b 100644
+index 6479da6..6e34ca4 100644
 --- a/src/core/main.c
 +++ b/src/core/main.c
 @@ -123,8 +123,8 @@ static FILE* arg_serialization = NULL;

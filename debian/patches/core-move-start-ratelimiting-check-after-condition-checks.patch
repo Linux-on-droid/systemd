@@ -1,0 +1,71 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Tue, 26 Apr 2016 20:34:33 +0200
+Subject: core: move start ratelimiting check after condition checks
+
+With #2564 unit start rate limiting was moved from after the condition checks
+are to before they are made, in an attempt to fix #2467. This however resulted
+in #2684. However, with a previous commit a concept of per socket unit trigger
+rate limiting has been added, to fix #2467 more comprehensively, hence the
+start limit can be moved after the condition checks again, thus fixing #2684.
+
+Fixes: #2684
+---
+ man/systemd.unit.xml                  |  3 ++-
+ src/core/load-fragment-gperf.gperf.m4 |  1 +
+ src/core/unit.c                       | 10 +++++-----
+ 3 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/man/systemd.unit.xml b/man/systemd.unit.xml
+index 5794681..39cb525 100644
+--- a/man/systemd.unit.xml
++++ b/man/systemd.unit.xml
+@@ -768,7 +768,8 @@
+         manually at a later point, from which point on, the restart logic is again activated. Note that
+         <command>systemctl reset-failed</command> will cause the restart rate counter for a service to be flushed,
+         which is useful if the administrator wants to manually start a unit and the start limit interferes with
+-        that.</para></listitem>
++        that. Note that this rate-limiting is enforced after any unit condition checks are executed, and hence unit
++        activations with failing conditions are not counted by this rate limiting.</para></listitem>
+       </varlistentry>
+ 
+       <varlistentry>
+diff --git a/src/core/load-fragment-gperf.gperf.m4 b/src/core/load-fragment-gperf.gperf.m4
+index e7a7807..b613549 100644
+--- a/src/core/load-fragment-gperf.gperf.m4
++++ b/src/core/load-fragment-gperf.gperf.m4
+@@ -220,6 +220,7 @@ Service.TimeoutStartSec,         config_parse_service_timeout,       0,
+ Service.TimeoutStopSec,          config_parse_service_timeout,       0,                             0
+ Service.RuntimeMaxSec,           config_parse_sec,                   0,                             offsetof(Service, runtime_max_usec)
+ Service.WatchdogSec,             config_parse_sec,                   0,                             offsetof(Service, watchdog_usec)
++m4_dnl The following three only exist for compatibility, they moved into Unit, see above
+ Service.StartLimitInterval,      config_parse_sec,                   0,                             offsetof(Unit, start_limit.interval)
+ Service.StartLimitBurst,         config_parse_unsigned,              0,                             offsetof(Unit, start_limit.burst)
+ Service.StartLimitAction,        config_parse_failure_action,        0,                             offsetof(Unit, start_limit_action)
+diff --git a/src/core/unit.c b/src/core/unit.c
+index d39e3dc..b864450 100644
+--- a/src/core/unit.c
++++ b/src/core/unit.c
+@@ -1472,11 +1472,6 @@ int unit_start(Unit *u) {
+         if (UNIT_IS_ACTIVE_OR_RELOADING(state))
+                 return -EALREADY;
+ 
+-        /* Make sure we don't enter a busy loop of some kind. */
+-        r = unit_start_limit_test(u);
+-        if (r < 0)
+-                return r;
+-
+         /* Units that aren't loaded cannot be started */
+         if (u->load_state != UNIT_LOADED)
+                 return -EINVAL;
+@@ -1518,6 +1513,11 @@ int unit_start(Unit *u) {
+         if (!UNIT_VTABLE(u)->start)
+                 return -EBADR;
+ 
++        /* Make sure we don't enter a busy loop of some kind. */
++        r = unit_start_limit_test(u);
++        if (r < 0)
++                return r;
++
+         /* We don't suppress calls to ->start() here when we are
+          * already starting, to allow this request to be used as a
+          * "hurry up" call, for example when the unit is in some "auto

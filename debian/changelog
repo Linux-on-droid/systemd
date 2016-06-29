@@ -2,6 +2,7 @@ systemd (229-4ubuntu7) UNRELEASED; urgency=medium
 
   * Add pre-dependency to dpkg >= 1.17.14 on udev, to ensure that
     dpkg-maintscript-helper symlink_to_dir is available. (LP: #1585406)
+  * Add activation rate limiting for socket units. (LP: #1568094)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 05 Jun 2016 21:46:07 +0200
 
