@@ -158,6 +158,7 @@ delta-Fix-broken-separator-support.patch
 sd-dhcp-client-make-request-broadcasts-configurable.patch
 make-sure-all-swap-units-are-ordered-before-the-swap-targ.patch
 nspawn-fix-network-interface.patch
+service-use-the-right-timeout-for-stop-processes-we-fork.patch
 
 ## Debian specific patches:
 Add-back-support-for-Debian-specific-config-files.patch
