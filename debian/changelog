@@ -2,6 +2,8 @@ systemd (215-17+deb8u5) UNRELEASED; urgency=medium
 
   * Use the right timeout for stop processes we fork. This ensures that
     services are properly killed after a given timeout. (Closes: #813702)
+  * Don't reset log level to NOTICE if we get quiet on the kernel cmdline.
+    (Closes: #828006)
 
  -- Michael Biebl <biebl@debian.org>  Fri, 01 Jul 2016 17:35:05 +0200
 

@@ -1,0 +1,40 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 4 Feb 2015 01:42:49 +0100
+Subject: core: don't reset log level to NOTICE if we get quiet on the kernel
+ cmdline
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+quiet should really just have an effect on the stuff we dump on the
+console, not what we log elsewhere.
+
+Hence:
+
+        debug on kernel cmdline → interpreted by every tool, turns up
+        log levels to "debug" everywhere.
+
+        quiet on kernel cmdline → interpreted only by PID 1 (and
+        obviously the kernel) no alteration of the max log level, but
+        turns off status output.
+
+http://lists.freedesktop.org/archives/systemd-devel/2014-December/026271.html
+
+(cherry-picked from commit 5e07a79e84ab8b045b9df1a2719f14fc84471a1d)
+---
+ src/core/main.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/core/main.c b/src/core/main.c
+index 904cdb8..7ad4bb0 100644
+--- a/src/core/main.c
++++ b/src/core/main.c
+@@ -377,8 +377,6 @@ static int parse_proc_cmdline_item(const char *key, const char *value) {
+ 
+         } else if (streq(key, "quiet") && !value) {
+ 
+-                log_set_max_level(LOG_NOTICE);
+-
+                 if (arg_show_status == _SHOW_STATUS_UNSET)
+                         arg_show_status = SHOW_STATUS_AUTO;
+ 
