@@ -160,6 +160,7 @@ make-sure-all-swap-units-are-ordered-before-the-swap-targ.patch
 nspawn-fix-network-interface.patch
 service-use-the-right-timeout-for-stop-processes-we-fork.patch
 core-don-t-reset-log-level-to-NOTICE-if-we-get-quiet-on-t.patch
+sd-event-fix-prepare-priority-queue-comparison-function.patch
 
 ## Debian specific patches:
 Add-back-support-for-Debian-specific-config-files.patch
