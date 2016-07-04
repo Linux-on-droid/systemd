@@ -11,6 +11,9 @@ systemd (215-17+deb8u5) UNRELEASED; urgency=medium
   * Update links to kernel.org cgroup documentation.
     The systemd.resource-control man page had references to /cgroups/ which
     moved to /cgroup-v1/. (Closes: #819970)
+  * Don't start console-getty.service when /dev/console is missing.
+    Avoids repeated unsuccessful start attempts of agetty inside (docker)
+    containers. (Closes: #829537)
 
  -- Michael Biebl <biebl@debian.org>  Fri, 01 Jul 2016 17:35:05 +0200
 
