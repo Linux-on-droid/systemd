@@ -9,6 +9,7 @@ systemd (229-4ubuntu7) UNRELEASED; urgency=medium
     kernel command line or if /etc/udev/rules.d/80-net-setup-link.rules is a
     symlink to /dev/null, to be consistent with disabling the *.link files and
     the documented way to disable ifnames. (Closes: #824491, LP: #1593379)
+  * coredump: Fix "Coredump file descriptor missing". (LP: #1602256)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 05 Jun 2016 21:46:07 +0200
 

@@ -1,0 +1,36 @@
+From: Evgeny Vereshchagin <evvers@ya.ru>
+Date: Wed, 11 May 2016 15:29:24 +0300
+Subject: coredump: use next_datagram_size_fd instead of ioctl(FIONREAD)
+ (#3237)
+
+We need to be sure that the size returned here actually matches what we will read with recvmsg() next
+
+Fixes #2984
+---
+ src/coredump/coredump.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/coredump/coredump.c b/src/coredump/coredump.c
+index 085909c..39b97c4 100644
+--- a/src/coredump/coredump.c
++++ b/src/coredump/coredump.c
+@@ -739,15 +739,16 @@ static int process_socket(int fd) {
+                         .msg_iovlen = 1,
+                 };
+                 ssize_t n;
+-                int l;
++                ssize_t l;
+ 
+                 if (!GREEDY_REALLOC(iovec, n_iovec_allocated, n_iovec + 3)) {
+                         r = log_oom();
+                         goto finish;
+                 }
+ 
+-                if (ioctl(fd, FIONREAD, &l) < 0) {
+-                        r = log_error_errno(errno, "FIONREAD failed: %m");
++                l = next_datagram_size_fd(fd);
++                if (l < 0) {
++                        r = log_error_errno(l, "Failed to determine datagram size to read: %m");
+                         goto finish;
+                 }
+ 
