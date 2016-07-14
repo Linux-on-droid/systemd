@@ -1,3 +1,23 @@
+systemd (230-7~bpo8+1) jessie-backports; urgency=medium
+
+  [ Michael Prokop ]
+  * [372e4e1] jessie-backport: New patch to revert libmount changes
+  * [b773297] jessie-backport: Drop versioned Build-Depends on libcap-dev
+  * [84287a5] jessie-backport: Lower Build-Depends on libmount-dev to >=
+    2.20
+  * [32fac24] jessie-backport: Adjust dependencies on util-linux + mount
+  * [ad889fe] jessie-backport: Adjust util-linux dependency for udev
+  * [54bd141] jessie-backport: New patch for swapon behavior changes.
+    Thanks to Michael Biebl <biebl@debian.org> for the pointer
+  * [b644ddc] jessie-backport: gbp.conf: set debian-branch to jessie-
+    backports
+
+  [ Martin Pitt ]
+  * [c573717] systemd.postinst: Remove systemd-networkd-resolvconf-
+    update.path removal leftover (see #830778)
+
+ -- Michael Prokop <mika@debian.org>  Thu, 14 Jul 2016 10:50:28 +0200
+
 systemd (230-7) unstable; urgency=medium
 
   * Tell dh_shlibdeps to look in the systemd package for libraries. Otherwise
