@@ -1,0 +1,28 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 20 Apr 2016 20:12:14 +0200
+Subject: units: order systemd-user-sessions.service after network.target
+
+That way we can be sure that local users are logged out before the network is
+shut down when the system goes down, so that SSH session should be ending
+cleanly before the system goes down.
+
+Fixes: #2390
+
+(cherry-picked from commit 8c856804780681e135d98ca94d08afe247557770)
+---
+ units/systemd-user-sessions.service.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/units/systemd-user-sessions.service.in b/units/systemd-user-sessions.service.in
+index c09c05d..b4ea5a1 100644
+--- a/units/systemd-user-sessions.service.in
++++ b/units/systemd-user-sessions.service.in
+@@ -8,7 +8,7 @@
+ [Unit]
+ Description=Permit User Sessions
+ Documentation=man:systemd-user-sessions.service(8)
+-After=remote-fs.target nss-user-lookup.target
++After=remote-fs.target nss-user-lookup.target network.target
+ 
+ [Service]
+ Type=oneshot

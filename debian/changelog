@@ -14,6 +14,11 @@ systemd (215-17+deb8u5) UNRELEASED; urgency=medium
   * Don't start console-getty.service when /dev/console is missing.
     Avoids repeated unsuccessful start attempts of agetty inside (docker)
     containers. (Closes: #829537)
+  * Order systemd-user-sessions.service after nss-user-lookup.target. We
+    should not allow logins before NIS/LDAP users are available.
+  * Order systemd-user-sessions.service after network.target. That way we can
+    be sure that local users are logged out and SSH sessions are ended cleanly
+    before the network is shut down when the system goes down.
 
  -- Michael Biebl <biebl@debian.org>  Fri, 01 Jul 2016 17:35:05 +0200
 

@@ -1,0 +1,25 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Fri, 3 Apr 2015 14:31:35 +0200
+Subject: units: explicitly order systemd-user-sessions.service after
+ nss-user-lookup.target
+
+We should not allow logins before NIS/LDAP users are available.
+
+(cherry-picked from commit efb3e19be9c568974b221990b9e84fb5304c5537)
+---
+ units/systemd-user-sessions.service.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/units/systemd-user-sessions.service.in b/units/systemd-user-sessions.service.in
+index 0869e73..c09c05d 100644
+--- a/units/systemd-user-sessions.service.in
++++ b/units/systemd-user-sessions.service.in
+@@ -8,7 +8,7 @@
+ [Unit]
+ Description=Permit User Sessions
+ Documentation=man:systemd-user-sessions.service(8)
+-After=remote-fs.target
++After=remote-fs.target nss-user-lookup.target
+ 
+ [Service]
+ Type=oneshot
