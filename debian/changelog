@@ -3,6 +3,11 @@ systemd (229-4ubuntu13) UNRELEASED; urgency=medium
   [ Martin Pitt ]
   * Backport graphical-session{,-pre}.target user units, for future usage from
     snaps. (LP: #1640293)
+  * debian/rules: Clean up *.busname units. They are useless in 16.04 as they
+    will always be "condition failed" as kdbus has never existed. But they add
+    ordering constraints which make it impossible to start
+    systemd-networkd.service during early boot, which is an upcoming
+    requirement for cloud-init. (Part of LP: #1636912)
 
   [ Dan Streetman ]
   * rules: introduce disk/by-id (wwid and model_serial) symlinks
