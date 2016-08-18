@@ -1,0 +1,38 @@
+From: David Michael <fedora.dm0@gmail.com>
+Date: Thu, 7 Jul 2016 20:43:01 -0700
+Subject: core: queue loading transient units after setting their properties
+ (#3676)
+
+The unit load queue can be processed in the middle of setting the
+unit's properties, so its load_state would no longer be UNIT_STUB
+for the check in bus_unit_set_properties(), which would cause it to
+incorrectly return an error.
+---
+ src/core/dbus-manager.c | 1 +
+ src/core/unit.c         | 1 -
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/core/dbus-manager.c b/src/core/dbus-manager.c
+index 00372b9..bfbb365 100644
+--- a/src/core/dbus-manager.c
++++ b/src/core/dbus-manager.c
+@@ -683,6 +683,7 @@ static int transient_unit_from_message(
+                 return r;
+ 
+         /* Now load the missing bits of the unit we just created */
++        unit_add_to_load_queue(u);
+         manager_dispatch_load_queue(m);
+ 
+         *unit = u;
+diff --git a/src/core/unit.c b/src/core/unit.c
+index b864450..872f552 100644
+--- a/src/core/unit.c
++++ b/src/core/unit.c
+@@ -3460,7 +3460,6 @@ int unit_make_transient(Unit *u) {
+ 
+         unit_add_to_dbus_queue(u);
+         unit_add_to_gc_queue(u);
+-        unit_add_to_load_queue(u);
+ 
+         return 0;
+ }

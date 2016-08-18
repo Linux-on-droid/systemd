@@ -34,6 +34,7 @@ tmp.mount.hm4-After-swap.target-3087.patch
 core-introduce-activation-rate-limiting-for-socket-units.patch
 core-move-start-ratelimiting-check-after-condition-checks.patch
 coredump-use-next_datagram_size_fd-instead-of-ioctl-FIONR.patch
+core-queue-loading-transient-units-after-setting-their-pr.patch
 
 ## Debian specific patches
 Add-back-support-for-Debian-specific-config-files.patch

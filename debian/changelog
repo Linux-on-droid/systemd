@@ -1,3 +1,10 @@
+systemd (229-4ubuntu8) UNRELEASED; urgency=medium
+
+  * Queue loading transient units after setting their properties. Fixes
+    starting VMs with libvirt. (LP: #1529079)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Aug 2016 11:16:16 +0200
+
 systemd (229-4ubuntu7) xenial-proposed; urgency=medium
 
   * Add pre-dependency to dpkg >= 1.17.14 on udev, to ensure that
