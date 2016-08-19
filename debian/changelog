@@ -2,6 +2,9 @@ systemd (229-4ubuntu8) UNRELEASED; urgency=medium
 
   * Queue loading transient units after setting their properties. Fixes
     starting VMs with libvirt. (LP: #1529079)
+  * Connect pid1's stdin/out/err fds to /dev/null also for containers. This
+    fixes generators which expect a valid stdout/err fd in some container
+    technologies. (LP: #1608953)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Aug 2016 11:16:16 +0200
 

@@ -1,0 +1,36 @@
+From: Franck Bui <fbui@suse.com>
+Date: Mon, 20 Jun 2016 21:45:28 +0200
+Subject: Connect pid1's stdin/out/err fds to /dev/null also for containers
+
+This fixes generators which expect a valid stdout/err fd in some container
+technologies.
+
+Backported (in spirit) from upstream commit 6edefe0b06.
+
+Bug-Ubuntu: https://launchpad.net/bugs/1608953
+---
+ src/core/main.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/main.c b/src/core/main.c
+index f889daa..4f277e3 100644
+--- a/src/core/main.c
++++ b/src/core/main.c
+@@ -1354,14 +1354,15 @@ int main(int argc, char *argv[]) {
+         log_set_upgrade_syslog_to_journal(true);
+ 
+         /* Disable the umask logic */
+-        if (getpid() == 1)
++        if (getpid() == 1) {
+                 umask(0);
++                make_null_stdio();
++        }
+ 
+         if (getpid() == 1 && detect_container() <= 0) {
+ 
+                 /* Running outside of a container as PID 1 */
+                 arg_running_as = MANAGER_SYSTEM;
+-                make_null_stdio();
+                 log_set_target(LOG_TARGET_KMSG);
+                 log_open();
+ 
