@@ -5,6 +5,12 @@ systemd (229-4ubuntu8) UNRELEASED; urgency=medium
   * Connect pid1's stdin/out/err fds to /dev/null also for containers. This
     fixes generators which expect a valid stdout/err fd in some container
     technologies. (LP: #1608953)
+  * 73-usb-net-by-mac.rules: Do not run readlink for *every* uevent, and
+    merely check if /etc/udev/rules.d/80-net-setup-link.rules exists.
+    A common way to disable an udev rule is to just "touch" it in
+    /etc/udev/rule.d/ (i. e. empty file), and if the rule is customized we
+    cannot really predict anyway if the user wants MAC-based USB net names or
+    not. (LP: #1615021)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Aug 2016 11:16:16 +0200
 
