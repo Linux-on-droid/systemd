@@ -11,6 +11,9 @@ systemd (229-4ubuntu8) UNRELEASED; urgency=medium
     /etc/udev/rule.d/ (i. e. empty file), and if the rule is customized we
     cannot really predict anyway if the user wants MAC-based USB net names or
     not. (LP: #1615021)
+  * systemd-networkd-resolvconf-update.service: Also pick up DNS servers from
+    individual link leases, as they sometimes don't appear in the global
+    ifstate. (LP: #1620559)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Aug 2016 11:16:16 +0200
 
