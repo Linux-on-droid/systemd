@@ -1,4 +1,4 @@
-systemd (229-4ubuntu8) UNRELEASED; urgency=medium
+systemd (229-4ubuntu8) xenial-proposed; urgency=medium
 
   * Queue loading transient units after setting their properties. Fixes
     starting VMs with libvirt. (LP: #1529079)
@@ -15,7 +15,7 @@ systemd (229-4ubuntu8) UNRELEASED; urgency=medium
     individual link leases, as they sometimes don't appear in the global
     ifstate. (LP: #1620559)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 18 Aug 2016 11:16:16 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 06 Sep 2016 14:16:29 +0200
 
 systemd (229-4ubuntu7) xenial-proposed; urgency=medium
 
