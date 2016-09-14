@@ -3,6 +3,8 @@ systemd (229-4ubuntu11) UNRELEASED; urgency=medium
   * 73-usb-net-by-mac.rules: Split kernel command line import line.
     Reportedly this makes the rule actually work on some platforms. Thanks
     Alp Toker! (LP: #1593379)
+  * fsckd: Do not exit on idle timeout if there are still clients connected
+    (Closes: #788050, LP: #1547844)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 15 Sep 2016 08:12:34 +0200
 

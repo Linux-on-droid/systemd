@@ -8,7 +8,7 @@ https://launchpad.net/bugs/1535219
  1 file changed, 2 insertions(+)
 
 diff --git a/hwdb/60-keyboard.hwdb b/hwdb/60-keyboard.hwdb
-index 01213b6..4c0c315 100644
+index 01213b6..4c0c315d 100644
 --- a/hwdb/60-keyboard.hwdb
 +++ b/hwdb/60-keyboard.hwdb
 @@ -492,6 +492,8 @@ evdev:atkbd:dmi:bvn*:bvr*:bd*:svnHewlett-Packard*:pnHP440G2:pvr*

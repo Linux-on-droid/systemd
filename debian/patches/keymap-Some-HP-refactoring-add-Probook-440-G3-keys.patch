@@ -14,7 +14,7 @@ events. Thanks to Hermann Kraus for those! (See PR #2679)
  1 file changed, 6 insertions(+), 8 deletions(-)
 
 diff --git a/hwdb/60-keyboard.hwdb b/hwdb/60-keyboard.hwdb
-index 4c0c315..46013d3 100644
+index 4c0c315d..46013d3 100644
 --- a/hwdb/60-keyboard.hwdb
 +++ b/hwdb/60-keyboard.hwdb
 @@ -378,6 +378,7 @@ evdev:input:b0003v0458p0708*
