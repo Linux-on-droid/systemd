@@ -5,6 +5,8 @@ systemd (229-4ubuntu11) UNRELEASED; urgency=medium
     Alp Toker! (LP: #1593379)
   * fsckd: Do not exit on idle timeout if there are still clients connected
     (Closes: #788050, LP: #1547844)
+  * libnss-*.prerm: Remove possible [key=value] options from NSS modules as
+    well. (LP: #1625584)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 15 Sep 2016 08:12:34 +0200
 
