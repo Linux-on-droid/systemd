@@ -1,12 +1,11 @@
 ## Cherry-picked from upstream
+Backport-networkd-231.patch
 time-util-map-ALARM-clockids-to-non-ALARM-clockids-in-now.patch
-networkd-tunnel-fix-tunnel-address.patch
 clock-util-make-clock_is_localtime-testable-and-add-initi.patch
 clock-util-be-more-tolerant-in-parsing-etc-adjtime.patch
 timedated-be-more-tolerant-in-parsing-etc-adjtime.patch
 core-fix-assertion-check.patch
 calendarspec-fix-find_next-skipping-times.patch
-networkd-FIONREAD-is-not-reliable-on-some-sockets.patch
 udev-fix-cg_unified-return-code-checking.patch
 core-revert-core-resolve-specifier-in-config_parse_exec.patch
 activate-fix-E-option-parsing.patch
@@ -19,7 +18,6 @@ shared-machine-pool-fix-another-mkfs.btrfs-checking.patch
 systemd-obey-systemd.log_color-config.patch
 device-Ensure-we-have-sysfs-path-before-comparing.patch
 logind-fix-crash-when-shutdown-is-not-issued-from-a-tty.patch
-networkd-rework-idle-detection-logic-of-networkd.patch
 bus-util-Fix-reading-uint32-properties.patch
 systemctl-use-correct-printf-macros-for-uint32.patch
 sd-device-fix-crash-if-a-device-has-many-tags-or-devlinks.patch
@@ -68,7 +66,6 @@ fsckd-daemon-for-inter-fsckd-communication.patch
 Skip-filesystem-check-if-already-done-by-the-initram.patch
 Revert-core-one-step-back-again-for-nspawn-we-actual.patch
 Revert-core-set-RLIMIT_CORE-to-unlimited-by-default.patch
-Revert-Revert-networkd-ndisc-revert-to-letting-the-k.patch
 Revert-core-enable-TasksMax-for-all-services-by-default-a.patch
 
 ## Ubuntu patches:

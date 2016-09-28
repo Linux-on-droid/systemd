@@ -34,10 +34,10 @@ index 586b379..9cdfb3a 100644
  /test-compress-benchmark
  /test-condition
 diff --git a/Makefile.am b/Makefile.am
-index 3b7cc1e..1caaccd 100644
+index 110ffb9..bbf0194 100644
 --- a/Makefile.am
 +++ b/Makefile.am
-@@ -1471,6 +1471,7 @@ tests += \
+@@ -1473,6 +1473,7 @@ tests += \
  	test-prioq \
  	test-fileio \
  	test-time \
@@ -45,7 +45,7 @@ index 3b7cc1e..1caaccd 100644
  	test-hashmap \
  	test-set \
  	test-bitmap \
-@@ -2000,6 +2001,12 @@ test_time_SOURCES = \
+@@ -2002,6 +2003,12 @@ test_time_SOURCES = \
  test_time_LDADD = \
  	libshared.la
  

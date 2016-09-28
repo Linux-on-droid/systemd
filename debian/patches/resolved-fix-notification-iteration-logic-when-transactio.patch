@@ -28,10 +28,10 @@ Fixes: #2676
  6 files changed, 52 insertions(+), 35 deletions(-)
 
 diff --git a/src/basic/macro.h b/src/basic/macro.h
-index 2695d0e..ab5cc97 100644
+index 666e8c2..a431e6a 100644
 --- a/src/basic/macro.h
 +++ b/src/basic/macro.h
-@@ -361,6 +361,12 @@ static inline unsigned long ALIGN_POWER2(unsigned long u) {
+@@ -370,6 +370,12 @@ static inline unsigned long ALIGN_POWER2(unsigned long u) {
                  _found;                         \
          })
  
