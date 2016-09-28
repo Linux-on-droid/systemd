@@ -12,6 +12,8 @@ systemd (229-4ubuntu11) UNRELEASED; urgency=medium
     would be a lot more work and a lot less robust, and we did not use/support
     networkd in 16.04 so far. Drop the other network related patches as they
     are included in this backport now. (LP: #1627641)
+  * debian/tests/networkd: Re-enable the the DHCPv6 tests. The DHCPv6
+    behaviour is fixed with the above backport now.
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 15 Sep 2016 08:12:34 +0200
 
