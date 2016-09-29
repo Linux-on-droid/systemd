@@ -69,7 +69,7 @@ index fc60db3..5562f40 100644
  
  static void pager_open_if_enabled(void) {
 diff --git a/src/core/manager.c b/src/core/manager.c
-index 6bd32ed..aa2786f 100644
+index 85e01a6..b215583 100644
 --- a/src/core/manager.c
 +++ b/src/core/manager.c
 @@ -578,8 +578,7 @@ int manager_new(ManagerRunningAs running_as, bool test_run, Manager **_m) {

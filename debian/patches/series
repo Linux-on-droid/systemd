@@ -35,6 +35,7 @@ coredump-use-next_datagram_size_fd-instead-of-ioctl-FIONR.patch
 core-queue-loading-transient-units-after-setting-their-pr.patch
 Connect-pid1-s-stdin-out-err-fds-to-dev-null-also-for-con.patch
 If-the-notification-message-length-is-0-ignore-the-messag.patch
+pid1-process-zero-length-notification-messages-again.patch
 
 ## Debian specific patches
 Add-back-support-for-Debian-specific-config-files.patch

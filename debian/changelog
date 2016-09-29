@@ -14,6 +14,10 @@ systemd (229-4ubuntu11) UNRELEASED; urgency=medium
     are included in this backport now. (LP: #1627641)
   * debian/tests/networkd: Re-enable the the DHCPv6 tests. The DHCPv6
     behaviour is fixed with the above backport now.
+  * pid1: process zero-length notification messages again. Just remove the
+    assertion, the "n" value was not used anyway. This fixes a local DoS due
+    to unprocessed/unclosed fds which got introduced by the previous fix.
+    (LP: #1628687)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 15 Sep 2016 08:12:34 +0200
 
