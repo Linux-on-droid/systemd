@@ -36,6 +36,7 @@ core-move-start-ratelimiting-check-after-condition-checks.patch
 coredump-use-next_datagram_size_fd-instead-of-ioctl-FIONR.patch
 core-queue-loading-transient-units-after-setting-their-pr.patch
 Connect-pid1-s-stdin-out-err-fds-to-dev-null-also-for-con.patch
+If-the-notification-message-length-is-0-ignore-the-messag.patch
 
 ## Debian specific patches
 Add-back-support-for-Debian-specific-config-files.patch
@@ -75,4 +76,3 @@ Support-system-image-read-only-etc.patch
 systemctl-Don-t-forward-telinit-u-to-upstart.patch
 Provide-shutdown-fallback-for-upstart.patch
 udev-Don-t-kill-peer-processes-if-we-don-t-run-in-a-cgrou.patch
-systemd-dont_assert_on_zero_length_message-lp1628687.patch
