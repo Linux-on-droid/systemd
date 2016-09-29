@@ -1,3 +1,14 @@
+systemd (229-4ubuntu10) UNRELEASED; urgency=medium
+
+  * SECURITY UPDATE: zero-length notify message triggers abort/denial of
+    service
+    - systemd-dont_assert_on_zero_length_message-lp1628687.patch: change
+      assert to simple return + log (LP: #1628687)
+    - Thanks to Jorge Niedbalski <jorge.niedbalski@canonical.com> for
+      the patch.
+
+ -- Steve Beattie <sbeattie@ubuntu.com>  Wed, 28 Sep 2016 14:21:42 -0700
+
 systemd (229-4ubuntu8) xenial-proposed; urgency=medium
 
   * Queue loading transient units after setting their properties. Fixes

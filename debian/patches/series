@@ -75,3 +75,4 @@ Support-system-image-read-only-etc.patch
 systemctl-Don-t-forward-telinit-u-to-upstart.patch
 Provide-shutdown-fallback-for-upstart.patch
 udev-Don-t-kill-peer-processes-if-we-don-t-run-in-a-cgrou.patch
+systemd-dont_assert_on_zero_length_message-lp1628687.patch
