@@ -1,4 +1,4 @@
-systemd (229-4ubuntu10) UNRELEASED; urgency=medium
+systemd (229-4ubuntu10) xenial; urgency=medium
 
   * SECURITY UPDATE: zero-length notify message triggers abort/denial of
     service
