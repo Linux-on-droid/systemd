@@ -18,6 +18,10 @@ systemd (229-4ubuntu11) UNRELEASED; urgency=medium
     assertion, the "n" value was not used anyway. This fixes a local DoS due
     to unprocessed/unclosed fds which got introduced by the previous fix.
     (LP: #1628687)
+  * pid1: Robustify manager_dispatch_notify_fd(). If
+    manager_dispatch_notify_fd() fails and returns an error then the handling
+    of service notifications will be disabled entirely leading to a
+    compromised system. (side issue of LP: #1628687)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 15 Sep 2016 08:12:34 +0200
 
