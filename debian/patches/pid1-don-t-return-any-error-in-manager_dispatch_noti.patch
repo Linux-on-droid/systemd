@@ -1,0 +1,45 @@
+From: Franck Bui <fbui@suse.com>
+Date: Thu, 29 Sep 2016 19:44:34 +0200
+Subject: pid1: don't return any error in manager_dispatch_notify_fd() (#4240)
+
+If manager_dispatch_notify_fd() fails and returns an error then the handling of
+service notifications will be disabled entirely leading to a compromised system.
+
+For example pid1 won't be able to receive the WATCHDOG messages anymore and
+will kill all services supposed to send such messages.
+
+Fixes: CVE-2016-7796
+Bug-Debian: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=839607
+
+(cherry picked from commit 9987750e7a4c62e0eb8473603150596ba7c3a015)
+---
+ src/core/manager.c | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/manager.c b/src/core/manager.c
+index e6a0736..a8c40d4 100644
+--- a/src/core/manager.c
++++ b/src/core/manager.c
+@@ -1493,14 +1493,14 @@ static int manager_dispatch_notify_fd(sd_event_source *source, int fd, uint32_t
+                 Unit *u;
+ 
+                 n = recvmsg(m->notify_fd, &msghdr, MSG_DONTWAIT);
+-                if (n <= 0) {
+-                        if (n == 0)
+-                                return -EIO;
+-
+-                        if (errno == EAGAIN || errno == EINTR)
+-                                break;
+-
+-                        return -errno;
++                if (n < 0) {
++                        if (!IN_SET(errno, EAGAIN, EINTR))
++                                log_error("Failed to receive notification message: %m");
++                        break;
++                }
++                if (n == 0) {
++                        log_debug("Got zero-length notification message. Ignoring.");
++                        break;
+                 }
+ 
+                 if (msghdr.msg_controllen < CMSG_LEN(sizeof(struct ucred)) ||

@@ -165,6 +165,7 @@ man-update-links-to-kernel.org-cgroup-documentation.patch
 console-getty.service-don-t-start-when-dev-console-is-mis.patch
 units-explicitly-order-systemd-user-sessions.service-afte.patch
 units-order-systemd-user-sessions.service-after-network.t.patch
+pid1-don-t-return-any-error-in-manager_dispatch_noti.patch
 
 ## Debian specific patches:
 Add-back-support-for-Debian-specific-config-files.patch
