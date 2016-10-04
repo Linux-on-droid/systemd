@@ -1,4 +1,4 @@
-systemd (229-4ubuntu11) UNRELEASED; urgency=medium
+systemd (229-4ubuntu11) xenial; urgency=medium
 
   * 73-usb-net-by-mac.rules: Split kernel command line import line.
     Reportedly this makes the rule actually work on some platforms. Thanks
@@ -23,7 +23,7 @@ systemd (229-4ubuntu11) UNRELEASED; urgency=medium
     of service notifications will be disabled entirely leading to a
     compromised system. (side issue of LP: #1628687)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 15 Sep 2016 08:12:34 +0200
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 04 Oct 2016 21:43:04 +0200
 
 systemd (229-4ubuntu10) xenial; urgency=medium
 
