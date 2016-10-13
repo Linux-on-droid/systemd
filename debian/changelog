@@ -1,3 +1,19 @@
+systemd (231-9git1) yakkety; urgency=medium
+
+  * systemctl: Add --wait option to wait until started units terminate again.
+    This is a prerequisite for using systemd for graphical sessions without
+    ugly polling.
+  * nss-resolve: return NOTFOUND instead of UNAVAIL on resolution errors.
+    This makes it possible to configure a fallback to "dns" without breaking
+    DNSSEC, with "resolve [!UNAVAIL=return] dns".
+  * libnss-resolve.postinst: Skip dns fallback if resolve is present.
+    Only fall back to "dns" if nss-resolve is not installed (for the
+    architecture of the calling program). Once it is, we never want to fall
+    back to "dns" as that breaks enforcing DNSSEC verification and also
+    pointlessly retries NXDOMAIN failures. (LP: #1624071)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Sun, 02 Oct 2016 10:33:11 +0200
+
 systemd (231-9) unstable; urgency=medium
 
   * pid1: process zero-length notification messages again.
