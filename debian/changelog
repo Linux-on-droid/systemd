@@ -1,3 +1,14 @@
+systemd (229-4ubuntu12) xenial; urgency=medium
+
+  * unit: sent change signal before removing the unit if necessary
+    (LP: #1632964)
+  * networkd: Fix assertion crash on adding VTI with IPv6 addresses
+    (LP: #1633274)
+  * systemd-networkd-resolvconf-update.service: Propagate search domains
+    (LP: #1635256)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 26 Oct 2016 13:18:42 +0200
+
 systemd (229-4ubuntu11) xenial; urgency=medium
 
   * 73-usb-net-by-mac.rules: Split kernel command line import line.
