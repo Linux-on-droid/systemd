@@ -1,3 +1,13 @@
+systemd (231-9ubuntu1) yakkety; urgency=medium
+
+  * debian/gbp.conf: Switch to yakkety branch
+  * unit: sent change signal before removing the unit if necessary
+    (LP: #1632964)
+  * networkd: Fix assertion crash on adding VTI with IPv6 addresses
+    (LP: #1633274)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 26 Oct 2016 13:11:33 +0200
+
 systemd (231-9git1) yakkety; urgency=medium
 
   * systemctl: Add --wait option to wait until started units terminate again.
