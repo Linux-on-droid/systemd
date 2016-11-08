@@ -1,3 +1,10 @@
+systemd (229-4ubuntu13) UNRELEASED; urgency=medium
+
+  * Backport graphical-session{,-pre}.target user units, for future usage from
+    snaps. (LP: #1640293)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 08 Nov 2016 21:05:46 +0100
+
 systemd (229-4ubuntu12) xenial; urgency=medium
 
   * unit: sent change signal before removing the unit if necessary

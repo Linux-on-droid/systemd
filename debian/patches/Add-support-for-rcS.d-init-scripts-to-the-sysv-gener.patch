@@ -12,7 +12,7 @@ adjustments to the test suite.
  4 files changed, 38 insertions(+), 10 deletions(-)
 
 diff --git a/man/systemd.special.xml b/man/systemd.special.xml
-index 055d854..41e55a8 100644
+index a1cf5b8..e618877 100644
 --- a/man/systemd.special.xml
 +++ b/man/systemd.special.xml
 @@ -344,6 +344,11 @@

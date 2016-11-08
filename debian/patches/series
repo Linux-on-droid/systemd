@@ -39,6 +39,8 @@ pid1-process-zero-length-notification-messages-again.patch
 pid1-don-t-return-any-error-in-manager_dispatch_notify_fd.patch
 unit-sent-change-signal-before-removing-the-unit-if-neces.patch
 networkd-use-proper-cast-to-access-VTI6-4399.patch
+units-add-graphical-session.target-user-unit-3678.patch
+units-add-graphical-session-pre.target-user-unit-3848.patch
 
 ## Debian specific patches
 Add-back-support-for-Debian-specific-config-files.patch
