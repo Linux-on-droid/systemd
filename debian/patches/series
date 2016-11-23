@@ -28,6 +28,7 @@ man-drop-myhostname-from-recommended-nsswitch-host-config.patch
 nss-resolve-return-NOTFOUND-instead-of-UNAVAIL-on-resolut.patch
 unit-sent-change-signal-before-removing-the-unit-if-neces.patch
 networkd-use-proper-cast-to-access-VTI6-4399.patch
+rules-introduce-disk-by-id-model_serial-symlinks-for.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
