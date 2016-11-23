@@ -41,6 +41,8 @@ unit-sent-change-signal-before-removing-the-unit-if-neces.patch
 networkd-use-proper-cast-to-access-VTI6-4399.patch
 units-add-graphical-session.target-user-unit-3678.patch
 units-add-graphical-session-pre.target-user-unit-3848.patch
+rules-add-NVMe-rules-3136.patch
+rules-introduce-disk-by-id-model_serial-symlinks-for.patch
 
 ## Debian specific patches
 Add-back-support-for-Debian-specific-config-files.patch

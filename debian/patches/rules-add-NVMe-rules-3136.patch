@@ -1,0 +1,34 @@
+From: Ming Lin <minggr@gmail.com>
+Date: Fri, 29 Apr 2016 04:02:57 -0700
+Subject: rules: add NVMe rules (#3136)
+
+Add NVMe rules using the "wwid" attribute.
+
+root@target:~# cat /sys/block/nvme0n1/wwid
+eui.3825004235000591
+
+root@target:~# ls /dev/disk/by-id/ -l |grep nvme
+lrwxrwxrwx 1 root root 13 Apr 27 16:08 nvme-eui.3825004235000591 -> ../../nvme0n1
+lrwxrwxrwx 1 root root 15 Apr 27 16:08 nvme-eui.3825004235000591-part1 -> ../../nvme0n1p1
+lrwxrwxrwx 1 root root 15 Apr 27 16:08 nvme-eui.3825004235000591-part2 -> ../../nvme0n1p2
+
+Bug-Ubuntu: https://launchpad.net/bugs/1642903
+---
+ rules/60-persistent-storage.rules | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/rules/60-persistent-storage.rules b/rules/60-persistent-storage.rules
+index 0b14bb4..7ad8a55 100644
+--- a/rules/60-persistent-storage.rules
++++ b/rules/60-persistent-storage.rules
+@@ -14,6 +14,10 @@ TEST=="whole_disk", GOTO="persistent_storage_end"
+ # for partitions import parent information
+ ENV{DEVTYPE}=="partition", IMPORT{parent}="ID_*"
+ 
++# NVMe
++KERNEL=="nvme*[0-9]n*[0-9]", ATTR{wwid}=="?*", SYMLINK+="disk/by-id/nvme-$attr{wwid}"
++KERNEL=="nvme*[0-9]n*[0-9]p*[0-9]", ENV{DEVTYPE}=="partition", ATTRS{wwid}=="?*", SYMLINK+="disk/by-id/nvme-$attr{wwid}-part%n"
++
+ # virtio-blk
+ KERNEL=="vd*[!0-9]", ATTRS{serial}=="?*", ENV{ID_SERIAL}="$attr{serial}", SYMLINK+="disk/by-id/virtio-$env{ID_SERIAL}"
+ KERNEL=="vd*[0-9]", ATTRS{serial}=="?*", ENV{ID_SERIAL}="$attr{serial}", SYMLINK+="disk/by-id/virtio-$env{ID_SERIAL}-part%n"

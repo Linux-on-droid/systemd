@@ -1,7 +1,12 @@
 systemd (229-4ubuntu13) UNRELEASED; urgency=medium
 
+  [ Martin Pitt ]
   * Backport graphical-session{,-pre}.target user units, for future usage from
     snaps. (LP: #1640293)
+
+  [ Dan Streetman ]
+  * rules: introduce disk/by-id (wwid and model_serial) symlinks
+    for NVMe drives (LP: #1642903)
 
  -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 08 Nov 2016 21:05:46 +0100
 
