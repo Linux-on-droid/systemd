@@ -1,3 +1,17 @@
+systemd (231-9ubuntu2) yakkety; urgency=medium
+
+  [ Dan Streetman ]
+  * rules: introduce disk/by-id (model_serial) symlinks for NVMe drives
+    (LP: #1642903)
+
+  [ Martin Pitt ]
+  * Drop systemd-networkd's "After=dbus.service" ordering, so that it can
+    start during early boot (for cloud-init.service). It will auto-connect to
+    D-Bus once it becomes available later, and transient (from DHCP) hostname
+    and timezone setting do not work in 16.10 anyway. (LP: #1636912)
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 24 Nov 2016 13:21:05 +0100
+
 systemd (231-9ubuntu1) yakkety; urgency=medium
 
   * debian/gbp.conf: Switch to yakkety branch
