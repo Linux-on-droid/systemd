@@ -8,6 +8,10 @@ systemd (229-4ubuntu13) UNRELEASED; urgency=medium
     ordering constraints which make it impossible to start
     systemd-networkd.service during early boot, which is an upcoming
     requirement for cloud-init. (Part of LP: #1636912)
+  * Drop systemd-networkd's "After=dbus.service" ordering so that it can start
+    during early boot (for cloud-init.service). It will auto-connect to D-Bus
+    once it becomes available later, and transient (from DHCP) hostname and
+    timezone setting do not work in 16.04 anyway. (LP: #1636912)
 
   [ Dan Streetman ]
   * rules: introduce disk/by-id (wwid and model_serial) symlinks
