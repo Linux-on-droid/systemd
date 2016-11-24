@@ -1,4 +1,4 @@
-systemd (229-4ubuntu13) UNRELEASED; urgency=medium
+systemd (229-4ubuntu13) xenial; urgency=medium
 
   [ Martin Pitt ]
   * Backport graphical-session{,-pre}.target user units, for future usage from
@@ -17,7 +17,7 @@ systemd (229-4ubuntu13) UNRELEASED; urgency=medium
   * rules: introduce disk/by-id (wwid and model_serial) symlinks
     for NVMe drives (LP: #1642903)
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 08 Nov 2016 21:05:46 +0100
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 24 Nov 2016 12:41:23 +0100
 
 systemd (229-4ubuntu12) xenial; urgency=medium
 
