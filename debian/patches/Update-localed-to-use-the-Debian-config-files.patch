@@ -8,11 +8,11 @@ configuration and use /etc/default/keyboard instead of
 
 Path courtesy of Steve Langasek.
 ---
- src/locale/localed.c | 214 +++++++++++++++++++++++++++------------------------
- 1 file changed, 113 insertions(+), 101 deletions(-)
+ src/locale/localed.c | 212 +++++++++++++++++++++++++++------------------------
+ 1 file changed, 114 insertions(+), 98 deletions(-)
 
 diff --git a/src/locale/localed.c b/src/locale/localed.c
-index 23da149..4db8bef 100644
+index 23da149..0e09ad9 100644
 --- a/src/locale/localed.c
 +++ b/src/locale/localed.c
 @@ -170,6 +170,24 @@ static int locale_read_data(Context *c) {
@@ -40,7 +40,7 @@ index 23da149..4db8bef 100644
          if (r == -ENOENT) {
                  int p;
  
-@@ -206,72 +224,17 @@ static int vconsole_read_data(Context *c) {
+@@ -206,70 +224,19 @@ static int vconsole_read_data(Context *c) {
  }
  
  static int x11_read_data(Context *c) {
@@ -107,21 +107,20 @@ index 23da149..4db8bef 100644
 -                } else if (in_section && first_word(l, "EndSection"))
 -                        in_section = false;
 -        }
--
--        fclose(f);
--
--        return 0;
 +        r = parse_env_file("/etc/default/keyboard", NEWLINE,
 +                           "XKBMODEL",          &c->x11_model,
 +                           "XKBLAYOUT",         &c->x11_layout,
 +                           "XKBVARIANT",        &c->x11_variant,
 +                           "XKBOPTIONS",        &c->x11_options,
 +                           NULL);
-+        return r;
- }
  
- static int context_read_data(Context *c) {
-@@ -287,8 +250,13 @@ static int context_read_data(Context *c) {
+-        fclose(f);
++        if (r < 0 && r != -ENOENT)
++                return r;
+ 
+         return 0;
+ }
+@@ -287,8 +254,13 @@ static int context_read_data(Context *c) {
  static int locale_write_data(Context *c) {
          int r, p;
          char **l = NULL;
@@ -136,7 +135,7 @@ index 23da149..4db8bef 100644
          if (r < 0 && r != -ENOENT)
                  return r;
  
-@@ -320,13 +288,13 @@ static int locale_write_data(Context *c) {
+@@ -320,13 +292,13 @@ static int locale_write_data(Context *c) {
          if (strv_isempty(l)) {
                  strv_free(l);
  
@@ -152,7 +151,7 @@ index 23da149..4db8bef 100644
          strv_free(l);
  
          return r;
-@@ -447,57 +415,101 @@ static int vconsole_write_data(Context *c) {
+@@ -447,57 +419,101 @@ static int vconsole_write_data(Context *c) {
  }
  
  static int write_data_x11(Context *c) {
@@ -219,26 +218,28 @@ index 23da149..4db8bef 100644
 +                        strv_free(l);
 +                        return -ENOMEM;
 +                }
-+
-+                u = strv_env_set(l, t);
-+                free(t);
-+                strv_free(l);
  
 -        r = fopen_temporary("/etc/X11/xorg.conf.d/00-keyboard.conf", &f, &temp_path);
 -        if (r < 0)
 -                return r;
-+                if (!u)
-+                        return -ENOMEM;
++                u = strv_env_set(l, t);
++                free(t);
++                strv_free(l);
  
 -        fchmod(fileno(f), 0644);
-+                l = u;
-+        }
++                if (!u)
++                        return -ENOMEM;
  
 -        fputs("# Read and parsed by systemd-localed. It's probably wise not to edit this file\n"
 -              "# manually too freely.\n"
 -              "Section \"InputClass\"\n"
 -              "        Identifier \"system-keyboard\"\n"
 -              "        MatchIsKeyboard \"on\"\n", f);
++                l = u;
++        }
+ 
+-        if (!isempty(c->x11_layout))
+-                fprintf(f, "        Option \"XkbLayout\" \"%s\"\n", c->x11_layout);
 +        if (isempty(c->x11_options)) {
 +                l = strv_env_unset(l, "XKBOPTIONS");
 +        } else {
@@ -247,24 +248,22 @@ index 23da149..4db8bef 100644
 +                        return -ENOMEM;
 +                }
  
--        if (!isempty(c->x11_layout))
--                fprintf(f, "        Option \"XkbLayout\" \"%s\"\n", c->x11_layout);
+-        if (!isempty(c->x11_model))
+-                fprintf(f, "        Option \"XkbModel\" \"%s\"\n", c->x11_model);
 +                u = strv_env_set(l, t);
 +                free(t);
 +                strv_free(l);
  
--        if (!isempty(c->x11_model))
--                fprintf(f, "        Option \"XkbModel\" \"%s\"\n", c->x11_model);
+-        if (!isempty(c->x11_variant))
+-                fprintf(f, "        Option \"XkbVariant\" \"%s\"\n", c->x11_variant);
 +                if (!u)
 +                        return -ENOMEM;
  
--        if (!isempty(c->x11_variant))
--                fprintf(f, "        Option \"XkbVariant\" \"%s\"\n", c->x11_variant);
-+                l = u;
-+        }
- 
 -        if (!isempty(c->x11_options))
 -                fprintf(f, "        Option \"XkbOptions\" \"%s\"\n", c->x11_options);
++                l = u;
++        }
++
 +        if (strv_isempty(l)) {
 +                strv_free(l);
  
