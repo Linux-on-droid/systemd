@@ -1,0 +1,188 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Tue, 29 Nov 2016 22:50:21 +0100
+Subject: core: rework logic to determine when we decide to add automatic deps
+ for mounts
+
+This adds a concept of "extrinsic" mounts. If mounts are extrinsic we consider
+them managed by something else and do not add automatic ordering against
+umount.target, local-fs.target, remote-fs.target.
+
+Extrinsic mounts are considered:
+
+- All mounts if we are running in --user mode
+
+- API mounts such as everything below /proc, /sys, /dev, which exist from
+  earliest boot to latest shutdown.
+
+- All mounts marked as initrd mounts, if we run on the host
+
+- The initrd's private directory /run/initrams that should survive until last
+  reboot.
+
+This primarily merges a couple of different exclusion lists into a single
+concept.
+
+(cherry picked from commit ad2706db7cceba69203f3ac2b6ef65d7490c5f29)
+---
+ src/core/mount.c       | 62 +++++++++++++++++++++++++++++++-------------------
+ src/shared/path-util.h | 25 ++++++++++++++++++++
+ 2 files changed, 64 insertions(+), 23 deletions(-)
+
+diff --git a/src/core/mount.c b/src/core/mount.c
+index 102bbef91..44f79ba8a 100644
+--- a/src/core/mount.c
++++ b/src/core/mount.c
+@@ -350,19 +350,35 @@ static int mount_add_quota_links(Mount *m) {
+         return 0;
+ }
+ 
+-static bool should_umount(Mount *m) {
++static bool mount_is_extrinsic(Mount *m) {
+         MountParameters *p;
++        assert(m);
+ 
+-        if (path_equal(m->where, "/") ||
+-            path_equal(m->where, "/usr"))
+-                return false;
++        /* Returns true for all units that are "magic" and should be excluded from the usual start-up and shutdown
++         * dependencies. We call them "extrinsic" here, as they are generally mounted outside of the systemd dependency
++         * logic. We shouldn't attempt to manage them ourselves but it's fine if the user operates on them with us. */
++
++        if (UNIT(m)->manager->running_as != SYSTEMD_SYSTEM) /* We only automatically manage mounts if we are in system mode */
++                return true;
+ 
++        if (PATH_IN_SET(m->where,  /* Don't bother with the OS data itself */
++                        "/",
++                        "/usr"))
++                return true;
++
++        if (PATH_STARTSWITH_SET(m->where,
++                                "/run/initramfs",    /* This should stay around from before we boot until after we shutdown */
++                                "/proc",             /* All of this is API VFS */
++                                "/sys",              /* … dito … */
++                                "/dev"))             /* … dito … */
++                return true;
++
++        /* If this is an initrd mount, and we are not in the initrd, then leave this around forever, too. */
+         p = get_mount_parameters(m);
+-        if (p && mount_test_option(p->options, "x-initrd.mount") &&
+-            !in_initrd())
+-                return false;
++        if (p && mount_test_option(p->options, "x-initrd.mount") && !in_initrd())
++                return true;
+ 
+-        return true;
++        return false;
+ }
+ 
+ static int mount_add_default_dependencies(Mount *m) {
+@@ -375,14 +391,17 @@ static int mount_add_default_dependencies(Mount *m) {
+         if (UNIT(m)->manager->running_as != SYSTEMD_SYSTEM)
+                 return 0;
+ 
++        /* We do not add any default dependencies to /, /usr or /run/initramfs/, since they are guaranteed to stay
++         * mounted the whole time, since our system is on it.  Also, don't bother with anything mounted below virtual
++         * file systems, it's also going to be virtual, and hence not worth the effort. */
++        if (mount_is_extrinsic(m))
++                return 0;
++
+         p = get_mount_parameters(m);
+ 
+         if (!p)
+                 return 0;
+ 
+-        if (path_equal(m->where, "/"))
+-                return 0;
+-
+         if (mount_is_network(p)) {
+                 after = SPECIAL_REMOTE_FS_PRE_TARGET;
+                 after2 = SPECIAL_NETWORK_TARGET;
+@@ -409,11 +428,9 @@ static int mount_add_default_dependencies(Mount *m) {
+                         return r;
+         }
+ 
+-        if (should_umount(m)) {
+-                r = unit_add_two_dependencies_by_name(UNIT(m), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true);
+-                if (r < 0)
+-                        return r;
+-        }
++        r = unit_add_two_dependencies_by_name(UNIT(m), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true);
++        if (r < 0)
++                return r;
+ 
+         return 0;
+ }
+@@ -667,6 +684,7 @@ static void mount_dump(Unit *u, FILE *f, const char *prefix) {
+                 "%sOptions: %s\n"
+                 "%sFrom /proc/self/mountinfo: %s\n"
+                 "%sFrom fragment: %s\n"
++                "%sExtrinsic: %s\n"
+                 "%sDirectoryMode: %04o\n",
+                 prefix, mount_state_to_string(m->state),
+                 prefix, mount_result_to_string(m->result),
+@@ -676,6 +694,7 @@ static void mount_dump(Unit *u, FILE *f, const char *prefix) {
+                 prefix, p ? strna(p->options) : "n/a",
+                 prefix, yes_no(m->from_proc_self_mountinfo),
+                 prefix, yes_no(m->from_fragment),
++                prefix, yes_no(mount_is_extrinsic(m)),
+                 prefix, m->directory_mode);
+ 
+         if (m->control_pid > 0)
+@@ -1374,8 +1393,7 @@ static int mount_add_one(
+                         goto fail;
+                 }
+ 
+-
+-                if (m->running_as == SYSTEMD_SYSTEM) {
++                if (!mount_is_extrinsic(MOUNT(u))) {
+                         const char* target;
+ 
+                         target = fstype_is_network(fstype) ? SPECIAL_REMOTE_FS_TARGET : SPECIAL_LOCAL_FS_TARGET;
+@@ -1384,11 +1402,9 @@ static int mount_add_one(
+                         if (r < 0)
+                                 goto fail;
+ 
+-                        if (should_umount(MOUNT(u))) {
+-                                r = unit_add_dependency_by_name(u, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true);
+-                                if (r < 0)
+-                                        goto fail;
+-                        }
++                        r = unit_add_dependency_by_name(u, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true);
++                        if (r < 0)
++                                goto fail;
+                 }
+ 
+                 unit_add_to_load_queue(u);
+diff --git a/src/shared/path-util.h b/src/shared/path-util.h
+index 54f00a8a8..6ac8eb9e2 100644
+--- a/src/shared/path-util.h
++++ b/src/shared/path-util.h
+@@ -70,3 +70,28 @@ int fsck_exists(const char *fstype);
+ /* Same as PATH_FOREACH_PREFIX but also includes the specified path itself */
+ #define PATH_FOREACH_PREFIX_MORE(prefix, path) \
+         for (char *_slash = ({ path_kill_slashes(strcpy(prefix, path)); if (streq(prefix, "/")) prefix[0] = 0; strrchr(prefix, 0); }); _slash && !(*_slash = 0); _slash = strrchr((prefix), '/'))
++
++/* Note: the search terminates on the first NULL item. */
++#define PATH_IN_SET(p, ...)                                     \
++        ({                                                      \
++                char **s;                                       \
++                bool _found = false;                            \
++                STRV_FOREACH(s, STRV_MAKE(__VA_ARGS__))         \
++                        if (path_equal(p, *s)) {                \
++                               _found = true;                   \
++                               break;                           \
++                        }                                       \
++                _found;                                         \
++        })
++
++#define PATH_STARTSWITH_SET(p, ...)                             \
++        ({                                                      \
++                char **s;                                       \
++                bool _found = false;                            \
++                STRV_FOREACH(s, STRV_MAKE(__VA_ARGS__))         \
++                        if (path_startswith(p, *s)) {           \
++                               _found = true;                   \
++                               break;                           \
++                        }                                       \
++                _found;                                         \
++        })
