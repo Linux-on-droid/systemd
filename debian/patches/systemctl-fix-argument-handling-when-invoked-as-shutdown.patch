@@ -1,0 +1,31 @@
+From: Jan Synacek <jsynacek@redhat.com>
+Date: Mon, 15 Dec 2014 10:39:00 +0100
+Subject: systemctl: fix argument handling when invoked as "shutdown"
+
+(cherry picked from commit 75836b9d2071aab978ee78d7d797126a18a32052)
+---
+ src/systemctl/systemctl.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/systemctl/systemctl.c b/src/systemctl/systemctl.c
+index 942acbc..f4fbab5 100644
+--- a/src/systemctl/systemctl.c
++++ b/src/systemctl/systemctl.c
+@@ -6219,7 +6219,7 @@ static int shutdown_parse_argv(int argc, char *argv[]) {
+         assert(argc >= 0);
+         assert(argv);
+ 
+-        while ((c = getopt_long(argc, argv, "HPrhkt:afFc", options, NULL)) >= 0) {
++        while ((c = getopt_long(argc, argv, "HPrhkKt:afFc", options, NULL)) >= 0) {
+                 switch (c) {
+ 
+                 case ARG_HELP:
+@@ -6259,6 +6259,8 @@ static int shutdown_parse_argv(int argc, char *argv[]) {
+ 
+                 case 't':
+                 case 'a':
++                case 'f':
++                case 'F':
+                         /* Compatibility nops */
+                         break;
+ 

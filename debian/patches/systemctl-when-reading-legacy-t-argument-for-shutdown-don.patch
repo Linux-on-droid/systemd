@@ -1,0 +1,26 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Tue, 29 Sep 2015 22:40:05 +0200
+Subject: systemctl: when reading legacy -t argument for shutdown,
+ don't drop following parameter
+
+We currently completely ignore the following parameter, but we really
+should not, as that is actually the time to shut down on.
+
+(cherry picked from commit a4420f7b8ed73b05ef6f31622101e7804daef69f)
+---
+ src/systemctl/systemctl.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/systemctl/systemctl.c b/src/systemctl/systemctl.c
+index f4fbab5..9adef05 100644
+--- a/src/systemctl/systemctl.c
++++ b/src/systemctl/systemctl.c
+@@ -6219,7 +6219,7 @@ static int shutdown_parse_argv(int argc, char *argv[]) {
+         assert(argc >= 0);
+         assert(argv);
+ 
+-        while ((c = getopt_long(argc, argv, "HPrhkKt:afFc", options, NULL)) >= 0) {
++        while ((c = getopt_long(argc, argv, "HPrhkKtafFc", options, NULL)) >= 0) {
+                 switch (c) {
+ 
+                 case ARG_HELP:
