@@ -1,3 +1,43 @@
+systemd (215-17+deb8u6) UNRELEASED; urgency=medium
+
+  [ Michael Biebl ]
+  * Don't return any error in manager_dispatch_notify_fd().
+    If manager_dispatch_notify_fd() fails and returns an error then the
+    handling of service notifications will be disabled entirely leading to a
+    compromised system.
+    For example pid1 won't be able to receive the WATCHDOG messages anymore
+    and will kill all services supposed to send such messages. (CVE-2016-7796)
+    (Closes: #839607)
+  * core: Rework logic to determine when we decide to add automatic deps for
+    mounts.
+    This adds a concept of "extrinsic" mounts. If mounts are extrinsic we
+    consider them managed by something else and do not add automatic ordering
+    against umount.target, local-fs.target, remote-fs.target.
+    Extrinsic mounts include API mounts such as everything below /proc, /sys,
+    /dev. This avoids a crash in LXC containers where /dev/urandom is a bind
+    mount from the host system and unmounting it leads to an assert in
+    systemd. (Closes: #818978)
+  * Various ordering fixes for ifupdown.
+    Run ifup after all kernel modules have been loaded and all sysctl settings
+    are applied. Update ifup@.service to add missing After= for the device
+    unit we bind to. This ensures that the device unit is active when systemd
+    tries to start the service. (Closes: #819314)
+  * systemctl: Fix argument handling when invoked as shutdown.
+    (Closes: #776997)
+
+  [ Simon McVittie ]
+  * localed: tolerate absence of /etc/default/keyboard.
+    The debian-specific patch to read Debian config files was not tolerating
+    the absence of /etc/default/keyboard. This causes systemd-localed to fail
+    to start on systems where that file isn't populated (like embedded systems
+    without keyboards). (Closes: #833849)
+
+  [ Martin Pitt ]
+  * systemctl, loginctl, etc.: Don't start polkit agent when running as root.
+    (Closes: #774153, LP: #1565617)
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 21 Dec 2016 21:28:45 +0100
+
 systemd (215-17+deb8u5) stable; urgency=medium
 
   * Use the right timeout for stop processes we fork. This ensures that
