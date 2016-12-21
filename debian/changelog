@@ -1,4 +1,4 @@
-systemd (215-17+deb8u6) UNRELEASED; urgency=medium
+systemd (215-17+deb8u6) stable; urgency=medium
 
   [ Michael Biebl ]
   * Don't return any error in manager_dispatch_notify_fd().
@@ -36,7 +36,7 @@ systemd (215-17+deb8u6) UNRELEASED; urgency=medium
   * systemctl, loginctl, etc.: Don't start polkit agent when running as root.
     (Closes: #774153, LP: #1565617)
 
- -- Michael Biebl <biebl@debian.org>  Wed, 21 Dec 2016 21:28:45 +0100
+ -- Michael Biebl <biebl@debian.org>  Wed, 21 Dec 2016 21:33:51 +0100
 
 systemd (215-17+deb8u5) stable; urgency=medium
 
