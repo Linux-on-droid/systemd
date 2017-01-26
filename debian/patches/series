@@ -170,6 +170,7 @@ polkit-don-t-start-polkit-agent-when-running-as-root.patch
 core-rework-logic-to-determine-when-we-decide-to-add-auto.patch
 systemctl-fix-argument-handling-when-invoked-as-shutdown.patch
 systemctl-when-reading-legacy-t-argument-for-shutdown-don.patch
+bus-fix-bus_print_property-to-use-int-for-booleans.patch
 
 ## Debian specific patches:
 Add-back-support-for-Debian-specific-config-files.patch
