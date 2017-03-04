@@ -52,6 +52,7 @@ resolved-add-the-new-KSK-to-the-built-in-resolved-trust-a.patch
 zsh-completion-_journalctl-fixes-5165.patch
 udev-Use-parent-bus-id-for-virtio-disk-builtin-path-id-55.patch
 udev-fix-id_net_name_path-for-virtio-ccw-interfaces-5357.patch
+Avoid-strict-DM-interface-version-dependencies-5519.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
