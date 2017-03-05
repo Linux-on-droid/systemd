@@ -1,0 +1,62 @@
+From: Viktor Mihajlovski <mihajlov@linux.vnet.ibm.com>
+Date: Wed, 1 Mar 2017 21:30:17 +0100
+Subject: udev: Use parent bus id for virtio disk builtin path-id (#5500)
+
+The builtin path id for virtio block devices has been changed
+to use the bus id without a prefix "virtio-pci" to be
+compatible with all virtio transport types.
+
+In order to not break existing setups, the by-path symlinks for
+virtio block devices on the PCI bus are reintroduced by udev rules.
+The virtio-pci symlinks are considered to be deprecated and
+should be replaced by the native PCI symlinks.
+
+Example output for a virtio disk in PCI slot 7:
+ $ ls  /dev/disk/by-path
+ pci-0000:00:07.0
+ pci-0000:00:07.0-part1
+ virtio-pci-0000:00:07.0
+ virtio-pci-0000:00:07.0-part1
+
+See also
+[1] https://lists.freedesktop.org/archives/systemd-devel/2017-February/038326.html
+[2] https://lists.freedesktop.org/archives/systemd-devel/2017-March/038397.html
+
+This reverts f073b1b but keeps the same symlinks for compatibility.
+---
+ rules/60-persistent-storage.rules | 4 ++++
+ src/udev/udev-builtin-path_id.c   | 5 +----
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/rules/60-persistent-storage.rules b/rules/60-persistent-storage.rules
+index a93a342..baf341d 100644
+--- a/rules/60-persistent-storage.rules
++++ b/rules/60-persistent-storage.rules
+@@ -66,6 +66,10 @@ ENV{DEVTYPE}=="disk", DEVPATH!="*/virtual/*", IMPORT{builtin}="path_id"
+ ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="?*", SYMLINK+="disk/by-path/$env{ID_PATH}"
+ ENV{DEVTYPE}=="partition", ENV{ID_PATH}=="?*", SYMLINK+="disk/by-path/$env{ID_PATH}-part%n"
+ 
++# legacy virtio-pci by-path links (deprecated)
++KERNEL=="vd*[!0-9]", ENV{ID_PATH}=="pci-*", SYMLINK+="disk/by-path/virtio-$env{ID_PATH}"
++KERNEL=="vd*[0-9]", ENV{ID_PATH}=="pci-*", SYMLINK+="disk/by-path/virtio-$env{ID_PATH}-part%n"
++
+ # probe filesystem metadata of optical drives which have a media inserted
+ KERNEL=="sr*", ENV{DISK_EJECT_REQUEST}!="?*", ENV{ID_CDROM_MEDIA_TRACK_COUNT_DATA}=="?*", ENV{ID_CDROM_MEDIA_SESSION_LAST_OFFSET}=="?*", \
+   IMPORT{builtin}="blkid --offset=$env{ID_CDROM_MEDIA_SESSION_LAST_OFFSET}"
+diff --git a/src/udev/udev-builtin-path_id.c b/src/udev/udev-builtin-path_id.c
+index 1825ee7..e55b468 100644
+--- a/src/udev/udev-builtin-path_id.c
++++ b/src/udev/udev-builtin-path_id.c
+@@ -664,11 +664,8 @@ static int builtin_path_id(struct udev_device *dev, int argc, char *argv[], bool
+                         parent = skip_subsystem(parent, "xen");
+                         supported_parent = true;
+                 } else if (streq(subsys, "virtio")) {
+-                        while (parent && streq_ptr("virtio", udev_device_get_subsystem(parent)))
+-                                parent = udev_device_get_parent(parent);
+-                        path_prepend(&path, "virtio-pci-%s", udev_device_get_sysname(parent));
++                        parent = skip_subsystem(parent, "virtio");
+                         supported_transport = true;
+-                        supported_parent = true;
+                 } else if (streq(subsys, "scm")) {
+                         path_prepend(&path, "scm-%s", udev_device_get_sysname(parent));
+                         parent = skip_subsystem(parent, "scm");
