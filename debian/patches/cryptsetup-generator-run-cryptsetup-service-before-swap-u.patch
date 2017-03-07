@@ -1,0 +1,75 @@
+From: Mauricio Faria de Oliveira <mauricio.foliveira@gmail.com>
+Date: Tue, 28 Feb 2017 17:30:22 -0300
+Subject: cryptsetup-generator: run cryptsetup service before swap unit (#5480)
+
+If the cryptsetup service unit and swap unit for a swap device
+are not strictly ordered, it might happen that the swap unit
+activates/mounts the swap device before its cryptsetup service unit
+has a chance to run the 'mkswap' command (that it is programmed to).
+
+This leads to the following error:
+
+             Starting Cryptography Setup for sda3_crypt...
+    [  OK  ] Found device /dev/mapper/sda3_crypt.
+             Activating swap /dev/mapper/sda3_crypt...
+    [  OK  ] Activated swap /dev/mapper/sda3_crypt.
+    [  OK  ] Reached target Swap.
+    [FAILED] Failed to start Cryptography Setup for sda3_crypt.
+    See 'systemctl status systemd-cryptsetup@sda3_crypt.service' for
+    details.
+    [DEPEND] Dependency failed for Encrypted Volumes.
+
+Which happens because the swap device is already mounted:
+
+    # systemctl status systemd-cryptsetup@sda3_crypt.service
+    <...>
+       Active: failed (Result: exit-code) since Mon 2017-02-27 14:21:43 CST;
+    54s ago
+    <...>
+
+    <...> systemd[1]: Starting Cryptography Setup for sda3_crypt...
+    <...> mkswap[2420]: mkswap: error: /dev/mapper/sda3_crypt is mounted;
+    will not make swapspace
+    <...>
+
+So, modify cryptsetup-generator to include a 'Before=' option for the
+respective 'dev-mapper-%i.swap' device in the cryptsetup service unit.
+
+Now, correct ordering is ensured, and the error no longer occurs:
+
+             Starting Cryptography Setup for sda3_crypt...
+    [  OK  ] Found device /dev/mapper/sda3_crypt.
+    [  OK  ] Started Cryptography Setup for sda3_crypt.
+             Activating swap /dev/mapper/sda3_crypt...
+    [  OK  ] Reached target Encrypted Volumes.
+    [  OK  ] Activated swap /dev/mapper/sda3_crypt.
+    [  OK  ] Reached target Swap.
+(cherry picked from commit a6f8786a56c0acba5997e2c58d0df6c80ffde7f1)
+---
+ src/cryptsetup/cryptsetup-generator.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/cryptsetup/cryptsetup-generator.c b/src/cryptsetup/cryptsetup-generator.c
+index 6802986..2d00bcf 100644
+--- a/src/cryptsetup/cryptsetup-generator.c
++++ b/src/cryptsetup/cryptsetup-generator.c
+@@ -145,13 +145,17 @@ static int create_disk(
+                 }
+         }
+ 
+-        if (is_device_path(u))
++        if (is_device_path(u)) {
+                 fprintf(f,
+                         "BindsTo=%s\n"
+                         "After=%s\n"
+                         "Before=umount.target\n",
+                         d, d);
+-        else
++
++                if (swap)
++                        fputs("Before=dev-mapper-%i.swap\n",
++                              f);
++        } else
+                 fprintf(f,
+                         "RequiresMountsFor=%s\n",
+                         u);
