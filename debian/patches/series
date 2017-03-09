@@ -171,6 +171,8 @@ core-rework-logic-to-determine-when-we-decide-to-add-auto.patch
 systemctl-fix-argument-handling-when-invoked-as-shutdown.patch
 systemctl-when-reading-legacy-t-argument-for-shutdown-don.patch
 bus-fix-bus_print_property-to-use-int-for-booleans.patch
+service-allow-services-of-Type-oneshot-that-specify-no-Ex.patch
+core-if-the-start-command-vanishes-during-runtime-don-t-h.patch
 
 ## Debian specific patches:
 Add-back-support-for-Debian-specific-config-files.patch
