@@ -1,3 +1,23 @@
+systemd (215-17+deb8u7) stable; urgency=medium
+
+  * bus: Fix bus_print_property() to use "int" for booleans.
+    This fixes the problem that on big endian architectures, like mips or
+    powerpc, boolean properties that were retrieved via sd-bus were always
+    set to 0 (no). (Closes: #774430)
+  * systemctl: Add is-enabled support for SysV init scripts.
+    The update-rc.d utility does not provide is-enabled, so implement it
+    ourselves in systemctl using the same logic as systemd-sysv-install from
+    Stretch. (Closes: #809405)
+  * core: If the start command vanishes during runtime don't hit an assert.
+    This can happen when the configuration is changed and reloaded while we
+    are executing a service. Let's not hit an assert in this case.
+    (Closes: #856985)
+  * automount: If an automount unit is masked, don't react to activation
+    anymore.
+    Otherwise we'll hit an assert sooner or later. (Closes: #856035)
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 10 Mar 2017 06:02:49 +0100
+
 systemd (215-17+deb8u6) stable; urgency=medium
 
   [ Michael Biebl ]
