@@ -1,3 +1,40 @@
+systemd (232-20) unstable; urgency=medium
+
+  [ Martin Pitt ]
+  * debian/gbp.conf: Switch to "stretch" branch
+  * udev: Fix /dev/disk/by-path aliases for virtio disks. (Closes: #856558)
+  * udev: Create persistent net names for virtio CCW devices.
+    This only affects s390x as only this has CCW devices. This provides
+    stable network interface names for those and avoids changing the names
+    on updating Stretch to Buster. (Closes: #856559)
+  * Move systemd.link(5) to udev package.
+    .link files are being handled by udev, so it should ship the
+    corresponding manpage. Bump Breaks/Replaces accordingly. (Closes: #857270)
+
+  [ Michael Biebl ]
+  * Avoid strict DM API versioning.
+    Compiling against the dm-ioctl.h header as provided by the Linux kernel
+    will embed the DM interface version number. Running an older kernel can
+    lead to errors on shutdown when trying to detach DM devices.
+    As a workaround, build against a local copy of dm-ioctl.h based on 3.13,
+    which is the minimum required version to support DM_DEFERRED_REMOVE.
+    (Closes: #856337)
+  * cryptsetup-generator: Run cryptsetup service before swap unit.
+    Otherwise if the cryptsetup service unit and swap unit for a swap
+    device are not strictly ordered, it might happen that the swap unit
+    activates/mounts the swap device before its cryptsetup service unit has
+    a chance to run the 'mkswap' command. (Closes: #787028)
+  * Override package-name-doesnt-match-sonames lintian warning for libnss-*
+  * networkd: Fix size of MTUBytes so that it does not overwrite ARP
+
+  [ Felipe Sateler ]
+  * git-cherry-pick: Actually use cherry-pick for picking.
+    Use git cherry-pick for picking instead of rebase.
+    This allows using -x flag and thus record the upstream commit that is
+    being picked.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 16 Mar 2017 17:38:24 +0100
+
 systemd (232-19) unstable; urgency=medium
 
   [ Martin Pitt ]
