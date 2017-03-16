@@ -1,0 +1,27 @@
+From: Susant Sahani <ssahani@users.noreply.github.com>
+Date: Wed, 23 Nov 2016 21:03:01 +0530
+Subject: networkd: fix size of MTUBytes so that it does not overwrites ARP
+ (#4707)
+
+config_parse_iec_size overwrites the next varible that is ARP.
+Now the mtu is unsigned . Make it size_t .
+
+Fixes #4644
+(cherry picked from commit b8b40317d0355bc70bb23a6240a36f3630c4952b)
+---
+ src/network/networkd-network.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/network/networkd-network.h b/src/network/networkd-network.h
+index 42fc82d..11ff34b 100644
+--- a/src/network/networkd-network.h
++++ b/src/network/networkd-network.h
+@@ -173,7 +173,7 @@ struct Network {
+         IPv6PrivacyExtensions ipv6_privacy_extensions;
+ 
+         struct ether_addr *mac;
+-        unsigned mtu;
++        size_t mtu;
+         int arp;
+         uint32_t iaid;
+         DUID duid;
