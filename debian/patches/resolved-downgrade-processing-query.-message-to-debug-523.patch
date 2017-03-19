@@ -1,0 +1,23 @@
+From: Felipe Sateler <fsateler@users.noreply.github.com>
+Date: Sun, 5 Feb 2017 19:17:50 -0300
+Subject: resolved: downgrade "processing query..." message to debug (#5233)
+
+It doesn't really add much value in normal operation and just spams the log.
+(cherry picked from commit 52e634271fe96ec23a22705ffb87df59a09d1618)
+---
+ src/resolve/resolved-dns-stub.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/resolve/resolved-dns-stub.c b/src/resolve/resolved-dns-stub.c
+index 29c8d2b..77ee7e9 100644
+--- a/src/resolve/resolved-dns-stub.c
++++ b/src/resolve/resolved-dns-stub.c
+@@ -360,7 +360,7 @@ static void dns_stub_process_query(Manager *m, DnsStream *s, DnsPacket *p) {
+                 goto fail;
+         }
+ 
+-        log_info("Processing query...");
++        log_debug("Processing query...");
+         return;
+ 
+ fail:
