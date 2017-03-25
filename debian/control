@@ -328,6 +328,7 @@ Depends: ${shlibs:Depends},
          util-linux (>= 2.27.1),
          s390-tools (>> 1.6.2) [s390],
          procps
+Conflicts: hal
 Breaks: consolekit (<< 0.4.6-1),
         kmod (<< 14),
         plymouth (<< 0.9.0-7),
