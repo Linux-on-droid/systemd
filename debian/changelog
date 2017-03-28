@@ -1,3 +1,12 @@
+systemd (232-21ubuntu1) zesty; urgency=medium
+
+  * Merge from Debian unstable, remaining changes:
+  * debian/extra/units/systemd-resolved.service.d/resolvconf.conf: if
+    resolved is going to be started, make sure this blocks
+    network-online.target.  LP: #1673860.
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 23 Mar 2017 10:02:35 +0100
+
 systemd (232-21) unstable; urgency=medium
 
   * resolved: Downgrade "processing query..." message to debug.
@@ -12,6 +21,14 @@ systemd (232-21) unstable; urgency=medium
     (Closes: #858014)
 
  -- Michael Biebl <biebl@debian.org>  Tue, 21 Mar 2017 19:52:17 +0100
+
+systemd (232-20ubuntu1) zesty; urgency=medium
+
+  * debian/extra/units/systemd-resolved.service.d/resolvconf.conf: if
+    resolved is going to be started, make sure this blocks
+    network-online.target.  LP: #1673860.
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Fri, 17 Mar 2017 17:18:46 -0700
 
 systemd (232-20) unstable; urgency=medium
 
