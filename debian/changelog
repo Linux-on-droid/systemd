@@ -1,3 +1,27 @@
+systemd (232-22) unstable; urgency=medium
+
+  [ Martin Pitt ]
+  * resolved: Disable DNSSEC by default on stretch and zesty.
+    Both Debian stretch and Ubuntu zesty are close to releasing, switch to
+    DNSSEC=off by default for those. Users can still turn it back on with
+    DNSSEC=allow-downgrade (or even "yes").
+
+  [ Michael Biebl ]
+  * Add Conflicts against hal.
+    Since v183, udev no longer supports RUN+="socket:". This feature is
+    still used by hal, but now generates vast amounts of errors in the
+    journal. Thus force the removal of hal by adding a Conflicts to the udev
+    package. This is safe, as hal is long dead and no package depends on it
+    anymore.
+
+  [ Dimitri John Ledkov ]
+  * Adjust pkgconfig files to point at rootlibdir.
+    The .so symlinks got moved to rootlibdir in v232 so the .pc files for
+    libudev and libsystemd need to be adjusted accordingly. Otherwise we
+    break cross compilation. (LP: #1674201)
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 28 Mar 2017 21:23:30 +0200
+
 systemd (232-21) unstable; urgency=medium
 
   * resolved: Downgrade "processing query..." message to debug.
