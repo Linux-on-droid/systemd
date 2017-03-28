@@ -1,3 +1,10 @@
+systemd (232-21ubuntu2) zesty; urgency=medium
+
+  * pkgconfig: Cherrypick upstream fix to libdir locations in .pc files
+    (LP: #1674201)
+
+ -- Dimitri John Ledkov <xnox@ubuntu.com>  Tue, 28 Mar 2017 16:59:14 +0100
+
 systemd (232-21ubuntu1) zesty; urgency=medium
 
   * Merge from Debian unstable, remaining changes:
