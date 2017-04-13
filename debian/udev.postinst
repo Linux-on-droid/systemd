@@ -90,6 +90,12 @@ Driver=virtio_net
 NamePolicy=onboard kernel
 EOF
   fi
+
+  # 232-20 (232-21ubuntu3 in ubuntu) introduced predicable interface names on
+  # s390x for virtio However, we should preserve ethX names on upgrade.
+  if dpkg --compare-versions "$2" lt-nl "232-21ubuntu3~"; then
+      /usr/share/systemd/write_persistent_net_s390x_virtio
+  fi
 }
 
 update_hwdb() {
