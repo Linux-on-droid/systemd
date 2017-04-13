@@ -1,3 +1,34 @@
+systemd (232-21ubuntu3) zesty; urgency=medium
+
+  [ Martin Pitt ]
+  * resolved: Disable DNSSEC by default on stretch and zesty.
+    Both Debian stretch and Ubuntu zesty are close to releasing, switch to
+    DNSSEC=off by default for those. Users can still turn it back on with
+    DNSSEC=allow-downgrade (or even "yes"). (LP: #1682499)
+
+  [ Michael Biebl ]
+  * journal: fix up syslog facility when forwarding native messages.
+    Native journal messages (_TRANSPORT=journal) typically don't have a
+    syslog facility attached to it. As a result when forwarding the
+    messages to syslog they ended up with facility 0 (LOG_KERN).
+    Apply syslog_fixup_facility() so we use LOG_USER instead. (Closes: #837893)
+    (LP: #1682484)
+
+  [ Dimitri John Ledkov ]
+  * networkd: cherry-pick support for setting bridge port's priority.
+    This is a useful feature/bugfix to improve feature parity of networkd with
+    ifupdown. This matches netplan's expectations to be able to set bridge port's
+    priorities via networked. This featue is to be used by netplan/MAAS/OpenStack.
+    (LP: #1668347)
+  * TEST-12: cherry-pick upstream fix for compat with new netcat-openbsd.
+    (LP: #1672542)
+  * udev.postinst: preserve virtio interfaces names on upgrades, on s390x.
+    New udev generates stable interface names on s390x kvm instances, however, upon
+    upgrades existing ethX names should be preserved to prevent breaking networking
+    and software configurations. (Closes: #860246) (LP: #1682437)
+
+ -- Dimitri John Ledkov <xnox@ubuntu.com>  Thu, 13 Apr 2017 18:10:33 +0100
+
 systemd (232-21ubuntu2) zesty; urgency=medium
 
   * pkgconfig: Cherrypick upstream fix to libdir locations in .pc files
