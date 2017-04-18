@@ -21,8 +21,8 @@ LP: #1668347
  src/network/networkd-network-gperf.gperf |   3 +-
  src/network/networkd-network.c           |   1 +
  src/network/networkd-network.h           |   3 +-
- test/networkd-test.py                    | 185 ++++++++++++++++++++++++++++++-
- 7 files changed, 206 insertions(+), 6 deletions(-)
+ test/networkd-test.py                    | 191 ++++++++++++++++++++++++++++++-
+ 7 files changed, 212 insertions(+), 6 deletions(-)
 
 diff --git a/man/systemd.network.xml b/man/systemd.network.xml
 index 2fb4907..3e3119b 100644
@@ -123,10 +123,26 @@ index 11ff34b..9e6efa0 100644
          bool use_br_vlan;
          uint16_t pvid;
 diff --git a/test/networkd-test.py b/test/networkd-test.py
-index 3091722..4057482 100755
+index 3091722..618d107 100755
 --- a/test/networkd-test.py
 +++ b/test/networkd-test.py
-@@ -45,9 +45,188 @@ have_dnsmasq = shutil.which('dnsmasq')
+@@ -30,6 +30,7 @@
+ # You should have received a copy of the GNU Lesser General Public License
+ # along with systemd; If not, see <http://www.gnu.org/licenses/>.
+ 
++import errno
+ import os
+ import sys
+ import time
+@@ -42,12 +43,196 @@ networkd_active = subprocess.call(['systemctl', 'is-active', '--quiet',
+                                    'systemd-networkd']) == 0
+ have_dnsmasq = shutil.which('dnsmasq')
+ 
++NETWORK_UNITDIR = '/run/systemd/network'
++
++NETWORKD_WAIT_ONLINE = shutil.which('systemd-networkd-wait-online',
++                                    path='/usr/lib/systemd:/lib/systemd')
++
  RESOLV_CONF = '/run/systemd/resolve/resolv.conf'
  
  
