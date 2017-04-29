@@ -91,6 +91,7 @@ Restrictions: needs-root, allow-stderr, isolation-machine
 
 Tests: root-unittests
 Depends: libsystemd-dev,
+  systemd,
   tree,
   perl,
   xz-utils,
