@@ -1,0 +1,220 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Fri, 18 Nov 2016 18:38:06 +0100
+Subject: nspawn: support ephemeral boots from images
+
+Previously --ephemeral was only supported with container trees in btrfs
+subvolumes (i.e. in combination with --directory=). This adds support for
+--ephemeral in conjunction with disk images (i.e. --image=) too.
+
+As side effect this fixes that --ephemeral was accepted but ignored when using
+-M on a container that turned out to be an image.
+
+Fixes: #4664
+(cherry picked from commit 0f3be6ca4dbbac8350cd8f10a8968d31f7bc13b6)
+---
+ man/systemd-nspawn.xml | 20 ++++++--------
+ src/basic/missing.h    |  4 +++
+ src/nspawn/nspawn.c    | 72 +++++++++++++++++++++++++++++++++++---------------
+ 3 files changed, 63 insertions(+), 33 deletions(-)
+
+diff --git a/man/systemd-nspawn.xml b/man/systemd-nspawn.xml
+index f153034..c295422 100644
+--- a/man/systemd-nspawn.xml
++++ b/man/systemd-nspawn.xml
+@@ -211,13 +211,8 @@
+         <term><option>-x</option></term>
+         <term><option>--ephemeral</option></term>
+ 
+-        <listitem><para>If specified, the container is run with a
+-        temporary <literal>btrfs</literal> snapshot of its root
+-        directory (as configured with <option>--directory=</option>),
+-        that is removed immediately when the container terminates.
+-        This option is only supported if the root file system is
+-        <literal>btrfs</literal>. May not be specified together with
+-        <option>--image=</option> or
++        <listitem><para>If specified, the container is run with a temporary snapshot of its file system that is removed
++        immediately when the container terminates. May not be specified together with
+         <option>--template=</option>.</para>
+         <para>Note that this switch leaves host name, machine ID and
+         all other settings that could identify the instance
+@@ -252,11 +247,12 @@
+           Partitions Specification</ulink>.</para></listitem>
+         </itemizedlist>
+ 
+-        <para>Any other partitions, such as foreign partitions, swap
+-        partitions or EFI system partitions are not mounted. May not
+-        be specified together with <option>--directory=</option>,
+-        <option>--template=</option> or
+-        <option>--ephemeral</option>.</para></listitem>
++        <para>On GPT images, if an EFI System Partition (ESP) is discovered, it is automatically mounted to
++        <filename>/efi</filename> (or <filename>/boot</filename> as fallback) in case a directory by this name exists
++        and is empty.</para>
++
++        <para>Any other partitions, such as foreign partitions or swap partitions are not mounted. May not be specified
++        together with <option>--directory=</option>, <option>--template=</option>.</para></listitem>
+       </varlistentry>
+ 
+       <varlistentry>
+diff --git a/src/basic/missing.h b/src/basic/missing.h
+index 4c013be..508eb0e 100644
+--- a/src/basic/missing.h
++++ b/src/basic/missing.h
+@@ -143,6 +143,10 @@
+ #define GRND_RANDOM 0x0002
+ #endif
+ 
++#ifndef FS_NOCOW_FL
++#define FS_NOCOW_FL 0x00800000
++#endif
++
+ #ifndef BTRFS_IOCTL_MAGIC
+ #define BTRFS_IOCTL_MAGIC 0x94
+ #endif
+diff --git a/src/nspawn/nspawn.c b/src/nspawn/nspawn.c
+index 1563644..9bafe9b 100644
+--- a/src/nspawn/nspawn.c
++++ b/src/nspawn/nspawn.c
+@@ -1107,11 +1107,6 @@ static int parse_argv(int argc, char *argv[]) {
+                 return -EINVAL;
+         }
+ 
+-        if (arg_ephemeral && arg_image) {
+-                log_error("--ephemeral and --image= may not be combined.");
+-                return -EINVAL;
+-        }
+-
+         if (arg_ephemeral && !IN_SET(arg_link_journal, LINK_NO, LINK_AUTO)) {
+                 log_error("--ephemeral and --link-journal= may not be combined.");
+                 return -EINVAL;
+@@ -2559,7 +2554,7 @@ static int determine_names(void) {
+                         r = image_find(arg_machine, &i);
+                         if (r < 0)
+                                 return log_error_errno(r, "Failed to find image for machine '%s': %m", arg_machine);
+-                        else if (r == 0) {
++                        if (r == 0) {
+                                 log_error("No image for machine '%s': %m", arg_machine);
+                                 return -ENOENT;
+                         }
+@@ -2569,14 +2564,14 @@ static int determine_names(void) {
+                         else
+                                 r = free_and_strdup(&arg_directory, i->path);
+                         if (r < 0)
+-                                return log_error_errno(r, "Invalid image directory: %m");
++                                return log_oom();
+ 
+                         if (!arg_ephemeral)
+                                 arg_read_only = arg_read_only || i->read_only;
+                 } else
+                         arg_directory = get_current_dir_name();
+ 
+-                if (!arg_directory && !arg_machine) {
++                if (!arg_directory && !arg_image) {
+                         log_error("Failed to determine path, please use -D or -i.");
+                         return -EINVAL;
+                 }
+@@ -2587,7 +2582,6 @@ static int determine_names(void) {
+                         arg_machine = gethostname_malloc();
+                 else
+                         arg_machine = strdup(basename(arg_image ?: arg_directory));
+-
+                 if (!arg_machine)
+                         return log_oom();
+ 
+@@ -4035,7 +4029,7 @@ int main(int argc, char *argv[]) {
+         _cleanup_fdset_free_ FDSet *fds = NULL;
+         int r, n_fd_passed, loop_nr = -1, ret = EXIT_SUCCESS;
+         char veth_name[IFNAMSIZ] = "";
+-        bool secondary = false, remove_subvol = false;
++        bool secondary = false, remove_subvol = false, remove_image = false;
+         pid_t pid = 0;
+         union in_addr_union exposed = {};
+         _cleanup_release_lock_file_ LockFile tree_global_lock = LOCK_FILE_INIT, tree_local_lock = LOCK_FILE_INIT;
+@@ -4106,7 +4100,7 @@ int main(int argc, char *argv[]) {
+                         else
+                                 r = tempfn_random(arg_directory, "machine.", &np);
+                         if (r < 0) {
+-                                log_error_errno(r, "Failed to generate name for snapshot: %m");
++                                log_error_errno(r, "Failed to generate name for directory snapshot: %m");
+                                 goto finish;
+                         }
+ 
+@@ -4177,19 +4171,46 @@ int main(int argc, char *argv[]) {
+                 assert(arg_image);
+                 assert(!arg_template);
+ 
+-                r = image_path_lock(arg_image, (arg_read_only ? LOCK_SH : LOCK_EX) | LOCK_NB, &tree_global_lock, &tree_local_lock);
+-                if (r == -EBUSY) {
+-                        r = log_error_errno(r, "Disk image %s is currently busy.", arg_image);
+-                        goto finish;
+-                }
+-                if (r < 0) {
+-                        r = log_error_errno(r, "Failed to create image lock: %m");
+-                        goto finish;
++                if (arg_ephemeral)  {
++                        _cleanup_free_ char *np = NULL;
++
++                        r = tempfn_random(arg_image, "machine.", &np);
++                        if (r < 0) {
++                                log_error_errno(r, "Failed to generate name for image snapshot: %m");
++                                goto finish;
++                        }
++
++                        r = image_path_lock(np, (arg_read_only ? LOCK_SH : LOCK_EX) | LOCK_NB, &tree_global_lock, &tree_local_lock);
++                        if (r < 0) {
++                                r = log_error_errno(r, "Failed to create image lock: %m");
++                                goto finish;
++                        }
++
++                        r = copy_file(arg_image, np, O_EXCL, arg_read_only ? 0400 : 0600, FS_NOCOW_FL);
++                        if (r < 0) {
++                                r = log_error_errno(r, "Failed to copy image file: %m");
++                                goto finish;
++                        }
++
++                        free(arg_image);
++                        arg_image = np;
++                        np = NULL;
++
++                        remove_image = true;
++                } else {
++                        r = image_path_lock(arg_image, (arg_read_only ? LOCK_SH : LOCK_EX) | LOCK_NB, &tree_global_lock, &tree_local_lock);
++                        if (r == -EBUSY) {
++                                r = log_error_errno(r, "Disk image %s is currently busy.", arg_image);
++                                goto finish;
++                        }
++                        if (r < 0) {
++                                r = log_error_errno(r, "Failed to create image lock: %m");
++                                goto finish;
++                        }
+                 }
+ 
+                 if (!mkdtemp(template)) {
+-                        log_error_errno(errno, "Failed to create temporary directory: %m");
+-                        r = -errno;
++                        r = log_error_errno(errno, "Failed to create temporary directory: %m");
+                         goto finish;
+                 }
+ 
+@@ -4213,6 +4234,10 @@ int main(int argc, char *argv[]) {
+                                   &secondary);
+                 if (r < 0)
+                         goto finish;
++
++                /* Now that we mounted the image, let's try to remove it again, if it is ephemeral */
++                if (remove_image && unlink(arg_image) >= 0)
++                        remove_image = false;
+         }
+ 
+         r = custom_mounts_prepare();
+@@ -4295,6 +4320,11 @@ finish:
+                         log_warning_errno(k, "Cannot remove subvolume '%s', ignoring: %m", arg_directory);
+         }
+ 
++        if (remove_image && arg_image) {
++                if (unlink(arg_image) < 0)
++                        log_warning_errno(errno, "Can't remove image file '%s', ignoring: %m", arg_image);
++        }
++
+         if (arg_machine) {
+                 const char *p;
+ 
