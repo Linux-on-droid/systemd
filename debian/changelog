@@ -1,3 +1,33 @@
+systemd (232-23) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * journal: fix up syslog facility when forwarding native messages.
+    Native journal messages (_TRANSPORT=journal) typically don't have a
+    syslog facility attached to it. As a result when forwarding the
+    messages to syslog they ended up with facility 0 (LOG_KERN).
+    Apply syslog_fixup_facility() so we use LOG_USER instead. (Closes: #837893)
+  * nspawn: Support ephemeral boots from images (Closes: #858149)
+  * Exclude test binaries from dh_shlibdeps.
+    The test binaries in libsystemd-dev require libsystemd-shared which is
+    shipped in the systemd package. Those test binaries are primarily meant
+    to be run via autopkgtest. As the libsystemd-dev package is not supposed
+    to depend on systemd, exclude the tests from dh_shlibdeps and instead
+    update the autopkgtest dependencies to pull in the systemd package.
+    (Closes: #859152)
+
+  [ Felipe Sateler ]
+  * Backport patch to make inability to get OS version nonfatal in machinectl.
+    Otherwise machinectl list breaks when there are libvirt machines
+    (Closes: #849316)
+
+  [ Sjoerd Simons ]
+  * init-functions: Only call daemon-reload when planning to redirect.
+    systemctl daemon-reload is a quite a heavy operation, it will re-parse
+    all configuration and re-run all generators. This should only be done
+    when strictly needed. (Closes: #861158)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 29 Apr 2017 21:47:47 +0200
+
 systemd (232-22) unstable; urgency=medium
 
   [ Martin Pitt ]
