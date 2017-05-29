@@ -62,6 +62,7 @@ Adjust-pkgconfig-files-to-point-at-rootlibdir-4584.patch
 journal-fix-up-syslog-facility-when-forwarding-native-mes.patch
 machinectl-make-sure-that-inability-to-get-OS-version-isn.patch
 nspawn-support-ephemeral-boots-from-images.patch
+resolved-bugfix-of-null-pointer-p-question-dereferencing-.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
