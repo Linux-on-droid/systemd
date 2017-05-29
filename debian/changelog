@@ -1,3 +1,21 @@
+systemd (232-24) unstable; urgency=medium
+
+  [ Felipe Sateler ]
+  * Specify nobody user and group.
+    Otherwise nss-systemd will translate to group 'nobody', which doesn't
+    exist on debian systems.
+
+  [ Michael Biebl ]
+  * Add Depends: procps to systemd.
+    It's required by /usr/lib/systemd/user/systemd-exit.service which calls
+    /bin/kill to stop the systemd --user instance. (Closes: #862292)
+  * resolved: fix null pointer p->question dereferencing.
+    This fixes a bug which allowed a remote DoS (daemon crash) via a crafted
+    DNS response with an empty question section.
+    Fixes: CVE-2017-9217 (Closes: #863277)
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 29 May 2017 16:25:43 +0200
+
 systemd (232-23) unstable; urgency=medium
 
   [ Michael Biebl ]
