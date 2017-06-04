@@ -1,0 +1,22 @@
+From: Maks Naumov <maksqwe1@ukr.net>
+Date: Mon, 14 Nov 2016 12:33:43 +0200
+Subject: link: fix offload features initialization (#4639)
+
+(cherry picked from commit 45d34fa7fb9f587f09e8cca882966050b4cbb5be)
+---
+ src/udev/net/link-config.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/udev/net/link-config.c b/src/udev/net/link-config.c
+index ece9248..fa8fe1f 100644
+--- a/src/udev/net/link-config.c
++++ b/src/udev/net/link-config.c
+@@ -168,7 +168,7 @@ static int load_link(link_config_ctx *ctx, const char *filename) {
+         link->wol = _WOL_INVALID;
+         link->duplex = _DUP_INVALID;
+ 
+-        memset(&link->features, -1, _NET_DEV_FEAT_MAX);
++        memset(&link->features, -1, sizeof(link->features));
+ 
+         r = config_parse(NULL, filename, file,
+                          "Match\0Link\0Ethernet\0",
