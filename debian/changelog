@@ -1,3 +1,27 @@
+systemd (232-25) unstable; urgency=medium
+
+  * hwdb: Use path_join() to generate the hwdb_bin path.
+    This ensures /lib/udev/hwdb.bin gets the correct SELinux context. Having
+    double slashes in the path makes selabel_lookup_raw() return the wrong
+    context. (Closes: #851933)
+  * selinux: Enable labeling and access checks for unprivileged users.
+    Revert commit that inadvertently broke a lot of SELinux related
+    functionality for both unprivileged users and systemd instances running
+    as MANAGER_USER and instead deal with the auditd issue by checking for
+    the CAP_AUDIT_WRITE capability before opening an audit netlink socket.
+    (Closes: #863800)
+  * Revert "systemd-sysv: Add Conflicts: systemd-shim"
+    Under certain conditions this confuses Jessies's apt which then tries to
+    remove systemd while being the active init system, resulting in a failed
+    dist-upgrade. While this turned out to be a bug in apt, avoid this
+    situation by dropping the Conflicts. (Closes: #854041)
+  * link: Fix offload features initialization.
+    This fixes a regression introduced in v232 which caused TCP
+    segmentation offloads being disabled by default, resulting in
+    significant performance issues under certain conditions. (Closes: #864073)
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 04 Jun 2017 22:58:32 +0200
+
 systemd (232-24) unstable; urgency=medium
 
   [ Felipe Sateler ]
