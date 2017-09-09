@@ -57,7 +57,7 @@ CONFFLAGS = \
 	-Dzshcompletiondir=/usr/share/zsh/vendor-completions \
 	-Ddbuspolicydir=/usr/share/dbus-1/system.d/ \
 	-Dsupport-url=$(SUPPORT_URL) \
-	-Dkill-user-processes=false \
+	-Ddefault-kill-user-processes=false \
 	-Dpamconfdir=no \
 	-Dqrencode=false \
 	-Dvconsole=false \
@@ -80,7 +80,9 @@ CONFFLAGS_deb = \
 	-Dhwdb=true \
 	-Dsysusers=true \
 	-Dinstall-tests=true \
-	-Defi=true
+	-Defi=true \
+	-Dnss-systemd=true \
+	-Dresolve=true
 
 ifeq (, $(filter stage1, $(DEB_BUILD_PROFILES)))
 CONFFLAGS_deb += \
@@ -139,7 +141,8 @@ CONFFLAGS_udeb = \
 	-Dtimesyncd=false \
 	-Dlocaled=false \
 	-Dmyhostname=false \
-	-Dresolved=false \
+	-Dnss-systemd=false \
+	-Dresolve=false \
 	-Dpolkit=false \
 	-Dacl=false \
 	-Dgcrypt=false \
@@ -215,6 +218,8 @@ override_dh_install:
 	# FIXME: generate proper sysusers.d/basic.conf for Debian, and add autopkgtest
 	rm -rf debian/install/*/usr/lib/sysusers.d/*
 	rm -f debian/install/*/lib/systemd/system/*sysusers*.service debian/install/*/lib/systemd/system/*/*sysusers*.service
+	# dropped in upstream master/235
+	-install -D -m 644 debian/install/deb/usr/lib/tmpfiles.d/systemd-remote.conf debian/systemd-journal-remote/usr/lib/tmpfiles.d/systemd-remote.conf
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
 	dh_install -pudev-udeb -plibudev1-udeb --sourcedir=debian/install/udeb
 endif
