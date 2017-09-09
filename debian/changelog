@@ -1,3 +1,9 @@
+systemd (234-3~bpo9+1) UNRELEASED; urgency=medium
+
+  * Rebuild for stretch-backports.
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 10 Sep 2017 00:22:33 +0200
+
 systemd (234-3) unstable; urgency=medium
 
   [ Martin Pitt ]
