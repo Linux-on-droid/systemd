@@ -1,8 +1,11 @@
-systemd (234-3~bpo9+1) UNRELEASED; urgency=medium
+systemd (234-3~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.
+  * Revert "Drop systemd-timesyncd.service.d/disable-with-time-daemon.conf"
+    It's still required in stretch as the NTP implementations were only
+    fixed in buster.
 
- -- Michael Biebl <biebl@debian.org>  Sun, 10 Sep 2017 00:22:33 +0200
+ -- Michael Biebl <biebl@debian.org>  Sun, 10 Sep 2017 00:27:07 +0200
 
 systemd (234-3) unstable; urgency=medium
 
