@@ -30,13 +30,6 @@ export DEB_BUILD_PROFILES += noudeb
 endif
 
 CONFFLAGS = \
-	--wrap-mode=nodownload \
-	--buildtype=plain \
-	--prefix=/usr \
-	--sysconfdir=/etc \
-	--localstatedir=/var \
-	--libdir=lib/$(DEB_HOST_MULTIARCH) \
-	--libexecdir=lib/$(DEB_HOST_MULTIARCH) \
 	-Db_lto=true \
 	-Drootlibdir=/lib/$(DEB_HOST_MULTIARCH) \
 	-Dsplit-usr=true \
@@ -155,23 +148,27 @@ CONFFLAGS_udeb = \
 	-Dsysusers=false
 
 override_dh_auto_configure:
-	meson $(CONFFLAGS) $(CONFFLAGS_deb) build-deb
+	dh_auto_configure --builddirectory=build-deb \
+		-- $(CONFFLAGS) $(CONFFLAGS_deb)
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
-	meson $(CONFFLAGS) $(CONFFLAGS_udeb) build-udeb
+	dh_auto_configure --builddirectory=build-udeb \
+		-- $(CONFFLAGS) $(CONFFLAGS_udeb)
 endif
 
 override_dh_auto_build:
-	ninja -v -C build-deb
+	dh_auto_build --builddirectory=build-deb
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
-	ninja -v -C build-udeb
+	dh_auto_build --builddirectory=build-udeb
 endif
 	# generate POT file for translators
 	cd build-deb/po; srcdir=../../po intltool-update --pot --verbose
 
 override_dh_auto_install:
-	DESTDIR=$(CURDIR)/debian/install/deb ninja -C build-deb install
+	dh_auto_install --builddirectory=build-deb \
+		--destdir=debian/install/deb
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
-	DESTDIR=$(CURDIR)/debian/install/udeb ninja -C build-udeb install
+	dh_auto_install --builddirectory=build-udeb \
+		--destdir=debian/install/udeb
 endif
 	# fix paths in manpages; manually check the remaining /usr occurrences
 	# occasionally, with filtering out paths which are known to be in /usr:
@@ -293,4 +290,4 @@ ifeq (, $(filter nocheck, $(DEB_BUILD_OPTIONS)))
 endif
 
 %:
-	dh $@ --without autoreconf,systemd
+	dh $@ --without autoreconf,systemd --buildsystem=meson
