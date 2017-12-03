@@ -77,6 +77,7 @@ cryptsetup-generator-run-cryptsetup-service-before-swap-u.patch
 networkd-handle-MTU-field-in-IPv6-RA-4719.patch
 shared-Add-a-linker-script-so-that-all-functions-are-tagg.patch
 resolved-fix-loop-on-packets-with-pseudo-dns-types.patch
+machinectl-don-t-output-No-machines.-with-no-legend-optio.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
