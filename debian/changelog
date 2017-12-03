@@ -1,3 +1,19 @@
+systemd (232-25+deb9u2) stretch; urgency=medium
+
+  * networkd: Handle MTU field in IPv6 RA (Closes: #878162)
+  * shared: Add a linker script so that all functions are tagged @SD_SHARED
+    instead of @Base.
+    This helps prevent symbol collisions with other programs and libraries.
+    In particular, because PAM modules are loaded into the process that is
+    creating the session, and systemd creates PAM sessions, the potential
+    for collisions is high. (Closes: #873708)
+  * resolved: Fix loop on packets with pseudo dns types.
+    CVE-2017-15908 (Closes: #880026)
+  * machinectl: Don't output "No machines." with --no-legend option
+    (Closes: #880158)
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 03 Dec 2017 15:03:50 +0100
+
 systemd (232-25+deb9u1) stretch; urgency=medium
 
   [ Dimitri John Ledkov ]
