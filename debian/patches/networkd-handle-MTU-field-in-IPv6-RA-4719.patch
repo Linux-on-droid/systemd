@@ -1,0 +1,131 @@
+From: Susant Sahani <ssahani@users.noreply.github.com>
+Date: Thu, 24 Nov 2016 03:02:19 +0530
+Subject: networkd: handle MTU field in IPv6 RA (#4719)
+
+This patch handles the custom MTU field in IPv6 RA.
+
+fixes RFE #4464
+
+(cherry picked from commit d6fceaf1f7ff765bdc3b135f3d3676ec689da312)
+---
+ src/libsystemd/sd-netlink/netlink-types.c | 27 ++++++++++++++++++++++++---
+ src/network/networkd-ndisc.c              |  8 ++++++++
+ src/network/networkd-route.c              | 14 ++++++++++++++
+ src/network/networkd-route.h              |  1 +
+ 4 files changed, 47 insertions(+), 3 deletions(-)
+
+diff --git a/src/libsystemd/sd-netlink/netlink-types.c b/src/libsystemd/sd-netlink/netlink-types.c
+index 1c10dd5..0f8b0cc 100644
+--- a/src/libsystemd/sd-netlink/netlink-types.c
++++ b/src/libsystemd/sd-netlink/netlink-types.c
+@@ -500,6 +500,28 @@ static const NLTypeSystem rtnl_address_type_system = {
+         .types = rtnl_address_types,
+ };
+ 
++/* RTM_METRICS --- array of struct rtattr with types of RTAX_* */
++
++static const NLType rtnl_route_metrics_types[] = {
++        [RTAX_MTU]               = { .type = NETLINK_TYPE_U32 },
++        [RTAX_WINDOW]            = { .type = NETLINK_TYPE_U32 },
++        [RTAX_RTT]               = { .type = NETLINK_TYPE_U32 },
++        [RTAX_RTTVAR]            = { .type = NETLINK_TYPE_U32 },
++        [RTAX_SSTHRESH]          = { .type = NETLINK_TYPE_U32 },
++        [RTAX_CWND]              = { .type = NETLINK_TYPE_U32 },
++        [RTAX_ADVMSS]            = { .type = NETLINK_TYPE_U32 },
++        [RTAX_REORDERING]        = { .type = NETLINK_TYPE_U32 },
++        [RTAX_HOPLIMIT]          = { .type = NETLINK_TYPE_U32 },
++        [RTAX_INITCWND]          = { .type = NETLINK_TYPE_U32 },
++        [RTAX_FEATURES]          = { .type = NETLINK_TYPE_U32 },
++        [RTAX_RTO_MIN]           = { .type = NETLINK_TYPE_U32 },
++};
++
++static const NLTypeSystem rtnl_route_metrics_type_system = {
++        .count = ELEMENTSOF(rtnl_route_metrics_types),
++        .types = rtnl_route_metrics_types,
++};
++
+ static const NLType rtnl_route_types[] = {
+         [RTA_DST]               = { .type = NETLINK_TYPE_IN_ADDR }, /* 6? */
+         [RTA_SRC]               = { .type = NETLINK_TYPE_IN_ADDR }, /* 6? */
+@@ -508,9 +530,8 @@ static const NLType rtnl_route_types[] = {
+         [RTA_GATEWAY]           = { .type = NETLINK_TYPE_IN_ADDR },
+         [RTA_PRIORITY]          = { .type = NETLINK_TYPE_U32 },
+         [RTA_PREFSRC]           = { .type = NETLINK_TYPE_IN_ADDR }, /* 6? */
+-/*
+-        [RTA_METRICS]           = { .type = NETLINK_TYPE_NESTED },
+-        [RTA_MULTIPATH]         = { .len = sizeof(struct rtnexthop) },
++        [RTA_METRICS]           = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_route_metrics_type_system},
++/*      [RTA_MULTIPATH]         = { .len = sizeof(struct rtnexthop) },
+ */
+         [RTA_FLOW]              = { .type = NETLINK_TYPE_U32 }, /* 6? */
+ /*
+diff --git a/src/network/networkd-ndisc.c b/src/network/networkd-ndisc.c
+index 4853791..9cfdf01 100644
+--- a/src/network/networkd-ndisc.c
++++ b/src/network/networkd-ndisc.c
+@@ -55,6 +55,7 @@ static void ndisc_router_process_default(Link *link, sd_ndisc_router *rt) {
+         struct in6_addr gateway;
+         uint16_t lifetime;
+         unsigned preference;
++        uint32_t mtu;
+         usec_t time_now;
+         int r;
+         Address *address;
+@@ -115,6 +116,12 @@ static void ndisc_router_process_default(Link *link, sd_ndisc_router *rt) {
+                 return;
+         }
+ 
++        r = sd_ndisc_router_get_mtu(rt, &mtu);
++        if (r < 0) {
++                log_link_warning_errno(link, r, "Failed to get default router MTU from RA: %m");
++                return;
++        }
++
+         r = route_new(&route);
+         if (r < 0) {
+                 log_link_error_errno(link, r, "Could not allocate route: %m");
+@@ -127,6 +134,7 @@ static void ndisc_router_process_default(Link *link, sd_ndisc_router *rt) {
+         route->pref = preference;
+         route->gw.in6 = gateway;
+         route->lifetime = time_now + lifetime * USEC_PER_SEC;
++        route->mtu = mtu;
+ 
+         r = route_configure(route, link, ndisc_netlink_handler);
+         if (r < 0) {
+diff --git a/src/network/networkd-route.c b/src/network/networkd-route.c
+index 6f60ee5..6693b1f 100644
+--- a/src/network/networkd-route.c
++++ b/src/network/networkd-route.c
+@@ -605,6 +605,20 @@ int route_configure(
+         if (r < 0)
+                 return log_error_errno(r, "Could not append RTA_OIF attribute: %m");
+ 
++        r = sd_netlink_message_open_container(req, RTA_METRICS);
++        if (r < 0)
++                return log_error_errno(r, "Could not append RTA_METRICS attribute: %m");
++
++        if (route->mtu > 0) {
++                r = sd_netlink_message_append_u32(req, RTAX_MTU, route->mtu);
++                if (r < 0)
++                        return log_error_errno(r, "Could not append RTAX_MTU attribute: %m");
++        }
++
++        r = sd_netlink_message_close_container(req);
++        if (r < 0)
++                return log_error_errno(r, "Could not append RTA_METRICS attribute: %m");
++
+         r = sd_netlink_call_async(link->manager->rtnl, req, callback, link, 0, NULL);
+         if (r < 0)
+                 return log_error_errno(r, "Could not send rtnetlink message: %m");
+diff --git a/src/network/networkd-route.h b/src/network/networkd-route.h
+index d4e4dba..02f0b27 100644
+--- a/src/network/networkd-route.h
++++ b/src/network/networkd-route.h
+@@ -37,6 +37,7 @@ struct Route {
+         unsigned char tos;
+         uint32_t priority; /* note that ip(8) calls this 'metric' */
+         uint32_t table;
++        uint32_t mtu;
+         unsigned char pref;
+         unsigned flags;
+ 
