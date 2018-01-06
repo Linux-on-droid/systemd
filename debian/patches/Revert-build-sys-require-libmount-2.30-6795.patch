@@ -1,0 +1,44 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Sat, 6 Jan 2018 15:48:07 +0100
+Subject: Revert "build-sys: require libmount >= 2.30 (#6795)"
+
+This reverts commit d6e8096669fef4aa5132843fb488fa35de349901.
+
+The newest version shipped in stretch is 2.29 and we don't strictly need
+the fixes provided by libmount 2.30.
+Or put differently, we don't introduce any regressions if we revert
+this commit.
+---
+ README      | 5 +++--
+ meson.build | 2 +-
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/README b/README
+index b245564..e3ce263 100644
+--- a/README
++++ b/README
+@@ -135,8 +135,9 @@ REQUIREMENTS:
+ 
+         glibc >= 2.16
+         libcap
+-        libmount >= 2.30 (from util-linux)
+-                (util-linux *must* be built without --enable-libmount-support-mtab)
++        libmount >= 2.27.1 (from util-linux)
++                (util-linux < 2.29 *must* be built with --enable-libmount-force-mountinfo,
++                 and later versions without --enable-libmount-support-mtab.)
+         libseccomp >= 2.3.1 (optional)
+         libblkid >= 2.24 (from util-linux) (optional)
+         libkmod >= 15 (optional)
+diff --git a/meson.build b/meson.build
+index c8fcc40..135b7a8 100644
+--- a/meson.build
++++ b/meson.build
+@@ -762,7 +762,7 @@ if not libcap.found()
+ endif
+ 
+ libmount = dependency('mount',
+-                      version : '>= 2.30')
++                      version : '>= 2.27')
+ 
+ want_seccomp = get_option('seccomp')
+ if want_seccomp != 'false'
