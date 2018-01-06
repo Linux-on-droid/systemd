@@ -1,3 +1,18 @@
+systemd (236-2~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+  * Revert "Don't rely on the debhelper meson build system support"
+    There is now a recent enough backport of debhelper available for
+    stretch.
+  * Revert "Bump Build-Depends on libmount-dev to (>= 2.30)"
+    The newest version shipped in stretch is 2.29 and we don't strictly need
+    the fixes provided by libmount 2.30.
+    Or put differently, we don't introduce any regressions compared to
+    what's currently in stretch if we revert the upstream commit which
+    bumped the libmount version.
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 06 Jan 2018 16:16:17 +0100
+
 systemd (236-2) unstable; urgency=medium
 
   * Downgrade priority of libudev1 to optional.
