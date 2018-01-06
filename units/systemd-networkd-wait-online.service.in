@@ -1,3 +1,5 @@
+#  SPDX-License-Identifier: LGPL-2.1+
+#
 #  This file is part of systemd.
 #
 #  systemd is free software; you can redistribute it and/or modify it
@@ -12,7 +14,7 @@ DefaultDependencies=no
 Conflicts=shutdown.target
 Requires=systemd-networkd.service
 After=systemd-networkd.service
-Before=network-online.target
+Before=network-online.target shutdown.target
 
 [Service]
 Type=oneshot

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -21,7 +22,7 @@
 
 #include <inttypes.h>
 
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
 #include <gcrypt.h>
 #endif
 
@@ -121,12 +122,12 @@ typedef struct JournalFile {
         pthread_t offline_thread;
         volatile OfflineState offline_state;
 
-#if defined(HAVE_XZ) || defined(HAVE_LZ4)
+#if HAVE_XZ || HAVE_LZ4
         void *compress_buffer;
         size_t compress_buffer_size;
 #endif
 
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
         gcry_md_hd_t hmac;
         bool hmac_running;
 
@@ -160,7 +161,6 @@ int journal_file_open(
 int journal_file_set_offline(JournalFile *f, bool wait);
 bool journal_file_is_offlining(JournalFile *f);
 JournalFile* journal_file_close(JournalFile *j);
-void journal_file_close_set(Set *s);
 
 int journal_file_open_reliably(
                 const char *fname,

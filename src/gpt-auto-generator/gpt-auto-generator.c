@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -43,6 +44,7 @@
 #include "path-util.h"
 #include "proc-cmdline.h"
 #include "special.h"
+#include "specifier.h"
 #include "stat-util.h"
 #include "string-util.h"
 #include "udev-util.h"
@@ -56,9 +58,9 @@ static bool arg_root_enabled = true;
 static bool arg_root_rw = false;
 
 static int add_cryptsetup(const char *id, const char *what, bool rw, bool require, char **device) {
-        _cleanup_free_ char *e = NULL, *n = NULL, *p = NULL, *d = NULL, *to = NULL;
+        _cleanup_free_ char *e = NULL, *n = NULL, *p = NULL, *d = NULL, *id_escaped = NULL, *what_escaped = NULL;
         _cleanup_fclose_ FILE *f = NULL;
-        char *from, *ret;
+        char *ret;
         int r;
 
         assert(id);
@@ -75,6 +77,14 @@ static int add_cryptsetup(const char *id, const char *what, bool rw, bool requir
         r = unit_name_build("systemd-cryptsetup", e, ".service", &n);
         if (r < 0)
                 return log_error_errno(r, "Failed to generate unit name: %m");
+
+        id_escaped = specifier_escape(id);
+        if (!id_escaped)
+                return log_oom();
+
+        what_escaped = specifier_escape(what);
+        if (!what_escaped)
+                return log_oom();
 
         p = strjoin(arg_dest, "/", n);
         if (!p)
@@ -99,45 +109,32 @@ static int add_cryptsetup(const char *id, const char *what, bool rw, bool requir
                 "Type=oneshot\n"
                 "RemainAfterExit=yes\n"
                 "TimeoutSec=0\n" /* the binary handles timeouts anyway */
+                "KeyringMode=shared\n" /* make sure we can share cached keys among instances */
                 "ExecStart=" SYSTEMD_CRYPTSETUP_PATH " attach '%s' '%s' '' '%s'\n"
                 "ExecStop=" SYSTEMD_CRYPTSETUP_PATH " detach '%s'\n",
                 d, d,
-                id, what, rw ? "" : "read-only",
-                id);
+                id_escaped, what_escaped, rw ? "" : "read-only",
+                id_escaped);
 
         r = fflush_and_check(f);
         if (r < 0)
                 return log_error_errno(r, "Failed to write file %s: %m", p);
 
-        from = strjoina("../", n);
-
-        to = strjoin(arg_dest, "/", d, ".wants/", n);
-        if (!to)
-                return log_oom();
-
-        mkdir_parents_label(to, 0755);
-        if (symlink(from, to) < 0)
-                return log_error_errno(errno, "Failed to create symlink %s: %m", to);
+        r = generator_add_symlink(arg_dest, d, "wants", n);
+        if (r < 0)
+                return r;
 
         if (require) {
-                free(to);
+                const char *dmname;
 
-                to = strjoin(arg_dest, "/cryptsetup.target.requires/", n);
-                if (!to)
-                        return log_oom();
+                r = generator_add_symlink(arg_dest, "cryptsetup.target", "requires", n);
+                if (r < 0)
+                        return r;
 
-                mkdir_parents_label(to, 0755);
-                if (symlink(from, to) < 0)
-                        return log_error_errno(errno, "Failed to create symlink %s: %m", to);
-
-                free(to);
-                to = strjoin(arg_dest, "/dev-mapper-", e, ".device.requires/", n);
-                if (!to)
-                        return log_oom();
-
-                mkdir_parents_label(to, 0755);
-                if (symlink(from, to) < 0)
-                        return log_error_errno(errno, "Failed to create symlink %s: %m", to);
+                dmname = strjoina("dev-mapper-", e, ".device");
+                r = generator_add_symlink(arg_dest, dmname, "requires", n);
+                if (r < 0)
+                        return r;
         }
 
         free(p);
@@ -173,9 +170,13 @@ static int add_mount(
                 const char *description,
                 const char *post) {
 
-        _cleanup_free_ char *unit = NULL, *lnk = NULL, *crypto_what = NULL, *p = NULL;
+        _cleanup_free_ char *unit = NULL, *crypto_what = NULL, *p = NULL;
         _cleanup_fclose_ FILE *f = NULL;
         int r;
+
+        /* Note that we don't apply specifier escaping on the input strings here, since we know they are not configured
+         * externally, but all originate from our own sources here, and hence we know they contain no % characters that
+         * could potentially be understood as specifiers. */
 
         assert(id);
         assert(what);
@@ -239,16 +240,8 @@ static int add_mount(
         if (r < 0)
                 return log_error_errno(r, "Failed to write unit file %s: %m", p);
 
-        if (post) {
-                lnk = strjoin(arg_dest, "/", post, ".requires/", unit);
-                if (!lnk)
-                        return log_oom();
-
-                mkdir_parents_label(lnk, 0755);
-                if (symlink(p, lnk) < 0)
-                        return log_error_errno(errno, "Failed to create symlink %s: %m", lnk);
-        }
-
+        if (post)
+                return generator_add_symlink(arg_dest, post, "requires", unit);
         return 0;
 }
 
@@ -299,7 +292,7 @@ static int add_partition_mount(
 }
 
 static int add_swap(const char *path) {
-        _cleanup_free_ char *name = NULL, *unit = NULL, *lnk = NULL;
+        _cleanup_free_ char *name = NULL, *unit = NULL;
         _cleanup_fclose_ FILE *f = NULL;
         int r;
 
@@ -341,18 +334,10 @@ static int add_swap(const char *path) {
         if (r < 0)
                 return log_error_errno(r, "Failed to write unit file %s: %m", unit);
 
-        lnk = strjoin(arg_dest, "/" SPECIAL_SWAP_TARGET ".wants/", name);
-        if (!lnk)
-                return log_oom();
-
-        mkdir_parents_label(lnk, 0755);
-        if (symlink(unit, lnk) < 0)
-                return log_error_errno(errno, "Failed to create symlink %s: %m", lnk);
-
-        return 0;
+        return generator_add_symlink(arg_dest, SPECIAL_SWAP_TARGET, "wants", name);
 }
 
-#ifdef ENABLE_EFI
+#if ENABLE_EFI
 static int add_automount(
                 const char *id,
                 const char *what,
@@ -363,7 +348,7 @@ static int add_automount(
                 const char *description,
                 usec_t timeout) {
 
-        _cleanup_free_ char *unit = NULL, *lnk = NULL;
+        _cleanup_free_ char *unit = NULL;
         _cleanup_free_ char *opt, *p = NULL;
         _cleanup_fclose_ FILE *f = NULL;
         int r;
@@ -418,15 +403,7 @@ static int add_automount(
         if (r < 0)
                 return log_error_errno(r, "Failed to write unit file %s: %m", p);
 
-        lnk = strjoin(arg_dest, "/" SPECIAL_LOCAL_FS_TARGET ".wants/", unit);
-        if (!lnk)
-                return log_oom();
-        mkdir_parents_label(lnk, 0755);
-
-        if (symlink(p, lnk) < 0)
-                return log_error_errno(errno, "Failed to create symlink %s: %m", lnk);
-
-        return 0;
+        return generator_add_symlink(arg_dest, SPECIAL_LOCAL_FS_TARGET, "wants", unit);
 }
 
 static int add_esp(DissectedPartition *p) {
@@ -609,136 +586,6 @@ static int enumerate_partitions(dev_t devnum) {
         return r;
 }
 
-static int get_block_device(const char *path, dev_t *dev) {
-        struct stat st;
-        struct statfs sfs;
-
-        assert(path);
-        assert(dev);
-
-        /* Get's the block device directly backing a file system. If
-         * the block device is encrypted, returns the device mapper
-         * block device. */
-
-        if (lstat(path, &st))
-                return -errno;
-
-        if (major(st.st_dev) != 0) {
-                *dev = st.st_dev;
-                return 1;
-        }
-
-        if (statfs(path, &sfs) < 0)
-                return -errno;
-
-        if (F_TYPE_EQUAL(sfs.f_type, BTRFS_SUPER_MAGIC))
-                return btrfs_get_block_device(path, dev);
-
-        return 0;
-}
-
-static int get_block_device_harder(const char *path, dev_t *dev) {
-        _cleanup_closedir_ DIR *d = NULL;
-        _cleanup_free_ char *p = NULL, *t = NULL;
-        struct dirent *de, *found = NULL;
-        const char *q;
-        unsigned maj, min;
-        dev_t dt;
-        int r;
-
-        assert(path);
-        assert(dev);
-
-        /* Gets the backing block device for a file system, and
-         * handles LUKS encrypted file systems, looking for its
-         * immediate parent, if there is one. */
-
-        r = get_block_device(path, &dt);
-        if (r <= 0)
-                return r;
-
-        if (asprintf(&p, "/sys/dev/block/%u:%u/slaves", major(dt), minor(dt)) < 0)
-                return -ENOMEM;
-
-        d = opendir(p);
-        if (!d) {
-                if (errno == ENOENT)
-                        goto fallback;
-
-                return -errno;
-        }
-
-        FOREACH_DIRENT_ALL(de, d, return -errno) {
-
-                if (dot_or_dot_dot(de->d_name))
-                        continue;
-
-                if (!IN_SET(de->d_type, DT_LNK, DT_UNKNOWN))
-                        continue;
-
-                if (found) {
-                        _cleanup_free_ char *u = NULL, *v = NULL, *a = NULL, *b = NULL;
-
-                        /* We found a device backed by multiple other devices. We don't really support automatic
-                         * discovery on such setups, with the exception of dm-verity partitions. In this case there are
-                         * two backing devices: the data partition and the hash partition. We are fine with such
-                         * setups, however, only if both partitions are on the same physical device. Hence, let's
-                         * verify this. */
-
-                        u = strjoin(p, "/", de->d_name, "/../dev");
-                        if (!u)
-                                return -ENOMEM;
-
-                        v = strjoin(p, "/", found->d_name, "/../dev");
-                        if (!v)
-                                return -ENOMEM;
-
-                        r = read_one_line_file(u, &a);
-                        if (r < 0) {
-                                log_debug_errno(r, "Failed to read %s: %m", u);
-                                goto fallback;
-                        }
-
-                        r = read_one_line_file(v, &b);
-                        if (r < 0) {
-                                log_debug_errno(r, "Failed to read %s: %m", v);
-                                goto fallback;
-                        }
-
-                        /* Check if the parent device is the same. If not, then the two backing devices are on
-                         * different physical devices, and we don't support that. */
-                        if (!streq(a, b))
-                                goto fallback;
-                }
-
-                found = de;
-        }
-
-        if (!found)
-                goto fallback;
-
-        q = strjoina(p, "/", found->d_name, "/dev");
-
-        r = read_one_line_file(q, &t);
-        if (r == -ENOENT)
-                goto fallback;
-        if (r < 0)
-                return r;
-
-        if (sscanf(t, "%u:%u", &maj, &min) != 2)
-                return -EINVAL;
-
-        if (maj == 0)
-                goto fallback;
-
-        *dev = makedev(maj, min);
-        return 1;
-
-fallback:
-        *dev = dt;
-        return 1;
-}
-
 static int parse_proc_cmdline_item(const char *key, const char *value, void *data) {
         int r;
 
@@ -779,7 +626,7 @@ static int parse_proc_cmdline_item(const char *key, const char *value, void *dat
         return 0;
 }
 
-#ifdef ENABLE_EFI
+#if ENABLE_EFI
 static int add_root_cryptsetup(void) {
 
         /* If a device /dev/gpt-auto-root-luks appears, then make it pull in systemd-cryptsetup-root.service, which
@@ -791,7 +638,7 @@ static int add_root_cryptsetup(void) {
 
 static int add_root_mount(void) {
 
-#ifdef ENABLE_EFI
+#if ENABLE_EFI
         int r;
 
         if (!is_efi_boot()) {
@@ -855,7 +702,7 @@ static int add_mounts(void) {
 }
 
 int main(int argc, char *argv[]) {
-        int r = 0, k;
+        int r, k;
 
         if (argc > 1 && argc != 4) {
                 log_error("This program takes three or no arguments.");
@@ -887,6 +734,8 @@ int main(int argc, char *argv[]) {
 
         if (arg_root_enabled)
                 r = add_root_mount();
+        else
+                r = 0;
 
         if (!in_initrd()) {
                 k = add_mounts();

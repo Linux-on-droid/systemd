@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -192,3 +193,6 @@ uint64_t system_tasks_max_scale(uint64_t v, uint64_t max);
 int update_reboot_parameter_and_warn(const char *param);
 
 int version(void);
+
+int get_block_device(const char *path, dev_t *dev);
+int get_block_device_harder(const char *path, dev_t *dev);

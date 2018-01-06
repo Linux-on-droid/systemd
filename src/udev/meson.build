@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 udevadm_sources = files('''
         udevadm.c
         udevadm-info.c
@@ -36,15 +53,15 @@ libudev_core_sources = '''
         net/ethtool-util.h
 '''.split()
 
-if conf.get('HAVE_KMOD', false)
+if conf.get('HAVE_KMOD') == 1
         libudev_core_sources += ['udev-builtin-kmod.c']
 endif
 
-if conf.get('HAVE_BLKID', false)
+if conf.get('HAVE_BLKID') == 1
         libudev_core_sources += ['udev-builtin-blkid.c']
 endif
 
-if conf.get('HAVE_ACL', false)
+if conf.get('HAVE_ACL') == 1
         libudev_core_sources += ['udev-builtin-uaccess.c',
 	                         logind_acl_c,
                                  sd_login_c]

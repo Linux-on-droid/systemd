@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -21,6 +22,7 @@
 #include <string.h>
 #include <sys/mount.h>
 #include <unistd.h>
+#include <stdio_ext.h>
 
 #include "alloc-util.h"
 #include "bus-common-errors.h"
@@ -141,7 +143,7 @@ static int user_save_internal(User *u) {
         assert(u);
         assert(u->state_file);
 
-        r = mkdir_safe_label("/run/systemd/users", 0755, 0, 0);
+        r = mkdir_safe_label("/run/systemd/users", 0755, 0, 0, false);
         if (r < 0)
                 goto fail;
 
@@ -149,7 +151,8 @@ static int user_save_internal(User *u) {
         if (r < 0)
                 goto fail;
 
-        fchmod(fileno(f), 0644);
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+        (void) fchmod(fileno(f), 0644);
 
         fprintf(f,
                 "# This is private data. Do not parse.\n"
@@ -334,7 +337,7 @@ static int user_mkdir_runtime_path(User *u) {
 
         assert(u);
 
-        r = mkdir_safe_label("/run/user", 0755, 0, 0);
+        r = mkdir_safe_label("/run/user", 0755, 0, 0, false);
         if (r < 0)
                 return log_error_errno(r, "Failed to create /run/user: %m");
 
@@ -354,7 +357,7 @@ static int user_mkdir_runtime_path(User *u) {
 
                 r = mount("tmpfs", u->runtime_path, "tmpfs", MS_NODEV|MS_NOSUID, t);
                 if (r < 0) {
-                        if (errno != EPERM && errno != EACCES) {
+                        if (!IN_SET(errno, EPERM, EACCES)) {
                                 r = log_error_errno(errno, "Failed to mount per-user tmpfs directory %s: %m", u->runtime_path);
                                 goto fail;
                         }
@@ -425,12 +428,11 @@ static int user_start_service(User *u) {
                         u->service,
                         &error,
                         &job);
-        if (r < 0) {
+        if (r < 0)
                 /* we don't fail due to this, let's try to continue */
                 log_error_errno(r, "Failed to start user service, ignoring: %s", bus_error_message(&error, r));
-        } else {
+        else
                 u->service_job = job;
-        }
 
         return 0;
 }
@@ -541,18 +543,18 @@ static int user_remove_runtime_path(User *u) {
 
         r = rm_rf(u->runtime_path, 0);
         if (r < 0)
-                log_error_errno(r, "Failed to remove runtime directory %s: %m", u->runtime_path);
+                log_error_errno(r, "Failed to remove runtime directory %s (before unmounting): %m", u->runtime_path);
 
         /* Ignore cases where the directory isn't mounted, as that's
          * quite possible, if we lacked the permissions to mount
          * something */
         r = umount2(u->runtime_path, MNT_DETACH);
-        if (r < 0 && errno != EINVAL && errno != ENOENT)
+        if (r < 0 && !IN_SET(errno, EINVAL, ENOENT))
                 log_error_errno(errno, "Failed to unmount user runtime directory %s: %m", u->runtime_path);
 
         r = rm_rf(u->runtime_path, REMOVE_ROOT);
         if (r < 0)
-                log_error_errno(r, "Failed to remove runtime directory %s: %m", u->runtime_path);
+                log_error_errno(r, "Failed to remove runtime directory %s (after unmounting): %m", u->runtime_path);
 
         return r;
 }
@@ -617,7 +619,7 @@ int user_finalize(User *u) {
          * cases, as we shouldn't accidentally remove a system service's IPC objects while it is running, just because
          * a cronjob running as the same user just finished. Hence: exclude system users generally from IPC clean-up,
          * and do it only for normal users. */
-        if (u->manager->remove_ipc && u->uid > SYSTEM_UID_MAX) {
+        if (u->manager->remove_ipc && !uid_is_system(u->uid)) {
                 k = clean_ipc_by_uid(u->uid);
                 if (k < 0)
                         r = k;

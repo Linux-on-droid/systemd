@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -1072,7 +1073,7 @@ static int manager_parse_config_file(Manager *m) {
                                         CONF_PATHS_NULSTR("systemd/logind.conf.d"),
                                         "Login\0",
                                         config_item_perf_lookup, logind_gperf_lookup,
-                                        false, m);
+                                        CONFIG_PARSE_WARN, m);
 }
 
 static int manager_dispatch_reload_signal(sd_event_source *s, const struct signalfd_siginfo *si, void *userdata) {
@@ -1254,7 +1255,7 @@ int main(int argc, char *argv[]) {
                 goto finish;
         }
 
-        log_debug("systemd-logind running as pid "PID_FMT, getpid());
+        log_debug("systemd-logind running as pid "PID_FMT, getpid_cached());
 
         sd_notify(false,
                   "READY=1\n"
@@ -1262,7 +1263,7 @@ int main(int argc, char *argv[]) {
 
         r = manager_run(m);
 
-        log_debug("systemd-logind stopped as pid "PID_FMT, getpid());
+        log_debug("systemd-logind stopped as pid "PID_FMT, getpid_cached());
 
 finish:
         sd_notify(false,

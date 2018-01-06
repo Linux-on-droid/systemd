@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -20,6 +21,7 @@
 #include "sd-bus.h"
 
 #include "alloc-util.h"
+#include "bpf-firewall.h"
 #include "bus-common-errors.h"
 #include "cgroup-util.h"
 #include "dbus-job.h"
@@ -36,6 +38,7 @@
 #include "strv.h"
 #include "user-util.h"
 
+static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_collect_mode, collect_mode, CollectMode);
 static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_load_state, unit_load_state, UnitLoadState);
 static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_job_mode, job_mode, JobMode);
 static BUS_DEFINE_PROPERTY_GET_ENUM(property_get_emergency_action, emergency_action, EmergencyAction);
@@ -99,9 +102,10 @@ static int property_get_dependencies(
                 void *userdata,
                 sd_bus_error *error) {
 
-        Set *s = *(Set**) userdata;
+        Hashmap *h = *(Hashmap**) userdata;
         Iterator j;
         Unit *u;
+        void *v;
         int r;
 
         assert(bus);
@@ -111,7 +115,7 @@ static int property_get_dependencies(
         if (r < 0)
                 return r;
 
-        SET_FOREACH(u, s, j) {
+        HASHMAP_FOREACH_KEY(v, u, h, j) {
                 r = sd_bus_message_append(reply, "s", u->id);
                 if (r < 0)
                         return r;
@@ -134,6 +138,37 @@ static int property_get_obsolete_dependencies(
 
         /* For dependency types we don't support anymore always return an empty array */
         return sd_bus_message_append(reply, "as", 0);
+}
+
+static int property_get_requires_mounts_for(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error) {
+
+        Hashmap *h = *(Hashmap**) userdata;
+        const char *p;
+        Iterator j;
+        void *v;
+        int r;
+
+        assert(bus);
+        assert(reply);
+
+        r = sd_bus_message_open_container(reply, 'a', "s");
+        if (r < 0)
+                return r;
+
+        HASHMAP_FOREACH_KEY(v, p, h, j) {
+                r = sd_bus_message_append(reply, "s", p);
+                if (r < 0)
+                        return r;
+        }
+
+        return sd_bus_message_close_container(reply);
 }
 
 static int property_get_description(
@@ -718,7 +753,7 @@ const sd_bus_vtable bus_unit_vtable[] = {
         SD_BUS_PROPERTY("PropagatesReloadTo", "as", property_get_dependencies, offsetof(Unit, dependencies[UNIT_PROPAGATES_RELOAD_TO]), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("ReloadPropagatedFrom", "as", property_get_dependencies, offsetof(Unit, dependencies[UNIT_RELOAD_PROPAGATED_FROM]), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("JoinsNamespaceOf", "as", property_get_dependencies, offsetof(Unit, dependencies[UNIT_JOINS_NAMESPACE_OF]), SD_BUS_VTABLE_PROPERTY_CONST),
-        SD_BUS_PROPERTY("RequiresMountsFor", "as", NULL, offsetof(Unit, requires_mounts_for), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("RequiresMountsFor", "as", property_get_requires_mounts_for, offsetof(Unit, requires_mounts_for), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("Documentation", "as", NULL, offsetof(Unit, documentation), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("Description", "s", property_get_description, 0, SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("LoadState", "s", property_get_load_state, offsetof(Unit, load_state), SD_BUS_VTABLE_PROPERTY_CONST),
@@ -763,8 +798,11 @@ const sd_bus_vtable bus_unit_vtable[] = {
         SD_BUS_PROPERTY("StartLimitIntervalSec", "t", bus_property_get_usec, offsetof(Unit, start_limit.interval), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("StartLimitBurst", "u", bus_property_get_unsigned, offsetof(Unit, start_limit.burst), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("StartLimitAction", "s", property_get_emergency_action, offsetof(Unit, start_limit_action), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("FailureAction", "s", property_get_emergency_action, offsetof(Unit, failure_action), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("SuccessAction", "s", property_get_emergency_action, offsetof(Unit, success_action), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("RebootArgument", "s", NULL, offsetof(Unit, reboot_arg), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("InvocationID", "ay", bus_property_get_id128, offsetof(Unit, invocation_id), 0),
+        SD_BUS_PROPERTY("CollectMode", "s", property_get_collect_mode, offsetof(Unit, collect_mode), 0),
 
         SD_BUS_METHOD("Start", "s", "o", method_start, SD_BUS_VTABLE_UNPRIVILEGED),
         SD_BUS_METHOD("Stop", "s", "o", method_stop, SD_BUS_VTABLE_UNPRIVILEGED),
@@ -916,7 +954,7 @@ static int append_process(sd_bus_message *reply, const char *p, pid_t pid, Set *
         assert(pid > 0);
 
         r = set_put(pids, PID_TO_PTR(pid));
-        if (r == -EEXIST || r == 0)
+        if (IN_SET(r, 0, -EEXIST))
                 return 0;
         if (r < 0)
                 return r;
@@ -1051,6 +1089,39 @@ int bus_unit_method_get_processes(sd_bus_message *message, void *userdata, sd_bu
         return sd_bus_send(NULL, reply, NULL);
 }
 
+static int property_get_ip_counter(
+                sd_bus *bus,
+                const char *path,
+                const char *interface,
+                const char *property,
+                sd_bus_message *reply,
+                void *userdata,
+                sd_bus_error *error) {
+
+        CGroupIPAccountingMetric metric;
+        uint64_t value = (uint64_t) -1;
+        Unit *u = userdata;
+
+        assert(bus);
+        assert(reply);
+        assert(property);
+        assert(u);
+
+        if (streq(property, "IPIngressBytes"))
+                metric = CGROUP_IP_INGRESS_BYTES;
+        else if (streq(property, "IPIngressPackets"))
+                metric = CGROUP_IP_INGRESS_PACKETS;
+        else if (streq(property, "IPEgressBytes"))
+                metric = CGROUP_IP_EGRESS_BYTES;
+        else {
+                assert(streq(property, "IPEgressPackets"));
+                metric = CGROUP_IP_EGRESS_PACKETS;
+        }
+
+        (void) unit_get_ip_accounting(u, metric, &value);
+        return sd_bus_message_append(reply, "t", value);
+}
+
 const sd_bus_vtable bus_unit_cgroup_vtable[] = {
         SD_BUS_VTABLE_START(0),
         SD_BUS_PROPERTY("Slice", "s", property_get_slice, 0, 0),
@@ -1058,6 +1129,10 @@ const sd_bus_vtable bus_unit_cgroup_vtable[] = {
         SD_BUS_PROPERTY("MemoryCurrent", "t", property_get_current_memory, 0, 0),
         SD_BUS_PROPERTY("CPUUsageNSec", "t", property_get_cpu_usage, 0, 0),
         SD_BUS_PROPERTY("TasksCurrent", "t", property_get_current_tasks, 0, 0),
+        SD_BUS_PROPERTY("IPIngressBytes", "t", property_get_ip_counter, 0, 0),
+        SD_BUS_PROPERTY("IPIngressPackets", "t", property_get_ip_counter, 0, 0),
+        SD_BUS_PROPERTY("IPEgressBytes", "t", property_get_ip_counter, 0, 0),
+        SD_BUS_PROPERTY("IPEgressPackets", "t", property_get_ip_counter, 0, 0),
         SD_BUS_METHOD("GetProcesses", NULL, "a(sus)", bus_unit_method_get_processes, SD_BUS_VTABLE_UNPRIVILEGED),
         SD_BUS_VTABLE_END
 };
@@ -1215,13 +1290,13 @@ int bus_unit_queue_job(
         }
 
         if (type == JOB_STOP &&
-            (u->load_state == UNIT_NOT_FOUND || u->load_state == UNIT_ERROR) &&
+            (IN_SET(u->load_state, UNIT_NOT_FOUND, UNIT_ERROR)) &&
             unit_active_state(u) == UNIT_INACTIVE)
                 return sd_bus_error_setf(error, BUS_ERROR_NO_SUCH_UNIT, "Unit %s not loaded.", u->id);
 
         if ((type == JOB_START && u->refuse_manual_start) ||
             (type == JOB_STOP && u->refuse_manual_stop) ||
-            ((type == JOB_RESTART || type == JOB_TRY_RESTART) && (u->refuse_manual_start || u->refuse_manual_stop)) ||
+            (IN_SET(type, JOB_RESTART, JOB_TRY_RESTART) && (u->refuse_manual_start || u->refuse_manual_stop)) ||
             (type == JOB_RELOAD_OR_START && job_type_collapse(type, u) == JOB_START && u->refuse_manual_start))
                 return sd_bus_error_setf(error, BUS_ERROR_ONLY_BY_DEPENDENCY, "Operation refused, unit %s may be requested by dependency only (it is configured to refuse manual start/stop).", u->id);
 
@@ -1240,11 +1315,11 @@ int bus_unit_queue_job(
         return sd_bus_reply_method_return(message, "o", path);
 }
 
-static int bus_unit_set_transient_property(
+static int bus_unit_set_live_property(
                 Unit *u,
                 const char *name,
                 sd_bus_message *message,
-                UnitSetPropertiesMode mode,
+                UnitWriteFlags flags,
                 sd_bus_error *error) {
 
         int r;
@@ -1253,6 +1328,9 @@ static int bus_unit_set_transient_property(
         assert(name);
         assert(message);
 
+        /* Handles setting properties both "live" (i.e. at any time during runtime), and during creation (for transient
+         * units that are being created). */
+
         if (streq(name, "Description")) {
                 const char *d;
 
@@ -1260,26 +1338,65 @@ static int bus_unit_set_transient_property(
                 if (r < 0)
                         return r;
 
-                if (mode != UNIT_CHECK) {
+                if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         r = unit_set_description(u, d);
                         if (r < 0)
                                 return r;
 
-                        unit_write_drop_in_format(u, mode, name, "[Unit]\nDescription=%s", d);
+                        unit_write_settingf(u, flags|UNIT_ESCAPE_SPECIFIERS, name, "Description=%s", d);
                 }
 
                 return 1;
+        }
 
-        } else if (streq(name, "DefaultDependencies")) {
+        return 0;
+}
+
+static int bus_unit_set_transient_property(
+                Unit *u,
+                const char *name,
+                sd_bus_message *message,
+                UnitWriteFlags flags,
+                sd_bus_error *error) {
+
+        int r;
+
+        assert(u);
+        assert(name);
+        assert(message);
+
+        /* Handles settings when transient units are created. This settings cannot be altered anymore after the unit
+         * has been created. */
+
+        if (streq(name, "DefaultDependencies")) {
                 int b;
 
                 r = sd_bus_message_read(message, "b", &b);
                 if (r < 0)
                         return r;
 
-                if (mode != UNIT_CHECK) {
+                if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         u->default_dependencies = b;
-                        unit_write_drop_in_format(u, mode, name, "[Unit]\nDefaultDependencies=%s", yes_no(b));
+                        unit_write_settingf(u, flags, name, "DefaultDependencies=%s", yes_no(b));
+                }
+
+                return 1;
+
+        } else if (streq(name, "CollectMode")) {
+                const char *s;
+                CollectMode m;
+
+                r = sd_bus_message_read(message, "s", &s);
+                if (r < 0)
+                        return r;
+
+                m = collect_mode_from_string(s);
+                if (m < 0)
+                        return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Unknown garbage collection mode: %s", s);
+
+                if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
+                        u->collect_mode = m;
+                        unit_write_settingf(u, flags, name, "CollectMode=%s", collect_mode_to_string(m));
                 }
 
                 return 1;
@@ -1312,12 +1429,12 @@ static int bus_unit_set_transient_property(
                 if (slice->type != UNIT_SLICE)
                         return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Unit name '%s' is not a slice", s);
 
-                if (mode != UNIT_CHECK) {
+                if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         r = unit_set_slice(u, slice);
                         if (r < 0)
                                 return r;
 
-                        unit_write_drop_in_private_format(u, mode, name, "Slice=%s", s);
+                        unit_write_settingf(u, flags|UNIT_PRIVATE, name, "Slice=%s", s);
                 }
 
                 return 1;
@@ -1354,10 +1471,10 @@ static int bus_unit_set_transient_property(
                         if (!unit_name_is_valid(other, UNIT_NAME_PLAIN|UNIT_NAME_INSTANCE))
                                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid unit name %s", other);
 
-                        if (mode != UNIT_CHECK) {
+                        if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                                 _cleanup_free_ char *label = NULL;
 
-                                r = unit_add_dependency_by_name(u, d, other, NULL, true);
+                                r = unit_add_dependency_by_name(u, d, other, NULL, true, UNIT_DEPENDENCY_FILE);
                                 if (r < 0)
                                         return r;
 
@@ -1365,7 +1482,7 @@ static int bus_unit_set_transient_property(
                                 if (!label)
                                         return -ENOMEM;
 
-                                unit_write_drop_in_format(u, mode, label, "[Unit]\n%s=%s", name, other);
+                                unit_write_settingf(u, flags, label, "%s=%s", name, other);
                         }
 
                 }
@@ -1375,6 +1492,30 @@ static int bus_unit_set_transient_property(
                 r = sd_bus_message_exit_container(message);
                 if (r < 0)
                         return r;
+
+                return 1;
+
+        } else if (STR_IN_SET(name, "FailureAction", "SuccessAction")) {
+                EmergencyAction action;
+                const char *s;
+
+                r = sd_bus_message_read(message, "s", &s);
+                if (r < 0)
+                        return r;
+
+                action = emergency_action_from_string(s);
+                if (action < 0)
+                        return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid emergency action: %s", s);
+
+                if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
+
+                        if (streq(name, "FailureAction"))
+                                u->failure_action = action;
+                        else
+                                u->success_action = action;
+
+                        unit_write_settingf(u, flags, name, "%s=%s", name, emergency_action_to_string(action));
+                }
 
                 return 1;
 
@@ -1396,7 +1537,7 @@ static int bus_unit_set_transient_property(
                 if (r < 0)
                         return r;
 
-                if (mode != UNIT_CHECK)
+                if (!UNIT_WRITE_FLAGS_NOOP(flags))
                         u->bus_track_add = b;
 
                 return 1;
@@ -1408,7 +1549,7 @@ static int bus_unit_set_transient_property(
 int bus_unit_set_properties(
                 Unit *u,
                 sd_bus_message *message,
-                UnitSetPropertiesMode mode,
+                UnitWriteFlags flags,
                 bool commit,
                 sd_bus_error *error) {
 
@@ -1430,12 +1571,13 @@ int bus_unit_set_properties(
 
         for (;;) {
                 const char *name;
+                UnitWriteFlags f;
 
                 r = sd_bus_message_enter_container(message, 'r', "sv");
                 if (r < 0)
                         return r;
                 if (r == 0) {
-                        if (for_real || mode == UNIT_CHECK)
+                        if (for_real || UNIT_WRITE_FLAGS_NOOP(flags))
                                 break;
 
                         /* Reached EOF. Let's try again, and this time for realz... */
@@ -1458,11 +1600,17 @@ int bus_unit_set_properties(
                 if (r < 0)
                         return r;
 
-                r = UNIT_VTABLE(u)->bus_set_property(u, name, message, for_real ? mode : UNIT_CHECK, error);
+                /* If not for real, then mask out the two target flags */
+                f = for_real ? flags : (flags & ~(UNIT_RUNTIME|UNIT_PERSISTENT));
+
+                r = UNIT_VTABLE(u)->bus_set_property(u, name, message, f, error);
                 if (r == 0 && u->transient && u->load_state == UNIT_STUB)
-                        r = bus_unit_set_transient_property(u, name, message, for_real ? mode : UNIT_CHECK, error);
+                        r = bus_unit_set_transient_property(u, name, message, f, error);
+                if (r == 0)
+                        r = bus_unit_set_live_property(u, name, message, f, error);
                 if (r < 0)
                         return r;
+
                 if (r == 0)
                         return sd_bus_error_setf(error, SD_BUS_ERROR_PROPERTY_READ_ONLY, "Cannot set property %s, or unknown property.", name);
 

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -28,7 +29,6 @@
 
 #define EDNS0_OPT_DO (1<<15)
 
-#define DNS_PACKET_SIZE_START 512u
 assert_cc(DNS_PACKET_SIZE_START > DNS_PACKET_HEADER_SIZE)
 
 typedef struct DnsPacketRewinder {
@@ -44,11 +44,20 @@ static void rewind_dns_packet(DnsPacketRewinder *rewinder) {
 #define INIT_REWINDER(rewinder, p) do { rewinder.packet = p; rewinder.saved_rindex = p->rindex; } while (0)
 #define CANCEL_REWINDER(rewinder) do { rewinder.packet = NULL; } while (0)
 
-int dns_packet_new(DnsPacket **ret, DnsProtocol protocol, size_t min_alloc_dsize) {
+int dns_packet_new(
+                DnsPacket **ret,
+                DnsProtocol protocol,
+                size_t min_alloc_dsize,
+                size_t max_size) {
+
         DnsPacket *p;
         size_t a;
 
         assert(ret);
+        assert(max_size >= DNS_PACKET_HEADER_SIZE);
+
+        if (max_size > DNS_PACKET_SIZE_MAX)
+                max_size = DNS_PACKET_SIZE_MAX;
 
         /* The caller may not check what is going to be truly allocated, so do not allow to
          * allocate a DNS packet bigger than DNS_PACKET_SIZE_MAX.
@@ -71,8 +80,8 @@ int dns_packet_new(DnsPacket **ret, DnsProtocol protocol, size_t min_alloc_dsize
         a = PAGE_ALIGN(ALIGN(sizeof(DnsPacket)) + a) - ALIGN(sizeof(DnsPacket));
 
         /* make sure we never allocate more than useful */
-        if (a > DNS_PACKET_SIZE_MAX)
-                a = DNS_PACKET_SIZE_MAX;
+        if (a > max_size)
+                a = max_size;
 
         p = malloc0(ALIGN(sizeof(DnsPacket)) + a);
         if (!p)
@@ -80,6 +89,7 @@ int dns_packet_new(DnsPacket **ret, DnsProtocol protocol, size_t min_alloc_dsize
 
         p->size = p->rindex = DNS_PACKET_HEADER_SIZE;
         p->allocated = a;
+        p->max_size = max_size;
         p->protocol = protocol;
         p->opt_start = p->opt_size = (size_t) -1;
         p->n_ref = 1;
@@ -145,7 +155,7 @@ int dns_packet_new_query(DnsPacket **ret, DnsProtocol protocol, size_t min_alloc
 
         assert(ret);
 
-        r = dns_packet_new(&p, protocol, min_alloc_dsize);
+        r = dns_packet_new(&p, protocol, min_alloc_dsize, DNS_PACKET_SIZE_MAX);
         if (r < 0)
                 return r;
 
@@ -314,11 +324,13 @@ static int dns_packet_extend(DnsPacket *p, size_t add, void **ret, size_t *start
         assert(p);
 
         if (p->size + add > p->allocated) {
-                size_t a;
+                size_t a, ms;
 
                 a = PAGE_ALIGN((p->size + add) * 2);
-                if (a > DNS_PACKET_SIZE_MAX)
-                        a = DNS_PACKET_SIZE_MAX;
+
+                ms = dns_packet_size_max(p);
+                if (a > ms)
+                        a = ms;
 
                 if (p->size + add > a)
                         return -EMSGSIZE;
@@ -1503,7 +1515,7 @@ static int dns_packet_read_type_window(DnsPacket *p, Bitmap **types, size_t *sta
 
                 found = true;
 
-                while (bitmask) {
+                for (; bitmask; bit++, bitmask >>= 1)
                         if (bitmap[i] & bitmask) {
                                 uint16_t n;
 
@@ -1517,10 +1529,6 @@ static int dns_packet_read_type_window(DnsPacket *p, Bitmap **types, size_t *sta
                                 if (r < 0)
                                         return r;
                         }
-
-                        bit++;
-                        bitmask >>= 1;
-                }
         }
 
         if (!found)
@@ -1690,16 +1698,9 @@ int dns_packet_read_rr(DnsPacket *p, DnsResourceRecord **ret, bool *ret_cache_fl
         case DNS_TYPE_SPF: /* exactly the same as TXT */
         case DNS_TYPE_TXT:
                 if (rdlength <= 0) {
-                        DnsTxtItem *i;
-                        /* RFC 6763, section 6.1 suggests to treat
-                         * empty TXT RRs as equivalent to a TXT record
-                         * with a single empty string. */
-
-                        i = malloc0(offsetof(DnsTxtItem, data) + 1); /* for safety reasons we add an extra NUL byte */
-                        if (!i)
-                                return -ENOMEM;
-
-                        rr->txt.items = i;
+                        r = dns_txt_item_new_empty(&rr->txt.items);
+                        if (r < 0)
+                                return r;
                 } else {
                         DnsTxtItem *last = NULL;
 

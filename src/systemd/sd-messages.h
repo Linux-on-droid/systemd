@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #ifndef foosdmessageshfoo
 #define foosdmessageshfoo
 
@@ -69,6 +70,8 @@ _SD_BEGIN_DECLARATIONS;
 #define SD_MESSAGE_TIMEZONE_CHANGE        SD_ID128_MAKE(45,f8,2f,4a,ef,7a,4b,bf,94,2c,e8,61,d1,f2,09,90)
 #define SD_MESSAGE_TIMEZONE_CHANGE_STR    SD_ID128_MAKE_STR(45,f8,2f,4a,ef,7a,4b,bf,94,2c,e8,61,d1,f2,09,90)
 
+#define SD_MESSAGE_TAINTED                SD_ID128_MAKE(50,87,6a,9d,b0,0f,4c,40,bd,e1,a2,ad,38,1c,3a,1b)
+#define SD_MESSAGE_TAINTED_STR            SD_ID128_MAKE_STR(50,87,6a,9d,b0,0f,4c,40,bd,e1,a2,ad,38,1c,3a,1b)
 #define SD_MESSAGE_STARTUP_FINISHED       SD_ID128_MAKE(b0,7a,24,9c,d0,24,41,4a,82,dd,00,cd,18,13,78,ff)
 #define SD_MESSAGE_STARTUP_FINISHED_STR   SD_ID128_MAKE_STR(b0,7a,24,9c,d0,24,41,4a,82,dd,00,cd,18,13,78,ff)
 #define SD_MESSAGE_USER_STARTUP_FINISHED \
@@ -98,6 +101,13 @@ _SD_BEGIN_DECLARATIONS;
 #define SD_MESSAGE_UNIT_RELOADING_STR     SD_ID128_MAKE_STR(d3,4d,03,7f,ff,18,47,e6,ae,66,9a,37,0e,69,47,25)
 #define SD_MESSAGE_UNIT_RELOADED          SD_ID128_MAKE(7b,05,eb,c6,68,38,42,22,ba,a8,88,11,79,cf,da,54)
 #define SD_MESSAGE_UNIT_RELOADED_STR      SD_ID128_MAKE_STR(7b,05,eb,c6,68,38,42,22,ba,a8,88,11,79,cf,da,54)
+
+#define SD_MESSAGE_UNIT_RESTART_SCHEDULED SD_ID128_MAKE(5e,b0,34,94,b6,58,48,70,a5,36,b3,37,29,08,09,b3)
+#define SD_MESSAGE_UNIT_RESTART_SCHEDULED_STR                   \
+                                          SD_ID128_MAKE_STR(5e,b0,34,94,b6,58,48,70,a5,36,b3,37,29,08,09,b3)
+
+#define SD_MESSAGE_UNIT_RESOURCES         SD_ID128_MAKE(ae,8f,7b,86,6b,03,47,b9,af,31,fe,1c,80,b1,27,c0)
+#define SD_MESSAGE_UNIT_RESOURCES_STR     SD_ID128_MAKE_STR(ae,8f,7b,86,6b,03,47,b9,af,31,fe,1c,80,b1,27,c0)
 
 #define SD_MESSAGE_SPAWN_FAILED           SD_ID128_MAKE(64,12,57,65,1c,1b,4e,c9,a8,62,4d,7a,40,a9,e1,e7)
 #define SD_MESSAGE_SPAWN_FAILED_STR       SD_ID128_MAKE_STR(64,12,57,65,1c,1b,4e,c9,a8,62,4d,7a,40,a9,e1,e7)

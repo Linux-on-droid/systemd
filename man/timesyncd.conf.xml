@@ -3,6 +3,8 @@
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 
 <!--
+  SPDX-License-Identifier: LGPL-2.1+
+
   This file is part of systemd.
 
   Copyright 2014 Lennart Poettering
@@ -80,7 +82,9 @@
         <citerefentry><refentrytitle>systemd-networkd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
         systemd-timesyncd will contact all configured system or
         per-interface servers in turn until one is found that
-        responds. This setting defaults to an empty
+        responds. When the empty string is assigned, the list of
+        NTP servers is reset, and all assignments prior to this one
+        will have no effect. This setting defaults to an empty
         list.</para></listitem>
       </varlistentry>
 
@@ -92,9 +96,28 @@
         <citerefentry><refentrytitle>systemd-networkd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>
         take precedence over this setting, as do any servers set via
         <varname>NTP=</varname> above. This setting is hence only used
-        if no other NTP server information is known. If this option is
-        not given, a compiled-in list of NTP servers is used
-        instead.</para></listitem>
+        if no other NTP server information is known. When the empty
+        string is assigned, the list of NTP servers is reset,
+        and all assignments prior to this one will have no effect.
+        If this option is not given, a compiled-in list of NTP servers
+        is used instead.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>RootDistanceMaxSec=</varname></term>
+        <listitem><para>Maximum acceptable root distance. Takes a time value (in seconds).
+        Defaults to 5 seconds.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><varname>PollIntervalMinSec=</varname></term>
+        <term><varname>PollIntervalMaxSec=</varname></term>
+        <listitem><para>The minimum and maximum poll intervals for NTP messages.
+        Each setting takes a time value (in seconds).
+        <varname>PollIntervalMinSec=</varname> must not be smaller than 16 seconds.
+        <varname>PollIntervalMaxSec=</varname> must be larger than <varname>PollIntervalMinSec=</varname>.
+        <varname>PollIntervalMinSec=</varname> defaults to 32 seconds, and
+        <varname>PollIntervalMaxSec=</varname> defaults to 2048 seconds.</para></listitem>
       </varlistentry>
 
     </variablelist>

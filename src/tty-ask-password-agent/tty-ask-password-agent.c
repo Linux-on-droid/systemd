@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -165,7 +166,7 @@ static int ask_password_plymouth(
 
                 k = read(fd, buffer + p, sizeof(buffer) - p);
                 if (k < 0) {
-                        if (errno == EINTR || errno == EAGAIN)
+                        if (IN_SET(errno, EINTR, EAGAIN))
                                 continue;
 
                         r = -errno;
@@ -206,7 +207,7 @@ static int ask_password_plymouth(
                         r = -ENOENT;
                         goto finish;
 
-                } else if (buffer[0] == 2 || buffer[0] == 9) {
+                } else if (IN_SET(buffer[0], 2, 9)) {
                         uint32_t size;
                         char **l;
 
@@ -310,7 +311,7 @@ static int parse_password(const char *filename, char **wall) {
         r = config_parse(NULL, filename, NULL,
                          NULL,
                          config_item_table_lookup, items,
-                         true, false, true, NULL);
+                         CONFIG_PARSE_RELAXED|CONFIG_PARSE_WARN, NULL);
         if (r < 0)
                 return r;
 
@@ -346,8 +347,7 @@ static int parse_password(const char *filename, char **wall) {
         } else {
                 _cleanup_strv_free_erase_ char **passwords = NULL;
 
-                assert(arg_action == ACTION_QUERY ||
-                       arg_action == ACTION_WATCH);
+                assert(IN_SET(arg_action, ACTION_QUERY, ACTION_WATCH));
 
                 if (access(socket_name, W_OK) < 0) {
                         if (arg_action == ACTION_QUERY)
@@ -721,7 +721,7 @@ static int ask_on_this_console(const char *tty, pid_t *pid, int argc, char *argv
 
                 for (ac = 0; ac < argc; ac++) {
                         if (streq(argv[ac], "--console")) {
-                                argv[ac] = strjoina("--console=", tty, NULL);
+                                argv[ac] = strjoina("--console=", tty);
                                 break;
                         }
                 }

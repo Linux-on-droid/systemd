@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -36,14 +37,10 @@
 /* The default value for the net.unix.max_dgram_qlen sysctl */
 #define DEFAULT_UNIX_MAX_DGRAM_QLEN 512UL
 
-#define SYSTEMD_CGROUP_CONTROLLER_LEGACY "name=systemd"
-#define SYSTEMD_CGROUP_CONTROLLER_HYBRID "name=unified"
-#define SYSTEMD_CGROUP_CONTROLLER "_systemd"
-
 #define SIGNALS_CRASH_HANDLER SIGSEGV,SIGILL,SIGFPE,SIGBUS,SIGQUIT,SIGABRT
 #define SIGNALS_IGNORE SIGPIPE
 
-#ifdef HAVE_SPLIT_USR
+#if HAVE_SPLIT_USR
 #define KBD_KEYMAP_DIRS                         \
         "/usr/share/keymaps/\0"                 \
         "/usr/share/kbd/keymaps/\0"             \
@@ -57,10 +54,8 @@
 #endif
 
 #define UNIX_SYSTEM_BUS_ADDRESS "unix:path=/var/run/dbus/system_bus_socket"
-#define KERNEL_SYSTEM_BUS_ADDRESS "kernel:path=/sys/fs/kdbus/0-system/bus"
-#define DEFAULT_SYSTEM_BUS_ADDRESS KERNEL_SYSTEM_BUS_ADDRESS ";" UNIX_SYSTEM_BUS_ADDRESS
+#define DEFAULT_SYSTEM_BUS_ADDRESS UNIX_SYSTEM_BUS_ADDRESS
 #define UNIX_USER_BUS_ADDRESS_FMT "unix:path=%s/bus"
-#define KERNEL_USER_BUS_ADDRESS_FMT "kernel:path=/sys/fs/kdbus/"UID_FMT"-user/bus"
 
 #define PLYMOUTH_SOCKET {                                       \
                 .un.sun_family = AF_UNIX,                       \
@@ -70,7 +65,7 @@
 #define NOTIFY_FD_MAX 768
 #define NOTIFY_BUFFER_MAX PIPE_BUF
 
-#ifdef HAVE_SPLIT_USR
+#if HAVE_SPLIT_USR
 #  define _CONF_PATHS_SPLIT_USR(n) "/lib/" n "\0"
 #else
 #  define _CONF_PATHS_SPLIT_USR(n)
@@ -86,3 +81,5 @@
         "/usr/local/lib/" n "\0"                \
         "/usr/lib/" n "\0"                      \
         _CONF_PATHS_SPLIT_USR(n)
+
+#define LONG_LINE_MAX (1U*1024U*1024U)

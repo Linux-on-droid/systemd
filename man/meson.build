@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 # This is lame, I know, but meson has no other include mechanism
 subdir('rules')
 
@@ -11,6 +28,7 @@ want_html = want_html != 'false' and xsltproc.found()
 xsltproc_flags = [
         '--nonet',
         '--xinclude',
+        '--maxdepth', '9000',
         '--stringparam', 'man.output.quietly', '1',
         '--stringparam', 'funcsynopsis.style', 'ansi',
         '--stringparam', 'man.authors.section.enabled', '0',
@@ -31,7 +49,7 @@ custom_entities_ent = configure_file(
 man_pages = []
 html_pages = []
 source_xml_files = []
-foreach tuple : manpages
+foreach tuple : xsltproc.found() ? manpages : []
         stem = tuple[0]
         section = tuple[1]
         aliases = tuple[2]
@@ -50,7 +68,7 @@ foreach tuple : manpages
 
         mandirn = join_paths(get_option('mandir'), 'man' + section)
 
-        if condition == '' or conf.get(condition, false)
+        if condition == '' or conf.get(condition) == 1
                 p1 = custom_target(
                         man,
                         input : xml,
@@ -114,8 +132,8 @@ systemd_index_xml = custom_target(
         output : 'systemd.index.xml',
         command : [make_man_index_py, '@OUTPUT@'] + nonindex_xml_files)
 
-foreach tuple : [['systemd.directives', '7', systemd_directives_xml],
-                 ['systemd.index',      '7', systemd_index_xml]]
+foreach tuple : want_man or want_html ? [['systemd.directives', '7', systemd_directives_xml],
+                                         ['systemd.index',      '7', systemd_index_xml]] : []
         stem = tuple[0]
         section = tuple[1]
         xml = tuple[2]
@@ -170,10 +188,10 @@ man = custom_target(
         depends : man_pages,
         command : ['echo'])
 
-html = run_target(
+html = custom_target(
         'html',
-        depends : html_pages,
         output : 'html',
+        depends : html_pages,
         command : ['echo'])
 
 run_target(
@@ -191,14 +209,15 @@ run_target(
 ############################################################
 
 if git.found()
-        run_target(
+        custom_target(
                 'update-man-rules',
+                output : 'update-man-rules',
                 # slightly strange syntax because of
                 # https://github.com/mesonbuild/meson/issues/1643
                 # and https://github.com/mesonbuild/meson/issues/1512
                 command : ['sh', '-c',
                            'cd @0@ && '.format(meson.build_root()) +
-                           'python3 @0@/tools/make-man-rules.py --meson `git ls-files ":/man/*.xml"` >t && '.format(meson.source_root()) +
+                           'python3 @0@/tools/make-man-rules.py `git ls-files ":/man/*.xml"` >t && '.format(meson.source_root()) +
                            'mv t @0@/rules/meson.build'.format(meson.current_source_dir())],
                 depend_files : custom_entities_ent)
 endif

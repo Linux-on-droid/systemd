@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -25,8 +26,7 @@
 #include "util.h"
 
 const char *address_family_boolean_to_string(AddressFamilyBoolean b) {
-        if (b == ADDRESS_FAMILY_YES ||
-            b == ADDRESS_FAMILY_NO)
+        if (IN_SET(b, ADDRESS_FAMILY_YES, ADDRESS_FAMILY_NO))
                 return yes_no(b == ADDRESS_FAMILY_YES);
 
         if (b == ADDRESS_FAMILY_IPV4)

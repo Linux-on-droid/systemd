@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -23,11 +24,11 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#ifdef HAVE_XZ
+#if HAVE_XZ
 #include <lzma.h>
 #endif
 
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
 #include <lz4.h>
 #include <lz4frame.h>
 #endif
@@ -43,7 +44,7 @@
 #include "string-util.h"
 #include "util.h"
 
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
 DEFINE_TRIVIAL_CLEANUP_FUNC(LZ4F_compressionContext_t, LZ4F_freeCompressionContext);
 DEFINE_TRIVIAL_CLEANUP_FUNC(LZ4F_decompressionContext_t, LZ4F_freeDecompressionContext);
 #endif
@@ -59,7 +60,7 @@ DEFINE_STRING_TABLE_LOOKUP(object_compressed, int);
 
 int compress_blob_xz(const void *src, uint64_t src_size,
                      void *dst, size_t dst_alloc_size, size_t *dst_size) {
-#ifdef HAVE_XZ
+#if HAVE_XZ
         static const lzma_options_lzma opt = {
                 1u << 20u, NULL, 0, LZMA_LC_DEFAULT, LZMA_LP_DEFAULT,
                 LZMA_PB_DEFAULT, LZMA_MODE_FAST, 128, LZMA_MF_HC3, 4
@@ -97,7 +98,7 @@ int compress_blob_xz(const void *src, uint64_t src_size,
 
 int compress_blob_lz4(const void *src, uint64_t src_size,
                       void *dst, size_t dst_alloc_size, size_t *dst_size) {
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
         int r;
 
         assert(src);
@@ -133,7 +134,7 @@ int compress_blob_lz4(const void *src, uint64_t src_size,
 int decompress_blob_xz(const void *src, uint64_t src_size,
                        void **dst, size_t *dst_alloc_size, size_t* dst_size, size_t dst_max) {
 
-#ifdef HAVE_XZ
+#if HAVE_XZ
         _cleanup_(lzma_end) lzma_stream s = LZMA_STREAM_INIT;
         lzma_ret ret;
         size_t space;
@@ -193,7 +194,7 @@ int decompress_blob_xz(const void *src, uint64_t src_size,
 int decompress_blob_lz4(const void *src, uint64_t src_size,
                         void **dst, size_t *dst_alloc_size, size_t* dst_size, size_t dst_max) {
 
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
         char* out;
         int r, size; /* LZ4 uses int for size */
 
@@ -249,7 +250,7 @@ int decompress_startswith_xz(const void *src, uint64_t src_size,
                              const void *prefix, size_t prefix_len,
                              uint8_t extra) {
 
-#ifdef HAVE_XZ
+#if HAVE_XZ
         _cleanup_(lzma_end) lzma_stream s = LZMA_STREAM_INIT;
         lzma_ret ret;
 
@@ -280,7 +281,7 @@ int decompress_startswith_xz(const void *src, uint64_t src_size,
         for (;;) {
                 ret = lzma_code(&s, LZMA_FINISH);
 
-                if (ret != LZMA_STREAM_END && ret != LZMA_OK)
+                if (!IN_SET(ret, LZMA_OK, LZMA_STREAM_END))
                         return -EBADMSG;
 
                 if (*buffer_size - s.avail_out >= prefix_len + 1)
@@ -307,7 +308,7 @@ int decompress_startswith_lz4(const void *src, uint64_t src_size,
                               void **buffer, size_t *buffer_size,
                               const void *prefix, size_t prefix_len,
                               uint8_t extra) {
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
         /* Checks whether the decompressed blob starts with the
          * mentioned prefix. The byte extra needs to follow the
          * prefix */
@@ -372,7 +373,7 @@ int decompress_startswith(int compression,
 }
 
 int compress_stream_xz(int fdf, int fdt, uint64_t max_bytes) {
-#ifdef HAVE_XZ
+#if HAVE_XZ
         _cleanup_(lzma_end) lzma_stream s = LZMA_STREAM_INIT;
         lzma_ret ret;
         uint8_t buf[BUFSIZ], out[BUFSIZ];
@@ -417,7 +418,7 @@ int compress_stream_xz(int fdf, int fdt, uint64_t max_bytes) {
                 }
 
                 ret = lzma_code(&s, action);
-                if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
+                if (!IN_SET(ret, LZMA_OK, LZMA_STREAM_END)) {
                         log_error("Compression failed: code %u", ret);
                         return -EBADMSG;
                 }
@@ -449,7 +450,7 @@ int compress_stream_xz(int fdf, int fdt, uint64_t max_bytes) {
 
 int compress_stream_lz4(int fdf, int fdt, uint64_t max_bytes) {
 
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
         LZ4F_errorCode_t c;
         _cleanup_(LZ4F_freeCompressionContextp) LZ4F_compressionContext_t ctx = NULL;
         _cleanup_free_ char *buf = NULL;
@@ -542,7 +543,7 @@ int compress_stream_lz4(int fdf, int fdt, uint64_t max_bytes) {
 
 int decompress_stream_xz(int fdf, int fdt, uint64_t max_bytes) {
 
-#ifdef HAVE_XZ
+#if HAVE_XZ
         _cleanup_(lzma_end) lzma_stream s = LZMA_STREAM_INIT;
         lzma_ret ret;
 
@@ -579,7 +580,7 @@ int decompress_stream_xz(int fdf, int fdt, uint64_t max_bytes) {
                 }
 
                 ret = lzma_code(&s, action);
-                if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
+                if (!IN_SET(ret, LZMA_OK, LZMA_STREAM_END)) {
                         log_debug("Decompression failed: code %u", ret);
                         return -EBADMSG;
                 }
@@ -616,7 +617,7 @@ int decompress_stream_xz(int fdf, int fdt, uint64_t max_bytes) {
 }
 
 int decompress_stream_lz4(int in, int out, uint64_t max_bytes) {
-#ifdef HAVE_LZ4
+#if HAVE_LZ4
         size_t c;
         _cleanup_(LZ4F_freeDecompressionContextp) LZ4F_decompressionContext_t ctx = NULL;
         _cleanup_free_ char *buf = NULL;
@@ -666,7 +667,7 @@ int decompress_stream_lz4(int in, int out, uint64_t max_bytes) {
 
         log_debug("LZ4 decompression finished (%zu -> %zu bytes, %.1f%%)",
                   total_in, total_out,
-                  (double) total_out / total_in * 100);
+                  total_in > 0 ? (double) total_out / total_in * 100 : 0.0);
  cleanup:
         munmap(src, st.st_size);
         return r;

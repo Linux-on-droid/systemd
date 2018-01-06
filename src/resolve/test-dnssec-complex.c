@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -218,7 +219,7 @@ int main(int argc, char* argv[]) {
         test_hostname_lookup(bus, "poettering.de", AF_INET, NULL);
         test_hostname_lookup(bus, "poettering.de", AF_INET6, NULL);
 
-#if defined(HAVE_LIBIDN2) || defined(HAVE_LIBIDN)
+#if HAVE_LIBIDN2 || HAVE_LIBIDN
         /* Unsigned A with IDNA conversion necessary */
         test_hostname_lookup(bus, "pöttering.de", AF_UNSPEC, NULL);
         test_hostname_lookup(bus, "pöttering.de", AF_INET, NULL);

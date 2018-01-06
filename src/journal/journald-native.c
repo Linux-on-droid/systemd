@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -28,6 +29,7 @@
 #include "fs-util.h"
 #include "io-util.h"
 #include "journal-importer.h"
+#include "journal-util.h"
 #include "journald-console.h"
 #include "journald-kmsg.h"
 #include "journald-native.h"
@@ -37,45 +39,11 @@
 #include "memfd-util.h"
 #include "parse-util.h"
 #include "path-util.h"
+#include "process-util.h"
 #include "selinux-util.h"
 #include "socket-util.h"
 #include "string-util.h"
 #include "unaligned.h"
-
-bool valid_user_field(const char *p, size_t l, bool allow_protected) {
-        const char *a;
-
-        /* We kinda enforce POSIX syntax recommendations for
-           environment variables here, but make a couple of additional
-           requirements.
-
-           http://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html */
-
-        /* No empty field names */
-        if (l <= 0)
-                return false;
-
-        /* Don't allow names longer than 64 chars */
-        if (l > 64)
-                return false;
-
-        /* Variables starting with an underscore are protected */
-        if (!allow_protected && p[0] == '_')
-                return false;
-
-        /* Don't allow digits as first character */
-        if (p[0] >= '0' && p[0] <= '9')
-                return false;
-
-        /* Only allow A-Z0-9 and '_' */
-        for (a = p; a < p + l; a++)
-                if ((*a < 'A' || *a > 'Z') &&
-                    (*a < '0' || *a > '9') &&
-                    *a != '_')
-                        return false;
-
-        return true;
-}
 
 static bool allow_object_pid(const struct ucred *ucred) {
         return ucred && ucred->uid == 0;
@@ -127,13 +95,14 @@ static void server_process_entry_meta(
                         *message = t;
                 }
 
-        } else if (l > strlen("OBJECT_PID=") &&
-                   l < strlen("OBJECT_PID=")  + DECIMAL_STR_MAX(pid_t) &&
+        } else if (l > STRLEN("OBJECT_PID=") &&
+                   l < STRLEN("OBJECT_PID=")  + DECIMAL_STR_MAX(pid_t) &&
                    startswith(p, "OBJECT_PID=") &&
                    allow_object_pid(ucred)) {
                 char buf[DECIMAL_STR_MAX(pid_t)];
-                memcpy(buf, p + strlen("OBJECT_PID="), l - strlen("OBJECT_PID="));
-                buf[l-strlen("OBJECT_PID=")] = '\0';
+                memcpy(buf, p + STRLEN("OBJECT_PID="),
+                       l - STRLEN("OBJECT_PID="));
+                buf[l-STRLEN("OBJECT_PID=")] = '\0';
 
                 (void) parse_pid(buf, object_pid);
         }
@@ -142,23 +111,22 @@ static void server_process_entry_meta(
 static int server_process_entry(
                 Server *s,
                 const void *buffer, size_t *remaining,
+                ClientContext *context,
                 const struct ucred *ucred,
                 const struct timeval *tv,
                 const char *label, size_t label_len) {
 
-        /* Process a single entry from a native message.
-         * Returns 0 if nothing special happened and the message processing should continue,
-         * and a negative or positive value otherwise.
+        /* Process a single entry from a native message. Returns 0 if nothing special happened and the message
+         * processing should continue, and a negative or positive value otherwise.
          *
          * Note that *remaining is altered on both success and failure. */
 
-        struct iovec *iovec = NULL;
-        unsigned n = 0, j, tn = (unsigned) -1;
-        const char *p;
-        size_t m = 0, entry_size = 0;
-        int priority = LOG_INFO;
+        size_t n = 0, j, tn = (size_t) -1, m = 0, entry_size = 0;
         char *identifier = NULL, *message = NULL;
+        struct iovec *iovec = NULL;
+        int priority = LOG_INFO;
         pid_t object_pid = 0;
+        const char *p;
         int r = 0;
 
         p = buffer;
@@ -181,7 +149,7 @@ static int server_process_entry(
                         break;
                 }
 
-                if (*p == '.' || *p == '#') {
+                if (IN_SET(*p, '.', '#')) {
                         /* Ignore control commands for now, and
                          * comments too. */
                         *remaining -= (e - p) + 1;
@@ -192,26 +160,25 @@ static int server_process_entry(
                 /* A property follows */
 
                 /* n existing properties, 1 new, +1 for _TRANSPORT */
-                if (!GREEDY_REALLOC(iovec, m, n + 2 + N_IOVEC_META_FIELDS + N_IOVEC_OBJECT_FIELDS)) {
+                if (!GREEDY_REALLOC(iovec, m,
+                                    n + 2 +
+                                    N_IOVEC_META_FIELDS + N_IOVEC_OBJECT_FIELDS +
+                                    client_context_extra_fields_n_iovec(context))) {
                         r = log_oom();
                         break;
                 }
 
                 q = memchr(p, '=', e - p);
                 if (q) {
-                        if (valid_user_field(p, q - p, false)) {
+                        if (journal_field_valid(p, q - p, false)) {
                                 size_t l;
 
                                 l = e - p;
 
-                                /* If the field name starts with an
-                                 * underscore, skip the variable,
-                                 * since that indicates a trusted
-                                 * field */
-                                iovec[n].iov_base = (char*) p;
-                                iovec[n].iov_len = l;
+                                /* If the field name starts with an underscore, skip the variable, since that indicates
+                                 * a trusted field */
+                                iovec[n++] = IOVEC_MAKE((char*) p, l);
                                 entry_size += l;
-                                n++;
 
                                 server_process_entry_meta(p, l, ucred,
                                                           &priority,
@@ -255,7 +222,7 @@ static int server_process_entry(
                         k[e - p] = '=';
                         memcpy(k + (e - p) + 1, e + 1 + sizeof(uint64_t), l);
 
-                        if (valid_user_field(p, e - p, false)) {
+                        if (journal_field_valid(p, e - p, false)) {
                                 iovec[n].iov_base = k;
                                 iovec[n].iov_len = (e - p) + 1 + l;
                                 entry_size += iovec[n].iov_len;
@@ -279,13 +246,17 @@ static int server_process_entry(
                 goto finish;
         }
 
+        if (!client_context_test_priority(context, priority)) {
+                r = 0;
+                goto finish;
+        }
+
         tn = n++;
-        IOVEC_SET_STRING(iovec[tn], "_TRANSPORT=journal");
-        entry_size += strlen("_TRANSPORT=journal");
+        iovec[tn] = IOVEC_MAKE_STRING("_TRANSPORT=journal");
+        entry_size += STRLEN("_TRANSPORT=journal");
 
         if (entry_size + n + 1 > ENTRY_SIZE_MAX) { /* data + separators + trailer */
-                log_debug("Entry is too big with %u properties and %zu bytes, ignoring.",
-                          n, entry_size);
+                log_debug("Entry is too big with %zu properties and %zu bytes, ignoring.", n, entry_size);
                 goto finish;
         }
 
@@ -303,7 +274,7 @@ static int server_process_entry(
                         server_forward_wall(s, priority, identifier, message, ucred);
         }
 
-        server_dispatch_message(s, iovec, n, m, ucred, tv, label, label_len, NULL, priority, object_pid);
+        server_dispatch_message(s, iovec, n, m, context, tv, priority, object_pid);
 
 finish:
         for (j = 0; j < n; j++)  {
@@ -329,16 +300,23 @@ void server_process_native_message(
                 const struct timeval *tv,
                 const char *label, size_t label_len) {
 
-        int r;
         size_t remaining = buffer_size;
+        ClientContext *context = NULL;
+        int r;
 
         assert(s);
         assert(buffer || buffer_size == 0);
 
+        if (ucred && pid_is_valid(ucred->pid)) {
+                r = client_context_get(s, ucred->pid, ucred, label, label_len, NULL, &context);
+                if (r < 0)
+                        log_warning_errno(r, "Failed to retrieve credentials for PID " PID_FMT ", ignoring: %m", ucred->pid);
+        }
+
         do {
                 r = server_process_entry(s,
                                          (const uint8_t*) buffer + (buffer_size - remaining), &remaining,
-                                         ucred, tv, label, label_len);
+                                         context, ucred, tv, label, label_len);
         } while (r == 0);
 }
 
@@ -512,7 +490,7 @@ int server_open_native_socket(Server*s) {
         if (r < 0)
                 return log_error_errno(errno, "SO_PASSCRED failed: %m");
 
-#ifdef HAVE_SELINUX
+#if HAVE_SELINUX
         if (mac_selinux_use()) {
                 r = setsockopt(s->native_fd, SOL_SOCKET, SO_PASSSEC, &one, sizeof(one));
                 if (r < 0)

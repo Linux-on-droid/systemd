@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -61,27 +62,16 @@ static int arg_nice = 0;
 static bool arg_nice_set = false;
 static char **arg_environment = NULL;
 static char **arg_property = NULL;
-static bool arg_pty = false;
-static usec_t arg_on_active = 0;
-static usec_t arg_on_boot = 0;
-static usec_t arg_on_startup = 0;
-static usec_t arg_on_unit_active = 0;
-static usec_t arg_on_unit_inactive = 0;
-static const char *arg_on_calendar = NULL;
+static enum {
+        ARG_STDIO_NONE,      /* The default, as it is for normal services, stdin connected to /dev/null, and stdout+stderr to the journal */
+        ARG_STDIO_PTY,       /* Interactive behaviour, requested by --pty: we allocate a pty and connect it to the TTY we are invoked from */
+        ARG_STDIO_DIRECT,    /* Directly pass our stdin/stdout/stderr to the activated service, useful for usage in shell pipelines, requested by --pipe */
+        ARG_STDIO_AUTO,      /* If --pipe and --pty are used together we use --pty when invoked on a TTY, and --pipe otherwise */
+} arg_stdio = ARG_STDIO_NONE;
 static char **arg_timer_property = NULL;
+static bool with_timer = false;
 static bool arg_quiet = false;
-
-static void polkit_agent_open_if_enabled(void) {
-
-        /* Open the polkit agent as a child process if necessary */
-        if (!arg_ask_password)
-                return;
-
-        if (arg_transport != BUS_TRANSPORT_LOCAL)
-                return;
-
-        polkit_agent_open();
-}
+static bool arg_aggressive_gc = false;
 
 static void help(void) {
         printf("%s [OPTIONS...] {COMMAND} [ARGS...]\n\n"
@@ -106,8 +96,11 @@ static void help(void) {
                "     --gid=GROUP                  Run as system group\n"
                "     --nice=NICE                  Nice level\n"
                "  -E --setenv=NAME=VALUE          Set environment\n"
-               "  -t --pty                        Run service on pseudo tty\n"
-               "  -q --quiet                      Suppress information messages during runtime\n\n"
+               "  -t --pty                        Run service on pseudo TTY as STDIN/STDOUT/\n"
+               "                                  STDERR\n"
+               "  -P --pipe                       Pass STDIN/STDOUT/STDERR directly to service\n"
+               "  -q --quiet                      Suppress information messages during runtime\n"
+               "  -G --collect                    Unload unit after it ran, even when failed\n\n"
                "Timer options:\n"
                "     --on-active=SECONDS          Run after SECONDS delay\n"
                "     --on-boot=SECONDS            Run SECONDS after machine was booted up\n"
@@ -119,8 +112,22 @@ static void help(void) {
                , program_invocation_short_name);
 }
 
-static bool with_timer(void) {
-        return arg_on_active || arg_on_boot || arg_on_startup || arg_on_unit_active || arg_on_unit_inactive || arg_on_calendar;
+static int add_timer_property(const char *name, const char *val) {
+        _cleanup_free_ char *p = NULL;
+
+        assert(name);
+        assert(val);
+
+        p = strjoin(name, "=", val);
+        if (!p)
+                return log_oom();
+
+        if (strv_consume(&arg_timer_property, p) < 0)
+                return log_oom();
+
+        p = NULL;
+
+        return 0;
 }
 
 static int parse_argv(int argc, char *argv[]) {
@@ -170,8 +177,9 @@ static int parse_argv(int argc, char *argv[]) {
                 { "nice",              required_argument, NULL, ARG_NICE             },
                 { "setenv",            required_argument, NULL, 'E'                  },
                 { "property",          required_argument, NULL, 'p'                  },
-                { "tty",               no_argument,       NULL, 't'                  }, /* deprecated */
+                { "tty",               no_argument,       NULL, 't'                  }, /* deprecated alias */
                 { "pty",               no_argument,       NULL, 't'                  },
+                { "pipe",              no_argument,       NULL, 'P'                  },
                 { "quiet",             no_argument,       NULL, 'q'                  },
                 { "on-active",         required_argument, NULL, ARG_ON_ACTIVE        },
                 { "on-boot",           required_argument, NULL, ARG_ON_BOOT          },
@@ -182,6 +190,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "timer-property",    required_argument, NULL, ARG_TIMER_PROPERTY   },
                 { "no-block",          no_argument,       NULL, ARG_NO_BLOCK         },
                 { "no-ask-password",   no_argument,       NULL, ARG_NO_ASK_PASSWORD  },
+                { "collect",           no_argument,       NULL, 'G'                  },
                 {},
         };
 
@@ -190,7 +199,7 @@ static int parse_argv(int argc, char *argv[]) {
         assert(argc >= 0);
         assert(argv);
 
-        while ((c = getopt_long(argc, argv, "+hrH:M:E:p:tq", options, NULL)) >= 0)
+        while ((c = getopt_long(argc, argv, "+hrH:M:E:p:tPqG", options, NULL)) >= 0)
 
                 switch (c) {
 
@@ -279,8 +288,18 @@ static int parse_argv(int argc, char *argv[]) {
 
                         break;
 
-                case 't':
-                        arg_pty = true;
+                case 't': /* --pty */
+                        if (IN_SET(arg_stdio, ARG_STDIO_DIRECT, ARG_STDIO_AUTO)) /* if --pipe is already used, upgrade to auto mode */
+                                arg_stdio = ARG_STDIO_AUTO;
+                        else
+                                arg_stdio = ARG_STDIO_PTY;
+                        break;
+
+                case 'P': /* --pipe */
+                        if (IN_SET(arg_stdio, ARG_STDIO_PTY, ARG_STDIO_AUTO)) /* If --pty is already used, upgrade to auto mode */
+                                arg_stdio = ARG_STDIO_AUTO;
+                        else
+                                arg_stdio = ARG_STDIO_DIRECT;
                         break;
 
                 case 'q':
@@ -288,74 +307,65 @@ static int parse_argv(int argc, char *argv[]) {
                         break;
 
                 case ARG_ON_ACTIVE:
-
-                        r = parse_sec(optarg, &arg_on_active);
-                        if (r < 0) {
-                                log_error("Failed to parse timer value: %s", optarg);
+                        r = add_timer_property("OnActiveSec", optarg);
+                        if (r < 0)
                                 return r;
-                        }
 
+                        with_timer = true;
                         break;
 
                 case ARG_ON_BOOT:
-
-                        r = parse_sec(optarg, &arg_on_boot);
-                        if (r < 0) {
-                                log_error("Failed to parse timer value: %s", optarg);
+                        r = add_timer_property("OnBootSec", optarg);
+                        if (r < 0)
                                 return r;
-                        }
 
+                        with_timer = true;
                         break;
 
                 case ARG_ON_STARTUP:
-
-                        r = parse_sec(optarg, &arg_on_startup);
-                        if (r < 0) {
-                                log_error("Failed to parse timer value: %s", optarg);
+                        r = add_timer_property("OnStartupSec", optarg);
+                        if (r < 0)
                                 return r;
-                        }
 
+                        with_timer = true;
                         break;
 
                 case ARG_ON_UNIT_ACTIVE:
-
-                        r = parse_sec(optarg, &arg_on_unit_active);
-                        if (r < 0) {
-                                log_error("Failed to parse timer value: %s", optarg);
+                        r = add_timer_property("OnUnitActiveSec", optarg);
+                        if (r < 0)
                                 return r;
-                        }
 
+                        with_timer = true;
                         break;
 
                 case ARG_ON_UNIT_INACTIVE:
-
-                        r = parse_sec(optarg, &arg_on_unit_inactive);
-                        if (r < 0) {
-                                log_error("Failed to parse timer value: %s", optarg);
+                        r = add_timer_property("OnUnitInactiveSec", optarg);
+                        if (r < 0)
                                 return r;
-                        }
 
+                        with_timer = true;
                         break;
 
-                case ARG_ON_CALENDAR: {
-                        CalendarSpec *spec = NULL;
-
-                        r = calendar_spec_from_string(optarg, &spec);
-                        if (r < 0) {
-                                log_error("Invalid calendar spec: %s", optarg);
+                case ARG_ON_CALENDAR:
+                        r = add_timer_property("OnCalendar", optarg);
+                        if (r < 0)
                                 return r;
-                        }
 
-                        calendar_spec_free(spec);
-                        arg_on_calendar = optarg;
+                        with_timer = true;
                         break;
-                }
 
                 case ARG_TIMER_PROPERTY:
 
                         if (strv_extend(&arg_timer_property, optarg) < 0)
                                 return log_oom();
 
+                        with_timer = with_timer ||
+                                !!startswith(optarg, "OnActiveSec=") ||
+                                !!startswith(optarg, "OnBootSec=") ||
+                                !!startswith(optarg, "OnStartupSec=") ||
+                                !!startswith(optarg, "OnUnitActiveSec=") ||
+                                !!startswith(optarg, "OnUnitInactiveSec=") ||
+                                !!startswith(optarg, "OnCalendar=");
                         break;
 
                 case ARG_NO_BLOCK:
@@ -366,6 +376,10 @@ static int parse_argv(int argc, char *argv[]) {
                         arg_wait = true;
                         break;
 
+                case 'G':
+                        arg_aggressive_gc = true;
+                        break;
+
                 case '?':
                         return -EINVAL;
 
@@ -373,7 +387,17 @@ static int parse_argv(int argc, char *argv[]) {
                         assert_not_reached("Unhandled option");
                 }
 
-        if ((optind >= argc) && (!arg_unit || !with_timer())) {
+
+        if (arg_stdio == ARG_STDIO_AUTO) {
+                /* If we both --pty and --pipe are specified we'll automatically pick --pty if we are connected fully
+                 * to a TTY and pick direct fd passing otherwise. This way, we automatically adapt to usage in a shell
+                 * pipeline, but we are neatly interactive with tty-level isolation otherwise. */
+                arg_stdio = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO) && isatty(STDERR_FILENO) ?
+                        ARG_STDIO_PTY :
+                        ARG_STDIO_DIRECT;
+        }
+
+        if ((optind >= argc) && (!arg_unit || !with_timer)) {
                 log_error("Command line to execute required.");
                 return -EINVAL;
         }
@@ -393,27 +417,27 @@ static int parse_argv(int argc, char *argv[]) {
                 return -EINVAL;
         }
 
-        if (arg_pty && (with_timer() || arg_scope)) {
-                log_error("--pty is not compatible in timer or --scope mode.");
+        if (arg_stdio != ARG_STDIO_NONE && (with_timer || arg_scope)) {
+                log_error("--pty/--pipe is not compatible in timer or --scope mode.");
                 return -EINVAL;
         }
 
-        if (arg_pty && arg_transport == BUS_TRANSPORT_REMOTE) {
-                log_error("--pty is only supported when connecting to the local system or containers.");
+        if (arg_stdio != ARG_STDIO_NONE && arg_transport == BUS_TRANSPORT_REMOTE) {
+                log_error("--pty/--pipe is only supported when connecting to the local system or containers.");
                 return -EINVAL;
         }
 
-        if (arg_pty && arg_no_block) {
-                log_error("--pty is not compatible with --no-block.");
+        if (arg_stdio != ARG_STDIO_NONE && arg_no_block) {
+                log_error("--pty/--pipe is not compatible with --no-block.");
                 return -EINVAL;
         }
 
-        if (arg_scope && with_timer()) {
+        if (arg_scope && with_timer) {
                 log_error("Timer options are not supported in --scope mode.");
                 return -EINVAL;
         }
 
-        if (arg_timer_property && !with_timer()) {
+        if (arg_timer_property && !with_timer) {
                 log_error("--timer-property= has no effect without any other timer options.");
                 return -EINVAL;
         }
@@ -424,7 +448,7 @@ static int parse_argv(int argc, char *argv[]) {
                         return -EINVAL;
                 }
 
-                if (with_timer()) {
+                if (with_timer) {
                         log_error("--wait may not be combined with timer operations.");
                         return -EINVAL;
                 }
@@ -443,7 +467,13 @@ static int transient_unit_set_properties(sd_bus_message *m, char **properties) {
 
         r = sd_bus_message_append(m, "(sv)", "Description", "s", arg_description);
         if (r < 0)
-                return r;
+                return bus_log_create_error(r);
+
+        if (arg_aggressive_gc) {
+                r = sd_bus_message_append(m, "(sv)", "CollectMode", "s", "inactive-or-failed");
+                if (r < 0)
+                        return bus_log_create_error(r);
+        }
 
         r = bus_append_unit_property_assignment_many(m, properties);
         if (r < 0)
@@ -457,30 +487,36 @@ static int transient_cgroup_set_properties(sd_bus_message *m) {
         assert(m);
 
         if (!isempty(arg_slice)) {
-                _cleanup_free_ char *slice;
+                _cleanup_free_ char *slice = NULL;
 
                 r = unit_name_mangle_with_suffix(arg_slice, UNIT_NAME_NOGLOB, ".slice", &slice);
                 if (r < 0)
-                        return r;
+                        return log_error_errno(r, "Failed to mangle name '%s': %m", arg_slice);
 
                 r = sd_bus_message_append(m, "(sv)", "Slice", "s", slice);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         return 0;
 }
 
 static int transient_kill_set_properties(sd_bus_message *m) {
+        int r;
+
         assert(m);
 
-        if (arg_send_sighup)
-                return sd_bus_message_append(m, "(sv)", "SendSIGHUP", "b", arg_send_sighup);
-        else
-                return 0;
+        if (arg_send_sighup) {
+                r = sd_bus_message_append(m, "(sv)", "SendSIGHUP", "b", arg_send_sighup);
+                if (r < 0)
+                        return bus_log_create_error(r);
+        }
+
+        return 0;
 }
 
 static int transient_service_set_properties(sd_bus_message *m, char **argv, const char *pty_path) {
+        bool send_term = false;
         int r;
 
         assert(m);
@@ -497,45 +533,43 @@ static int transient_service_set_properties(sd_bus_message *m, char **argv, cons
         if (r < 0)
                 return r;
 
-        if (arg_wait || arg_pty) {
+        if (arg_wait || arg_stdio != ARG_STDIO_NONE) {
                 r = sd_bus_message_append(m, "(sv)", "AddRef", "b", 1);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         if (arg_remain_after_exit) {
                 r = sd_bus_message_append(m, "(sv)", "RemainAfterExit", "b", arg_remain_after_exit);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         if (arg_service_type) {
                 r = sd_bus_message_append(m, "(sv)", "Type", "s", arg_service_type);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         if (arg_exec_user) {
                 r = sd_bus_message_append(m, "(sv)", "User", "s", arg_exec_user);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         if (arg_exec_group) {
                 r = sd_bus_message_append(m, "(sv)", "Group", "s", arg_exec_group);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         if (arg_nice_set) {
                 r = sd_bus_message_append(m, "(sv)", "Nice", "i", arg_nice);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         if (pty_path) {
-                const char *e;
-
                 r = sd_bus_message_append(m,
                                           "(sv)(sv)(sv)(sv)",
                                           "StandardInput", "s", "tty",
@@ -543,7 +577,24 @@ static int transient_service_set_properties(sd_bus_message *m, char **argv, cons
                                           "StandardError", "s", "tty",
                                           "TTYPath", "s", pty_path);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
+
+                send_term = true;
+
+        } else if (arg_stdio == ARG_STDIO_DIRECT) {
+                r = sd_bus_message_append(m,
+                                          "(sv)(sv)(sv)",
+                                          "StandardInputFileDescriptor", "h", STDIN_FILENO,
+                                          "StandardOutputFileDescriptor", "h", STDOUT_FILENO,
+                                          "StandardErrorFileDescriptor", "h", STDERR_FILENO);
+                if (r < 0)
+                        return bus_log_create_error(r);
+
+                send_term = isatty(STDIN_FILENO) || isatty(STDOUT_FILENO) || isatty(STDERR_FILENO);
+        }
+
+        if (send_term) {
+                const char *e;
 
                 e = getenv("TERM");
                 if (e) {
@@ -554,85 +605,85 @@ static int transient_service_set_properties(sd_bus_message *m, char **argv, cons
                                                   "(sv)",
                                                   "Environment", "as", 1, n);
                         if (r < 0)
-                                return r;
+                                return bus_log_create_error(r);
                 }
         }
 
         if (!strv_isempty(arg_environment)) {
                 r = sd_bus_message_open_container(m, 'r', "sv");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_append(m, "s", "Environment");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_open_container(m, 'v', "as");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_append_strv(m, arg_environment);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         /* Exec container */
         {
                 r = sd_bus_message_open_container(m, 'r', "sv");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_append(m, "s", "ExecStart");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_open_container(m, 'v', "a(sasb)");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_open_container(m, 'a', "(sasb)");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_open_container(m, 'r', "sasb");
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_append(m, "s", argv[0]);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_append_strv(m, argv);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_append(m, "b", false);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
-                        return r;
+                        return bus_log_create_error(r);
         }
 
         return 0;
@@ -655,9 +706,9 @@ static int transient_scope_set_properties(sd_bus_message *m) {
         if (r < 0)
                 return r;
 
-        r = sd_bus_message_append(m, "(sv)", "PIDs", "au", 1, (uint32_t) getpid());
+        r = sd_bus_message_append(m, "(sv)", "PIDs", "au", 1, (uint32_t) getpid_cached());
         if (r < 0)
-                return r;
+                return bus_log_create_error(r);
 
         return 0;
 }
@@ -674,43 +725,7 @@ static int transient_timer_set_properties(sd_bus_message *m) {
         /* Automatically clean up our transient timers */
         r = sd_bus_message_append(m, "(sv)", "RemainAfterElapse", "b", false);
         if (r < 0)
-                return r;
-
-        if (arg_on_active) {
-                r = sd_bus_message_append(m, "(sv)", "OnActiveSec", "t", arg_on_active);
-                if (r < 0)
-                        return r;
-        }
-
-        if (arg_on_boot) {
-                r = sd_bus_message_append(m, "(sv)", "OnBootSec", "t", arg_on_boot);
-                if (r < 0)
-                        return r;
-        }
-
-        if (arg_on_startup) {
-                r = sd_bus_message_append(m, "(sv)", "OnStartupSec", "t", arg_on_startup);
-                if (r < 0)
-                        return r;
-        }
-
-        if (arg_on_unit_active) {
-                r = sd_bus_message_append(m, "(sv)", "OnUnitActiveSec", "t", arg_on_unit_active);
-                if (r < 0)
-                        return r;
-        }
-
-        if (arg_on_unit_inactive) {
-                r = sd_bus_message_append(m, "(sv)", "OnUnitInactiveSec", "t", arg_on_unit_inactive);
-                if (r < 0)
-                        return r;
-        }
-
-        if (arg_on_calendar) {
-                r = sd_bus_message_append(m, "(sv)", "OnCalendar", "s", arg_on_calendar);
-                if (r < 0)
-                        return r;
-        }
+                return bus_log_create_error(r);
 
         return 0;
 }
@@ -772,6 +787,8 @@ typedef struct RunContext {
         uint64_t inactive_enter_usec;
         char *result;
         uint64_t cpu_usage_nsec;
+        uint64_t ip_ingress_bytes;
+        uint64_t ip_egress_bytes;
         uint32_t exit_code;
         uint32_t exit_status;
 } RunContext;
@@ -815,6 +832,8 @@ static int run_context_update(RunContext *c, const char *path) {
                 { "ExecMainCode",                     "i", NULL, offsetof(RunContext, exit_code)           },
                 { "ExecMainStatus",                   "i", NULL, offsetof(RunContext, exit_status)         },
                 { "CPUUsageNSec",                     "t", NULL, offsetof(RunContext, cpu_usage_nsec)      },
+                { "IPIngressBytes",                   "t", NULL, offsetof(RunContext, ip_ingress_bytes)    },
+                { "IPEgressBytes",                    "t", NULL, offsetof(RunContext, ip_egress_bytes)     },
                 {}
         };
 
@@ -875,7 +894,7 @@ static int start_transient_service(
         assert(argv);
         assert(retval);
 
-        if (arg_pty) {
+        if (arg_stdio == ARG_STDIO_PTY) {
 
                 if (arg_transport == BUS_TRANSPORT_LOCAL) {
                         master = posix_openpt(O_RDWR|O_NOCTTY|O_CLOEXEC|O_NDELAY);
@@ -968,7 +987,7 @@ static int start_transient_service(
 
         r = transient_service_set_properties(m, argv, pty_path);
         if (r < 0)
-                return bus_log_create_error(r);
+                return r;
 
         r = sd_bus_message_close_container(m);
         if (r < 0)
@@ -979,7 +998,7 @@ static int start_transient_service(
         if (r < 0)
                 return bus_log_create_error(r);
 
-        polkit_agent_open_if_enabled();
+        polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
         r = sd_bus_call(bus, m, 0, &error, &reply);
         if (r < 0)
@@ -1000,8 +1019,14 @@ static int start_transient_service(
         if (!arg_quiet)
                 log_info("Running as unit: %s", service);
 
-        if (arg_wait || master >= 0) {
-                _cleanup_(run_context_free) RunContext c = {};
+        if (arg_wait || arg_stdio != ARG_STDIO_NONE) {
+                _cleanup_(run_context_free) RunContext c = {
+                        .cpu_usage_nsec = NSEC_INFINITY,
+                        .ip_ingress_bytes = UINT64_MAX,
+                        .ip_egress_bytes = UINT64_MAX,
+                        .inactive_exit_usec = USEC_INFINITY,
+                        .inactive_enter_usec = USEC_INFINITY,
+                };
                 _cleanup_free_ char *path = NULL;
                 const char *mt;
 
@@ -1024,6 +1049,9 @@ static int start_transient_service(
                                 return log_error_errno(r, "Failed to create PTY forwarder: %m");
 
                         pty_forward_set_handler(c.forward, pty_forward_handler, &c);
+
+                        /* Make sure to process any TTY events before we process bus events */
+                        (void) pty_forward_set_priority(c.forward, SD_EVENT_PRIORITY_IMPORTANT);
                 }
 
                 path = unit_dbus_path_from_name(service);
@@ -1039,7 +1067,7 @@ static int start_transient_service(
                 if (r < 0)
                         return log_error_errno(r, "Failed to add properties changed signal.");
 
-                r = sd_bus_attach_event(bus, c.event, 0);
+                r = sd_bus_attach_event(bus, c.event, SD_EVENT_PRIORITY_NORMAL);
                 if (r < 0)
                         return log_error_errno(r, "Failed to attach bus to event loop.");
 
@@ -1081,9 +1109,18 @@ static int start_transient_service(
                                 log_info("Service runtime: %s", format_timespan(ts, sizeof(ts), c.inactive_enter_usec - c.inactive_exit_usec, USEC_PER_MSEC));
                         }
 
-                        if (c.cpu_usage_nsec > 0 && c.cpu_usage_nsec != NSEC_INFINITY) {
+                        if (c.cpu_usage_nsec != NSEC_INFINITY) {
                                 char ts[FORMAT_TIMESPAN_MAX];
                                 log_info("CPU time consumed: %s", format_timespan(ts, sizeof(ts), (c.cpu_usage_nsec + NSEC_PER_USEC - 1) / NSEC_PER_USEC, USEC_PER_MSEC));
+                        }
+
+                        if (c.ip_ingress_bytes != UINT64_MAX) {
+                                char bytes[FORMAT_BYTES_MAX];
+                                log_info("IP traffic received: %s", format_bytes(bytes, sizeof(bytes), c.ip_ingress_bytes));
+                        }
+                        if (c.ip_egress_bytes != UINT64_MAX) {
+                                char bytes[FORMAT_BYTES_MAX];
+                                log_info("IP traffic sent: %s", format_bytes(bytes, sizeof(bytes), c.ip_egress_bytes));
                         }
                 }
 
@@ -1152,7 +1189,7 @@ static int start_transient_scope(
 
         r = transient_scope_set_properties(m);
         if (r < 0)
-                return bus_log_create_error(r);
+                return r;
 
         r = sd_bus_message_close_container(m);
         if (r < 0)
@@ -1163,7 +1200,7 @@ static int start_transient_scope(
         if (r < 0)
                 return bus_log_create_error(r);
 
-        polkit_agent_open_if_enabled();
+        polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
         r = sd_bus_call(bus, m, 0, &error, &reply);
         if (r < 0) {
@@ -1333,7 +1370,7 @@ static int start_transient_timer(
 
         r = transient_timer_set_properties(m);
         if (r < 0)
-                return bus_log_create_error(r);
+                return r;
 
         r = sd_bus_message_close_container(m);
         if (r < 0)
@@ -1358,7 +1395,7 @@ static int start_transient_timer(
 
                 r = transient_service_set_properties(m, argv, NULL);
                 if (r < 0)
-                        return bus_log_create_error(r);
+                        return r;
 
                 r = sd_bus_message_close_container(m);
                 if (r < 0)
@@ -1373,7 +1410,7 @@ static int start_transient_timer(
         if (r < 0)
                 return bus_log_create_error(r);
 
-        polkit_agent_open_if_enabled();
+        polkit_agent_open_if_enabled(arg_transport, arg_ask_password);
 
         r = sd_bus_call(bus, m, 0, &error, &reply);
         if (r < 0) {
@@ -1440,7 +1477,7 @@ int main(int argc, char* argv[]) {
 
         /* If --wait is used connect via the bus, unconditionally, as ref/unref is not supported via the limited direct
          * connection */
-        if (arg_wait || arg_pty)
+        if (arg_wait || arg_stdio != ARG_STDIO_NONE)
                 r = bus_connect_transport(arg_transport, arg_host, arg_user, &bus);
         else
                 r = bus_connect_transport_systemd(arg_transport, arg_host, arg_user, &bus);
@@ -1451,7 +1488,7 @@ int main(int argc, char* argv[]) {
 
         if (arg_scope)
                 r = start_transient_scope(bus, argv + optind);
-        else if (with_timer())
+        else if (with_timer)
                 r = start_transient_timer(bus, argv + optind);
         else
                 r = start_transient_service(bus, argv + optind, &retval);

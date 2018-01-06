@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 systemd_journal_upload_sources = files('''
         journal-upload.h
         journal-upload.c
@@ -21,7 +38,7 @@ systemd_journal_gatewayd_sources = files('''
         microhttpd-util.c
 '''.split())
 
-if conf.get('ENABLE_REMOTE', false) and conf.get('HAVE_LIBCURL', false)
+if conf.get('ENABLE_REMOTE') ==1 and conf.get('HAVE_LIBCURL') == 1
         journal_upload_conf = configure_file(
                 input : 'journal-upload.conf.in',
                 output : 'journal-upload.conf',
@@ -30,7 +47,7 @@ if conf.get('ENABLE_REMOTE', false) and conf.get('HAVE_LIBCURL', false)
                      install_dir : pkgsysconfdir)
 endif
 
-if conf.get('ENABLE_REMOTE', false) and conf.get('HAVE_MICROHTTPD', false)
+if conf.get('ENABLE_REMOTE') == 1 and conf.get('HAVE_MICROHTTPD') == 1
         journal_remote_conf = configure_file(
                 input : 'journal-remote.conf.in',
                 output : 'journal-remote.conf',

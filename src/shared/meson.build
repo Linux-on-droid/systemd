@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 shared_sources = '''
         acl-util.h
         acpi-fpdt.c
@@ -10,6 +27,8 @@ shared_sources = '''
         base-filesystem.h
         boot-timestamps.c
         boot-timestamps.h
+        bootspec.c
+        bootspec.h
         bus-unit-util.c
         bus-unit-util.h
         bus-util.c
@@ -88,6 +107,8 @@ shared_sources = '''
         sysctl-util.h
         tests.c
         tests.h
+        tomoyo-util.c
+        tomoyo-util.h
         udev-util.h
         udev-util.c
         uid-range.c
@@ -104,19 +125,19 @@ shared_sources = '''
 test_tables_h = files('test-tables.h')
 shared_sources += [test_tables_h]
 
-if conf.get('HAVE_ACL', false)
+if conf.get('HAVE_ACL') == 1
         shared_sources += ['acl-util.c']
 endif
 
-if conf.get('HAVE_UTMP', false)
+if conf.get('ENABLE_UTMP') == 1
         shared_sources += ['utmp-wtmp.c']
 endif
 
-if conf.get('HAVE_SECCOMP', false)
+if conf.get('HAVE_SECCOMP') == 1
         shared_sources += ['seccomp-util.c']
 endif
 
-if conf.get('HAVE_LIBIPTC', false)
+if conf.get('HAVE_LIBIPTC') == 1
         shared_sources += ['firewall-util.c']
 endif
 
@@ -136,6 +157,8 @@ libshared_deps = [threads,
                   liblz4,
                   libblkid]
 
+libshared_sym_path = '@0@/libshared.sym'.format(meson.current_source_dir())
+
 libshared = shared_library(
         libshared_name,
         shared_sources,
@@ -144,7 +167,8 @@ libshared = shared_library(
         libsystemd_internal_sources,
         libudev_sources,
         include_directories : includes,
-        link_args : ['-shared'],
+        link_args : ['-shared',
+                    '-Wl,--version-script=' + libshared_sym_path],
         c_args : ['-fvisibility=default'],
         dependencies : libshared_deps,
         install : true,

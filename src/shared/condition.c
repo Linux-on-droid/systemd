@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -48,11 +49,13 @@
 #include "parse-util.h"
 #include "path-util.h"
 #include "proc-cmdline.h"
+#include "process-util.h"
 #include "selinux-util.h"
 #include "smack-util.h"
 #include "stat-util.h"
 #include "string-table.h"
 #include "string-util.h"
+#include "tomoyo-util.h"
 #include "user-util.h"
 #include "util.h"
 #include "virt.h"
@@ -75,8 +78,7 @@ Condition* condition_new(ConditionType type, const char *parameter, bool trigger
 
         r = free_and_strdup(&c->parameter, parameter);
         if (r < 0) {
-                free(c);
-                return NULL;
+                return mfree(c);
         }
 
         return c;
@@ -130,7 +132,7 @@ static int condition_test_kernel_command_line(Condition *c) {
                         const char *f;
 
                         f = startswith(word, c->parameter);
-                        found = f && (*f == '=' || *f == 0);
+                        found = f && IN_SET(*f, 0, '=');
                 }
 
                 if (found)
@@ -155,7 +157,7 @@ static int condition_test_user(Condition *c) {
                 return id == getuid() || id == geteuid();
 
         if (streq("@system", c->parameter))
-                return getuid() <= SYSTEM_UID_MAX || geteuid() <= SYSTEM_UID_MAX;
+                return uid_is_system(getuid()) || uid_is_system(geteuid());
 
         username = getusername_malloc();
         if (!username)
@@ -164,7 +166,7 @@ static int condition_test_user(Condition *c) {
         if (streq(username, c->parameter))
                 return 1;
 
-        if (getpid() == 1)
+        if (getpid_cached() == 1)
                 return streq(c->parameter, "root");
 
         u = c->parameter;
@@ -188,7 +190,7 @@ static int condition_test_group(Condition *c) {
                 return in_gid(id);
 
         /* Avoid any NSS lookups if we are PID1 */
-        if (getpid() == 1)
+        if (getpid_cached() == 1)
                 return streq(c->parameter, "root");
 
         return in_group(c->parameter) > 0;
@@ -300,6 +302,8 @@ static int condition_test_security(Condition *c) {
                 return use_audit();
         if (streq(c->parameter, "ima"))
                 return use_ima();
+        if (streq(c->parameter, "tomoyo"))
+                return mac_tomoyo_use();
 
         return false;
 }

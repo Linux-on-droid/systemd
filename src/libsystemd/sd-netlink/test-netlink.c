@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -362,7 +363,7 @@ static void test_get_addresses(sd_netlink *rtnl) {
                 assert_se(sd_rtnl_message_addr_get_flags(m, &flags) >= 0);
 
                 assert_se(ifindex > 0);
-                assert_se(family == AF_INET || family == AF_INET6);
+                assert_se(IN_SET(family, AF_INET, AF_INET6));
 
                 log_info("got IPv%u address on ifindex %i", family == AF_INET ? 4: 6, ifindex);
         }

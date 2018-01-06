@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -22,7 +23,7 @@
 #include "fd-util.h"
 #include "sigbus.h"
 #include "util.h"
-#ifdef HAVE_VALGRIND_VALGRIND_H
+#if HAVE_VALGRIND_VALGRIND_H
 #include <valgrind/valgrind.h>
 #endif
 
@@ -32,7 +33,7 @@ int main(int argc, char *argv[]) {
         void *addr = NULL;
         uint8_t *p;
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
+#if HAVE_VALGRIND_VALGRIND_H
         if (RUNNING_ON_VALGRIND)
                 return EXIT_TEST_SKIP;
 #endif

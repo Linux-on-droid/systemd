@@ -6,7 +6,7 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Marco d'Itri <md@linux.it>,
            Sjoerd Simons <sjoerd@debian.org>,
            Martin Pitt <mpitt@debian.org>
-Standards-Version: 4.0.0
+Standards-Version: 4.1.2
 Vcs-Git: https://anonscm.debian.org/git/pkg-systemd/systemd.git
 Vcs-Browser: https://anonscm.debian.org/git/pkg-systemd/systemd.git
 Homepage: https://www.freedesktop.org/wiki/Software/systemd
@@ -41,7 +41,7 @@ Build-Depends: debhelper (>= 10.4~),
                libgcrypt20-dev,
                libkmod-dev (>= 15),
                libblkid-dev (>= 2.24),
-               libmount-dev (>= 2.27.1),
+               libmount-dev (>= 2.30),
                libseccomp-dev (>= 2.3.1) [amd64 arm64 armel armhf i386 mips mipsel mips64 mips64el x32 powerpc ppc64 ppc64el s390x],
                libdw-dev (>= 0.158) <!stage1>,
                libpolkit-gobject-1-dev <!stage1>,
@@ -109,6 +109,7 @@ Replaces: sysvinit (<< 2.88dsf-44~),
 Pre-Depends: systemd
 Depends: ${shlibs:Depends},
          ${misc:Depends}
+Recommends: libnss-systemd
 Description: system and service manager - SysV links
  systemd is a system and service manager for Linux. It provides aggressive
  parallelization capabilities, uses socket and D-Bus activation for starting
@@ -185,6 +186,7 @@ Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
+         python3-minimal,
 Description: tests for systemd
  This package contains the test binaries. Those binaries are primarily used
  for autopkgtest and not meant to be installed on regular user systems.
@@ -337,7 +339,7 @@ Description: /dev/ and hotplug management daemon
 
 Package: libudev1
 Section: libs
-Priority: important
+Priority: optional
 Architecture: linux-any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
@@ -361,7 +363,7 @@ Description: libudev development files
 
 Package: udev-udeb
 Build-Profiles: <!noudeb>
-XC-Package-Type: udeb
+Package-Type: udeb
 Section: debian-installer
 Priority: optional
 Architecture: linux-any

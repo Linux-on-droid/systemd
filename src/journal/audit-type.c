@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -19,7 +20,7 @@
 
 #include <stdio.h>
 #include <linux/audit.h>
-#ifdef HAVE_AUDIT
+#if HAVE_AUDIT
 #  include <libaudit.h>
 #endif
 

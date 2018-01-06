@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -29,6 +30,7 @@
 #include "cgroup-util.h"
 #include "fdset.h"
 #include "hashmap.h"
+#include "ip-address-access.h"
 #include "list.h"
 #include "ratelimit.h"
 
@@ -68,11 +70,38 @@ typedef enum StatusType {
         STATUS_TYPE_EMERGENCY,
 } StatusType;
 
+typedef enum ManagerTimestamp {
+        MANAGER_TIMESTAMP_FIRMWARE,
+        MANAGER_TIMESTAMP_LOADER,
+        MANAGER_TIMESTAMP_KERNEL,
+        MANAGER_TIMESTAMP_INITRD,
+        MANAGER_TIMESTAMP_USERSPACE,
+        MANAGER_TIMESTAMP_FINISH,
+
+        MANAGER_TIMESTAMP_SECURITY_START,
+        MANAGER_TIMESTAMP_SECURITY_FINISH,
+        MANAGER_TIMESTAMP_GENERATORS_START,
+        MANAGER_TIMESTAMP_GENERATORS_FINISH,
+        MANAGER_TIMESTAMP_UNITS_LOAD_START,
+        MANAGER_TIMESTAMP_UNITS_LOAD_FINISH,
+        _MANAGER_TIMESTAMP_MAX,
+        _MANAGER_TIMESTAMP_INVALID = -1,
+} ManagerTimestamp;
+
 #include "execute.h"
 #include "job.h"
 #include "path-lookup.h"
 #include "show-status.h"
 #include "unit-name.h"
+
+enum {
+        /* 0 = run normally */
+        MANAGER_TEST_RUN_MINIMAL = 1,        /* run test w/o generators */
+        MANAGER_TEST_RUN_ENV_GENERATORS = 2, /* also run env generators  */
+        MANAGER_TEST_RUN_GENERATORS = 4,     /* also run unit generators */
+        MANAGER_TEST_FULL = MANAGER_TEST_RUN_ENV_GENERATORS | MANAGER_TEST_RUN_GENERATORS,
+};
+assert_cc((MANAGER_TEST_FULL & UINT8_MAX) == MANAGER_TEST_FULL);
 
 struct Manager {
         /* Note that the set of units we know of is allowed to be
@@ -109,7 +138,10 @@ struct Manager {
         LIST_HEAD(Job, gc_job_queue);
 
         /* Units that should be realized */
-        LIST_HEAD(Unit, cgroup_queue);
+        LIST_HEAD(Unit, cgroup_realize_queue);
+
+        /* Units whose cgroup ran empty */
+        LIST_HEAD(Unit, cgroup_empty_queue);
 
         sd_event *event;
 
@@ -157,19 +189,7 @@ struct Manager {
         usec_t runtime_watchdog;
         usec_t shutdown_watchdog;
 
-        dual_timestamp firmware_timestamp;
-        dual_timestamp loader_timestamp;
-        dual_timestamp kernel_timestamp;
-        dual_timestamp initrd_timestamp;
-        dual_timestamp userspace_timestamp;
-        dual_timestamp finish_timestamp;
-
-        dual_timestamp security_start_timestamp;
-        dual_timestamp security_finish_timestamp;
-        dual_timestamp generators_start_timestamp;
-        dual_timestamp generators_finish_timestamp;
-        dual_timestamp units_load_start_timestamp;
-        dual_timestamp units_load_finish_timestamp;
+        dual_timestamp timestamps[_MANAGER_TIMESTAMP_MAX];
 
         struct udev* udev;
 
@@ -219,17 +239,19 @@ struct Manager {
         CGroupMask cgroup_supported;
         char *cgroup_root;
 
-        /* Notifications from cgroups, when the unified hierarchy is
-         * used is done via inotify. */
+        /* Notifications from cgroups, when the unified hierarchy is used is done via inotify. */
         int cgroup_inotify_fd;
         sd_event_source *cgroup_inotify_event_source;
         Hashmap *cgroup_inotify_wd_unit;
+
+        /* A defer event for handling cgroup empty events and processing them after SIGCHLD in all cases. */
+        sd_event_source *cgroup_empty_event_source;
 
         /* Make sure the user cannot accidentally unmount our cgroup
          * file system */
         int pin_cgroupfs_fd;
 
-        int gc_marker;
+        unsigned gc_marker;
 
         /* Flags */
         ManagerExitCode exit_code:5;
@@ -238,7 +260,10 @@ struct Manager {
         bool dispatching_dbus_queue:1;
 
         bool taint_usr:1;
-        bool test_run:1;
+
+        bool ready_sent:1;
+
+        unsigned test_run_flags:8;
 
         /* If non-zero, exit with the following value when the systemd
          * process terminate. Useful for containers: systemd-nspawn could get
@@ -261,6 +286,7 @@ struct Manager {
         bool default_io_accounting;
         bool default_blockio_accounting;
         bool default_tasks_accounting;
+        bool default_ip_accounting;
 
         uint64_t default_tasks_max;
         usec_t default_timer_accuracy_usec;
@@ -316,6 +342,9 @@ struct Manager {
         const char *invocation_log_format_string;
 
         int first_boot; /* tri-state */
+
+        /* prefixes of e.g. RuntimeDirectory= */
+        char *prefix[_EXEC_DIRECTORY_TYPE_MAX];
 };
 
 #define MANAGER_IS_SYSTEM(m) ((m)->unit_file_scope == UNIT_FILE_SYSTEM)
@@ -323,7 +352,9 @@ struct Manager {
 
 #define MANAGER_IS_RELOADING(m) ((m)->n_reloading > 0)
 
-int manager_new(UnitFileScope scope, bool test_run, Manager **m);
+#define MANAGER_IS_FINISHED(m) (dual_timestamp_is_set((m)->timestamps + MANAGER_TIMESTAMP_FINISH))
+
+int manager_new(UnitFileScope scope, unsigned test_run_flags, Manager **m);
 Manager* manager_free(Manager *m);
 
 void manager_enumerate(Manager *m);
@@ -341,9 +372,12 @@ int manager_load_unit_from_dbus_path(Manager *m, const char *s, sd_bus_error *e,
 int manager_add_job(Manager *m, JobType type, Unit *unit, JobMode mode, sd_bus_error *e, Job **_ret);
 int manager_add_job_by_name(Manager *m, JobType type, const char *name, JobMode mode, sd_bus_error *e, Job **_ret);
 int manager_add_job_by_name_and_warn(Manager *m, JobType type, const char *name, JobMode mode, Job **ret);
+int manager_propagate_reload(Manager *m, Unit *unit, JobMode mode, sd_bus_error *e);
 
 void manager_dump_units(Manager *s, FILE *f, const char *prefix);
 void manager_dump_jobs(Manager *s, FILE *f, const char *prefix);
+void manager_dump(Manager *s, FILE *f, const char *prefix);
+int manager_get_dump_string(Manager *m, char **ret);
 
 void manager_clear_jobs(Manager *m);
 
@@ -380,7 +414,7 @@ void manager_flip_auto_status(Manager *m, bool enable);
 
 Set *manager_get_units_requiring_mounts_for(Manager *m, const char *path);
 
-const char *manager_get_runtime_prefix(Manager *m);
+void manager_set_exec_params(Manager *m, ExecParameters *p);
 
 ManagerState manager_state(Manager *m);
 
@@ -401,9 +435,14 @@ void manager_deserialize_uid_refs_one(Manager *m, const char *value);
 void manager_serialize_gid_refs(Manager *m, FILE *f);
 void manager_deserialize_gid_refs_one(Manager *m, const char *value);
 
+char *manager_taint_string(Manager *m);
+
 const char *manager_state_to_string(ManagerState m) _const_;
 ManagerState manager_state_from_string(const char *s) _pure_;
 
 const char *manager_get_confirm_spawn(Manager *m);
 bool manager_is_confirm_spawn_disabled(Manager *m);
 void manager_disable_confirm_spawn(void);
+
+const char *manager_timestamp_to_string(ManagerTimestamp m) _const_;
+ManagerTimestamp manager_timestamp_from_string(const char *s) _pure_;

@@ -1,120 +1,137 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 libcore_la_sources = '''
-        unit.c
-        unit.h
-        unit-printf.c
-        unit-printf.h
-        job.c
-        job.h
-        manager.c
-        manager.h
-        transaction.c
-        transaction.h
-        load-fragment.c
-        load-fragment.h
-        service.c
-        service.h
-        socket.c
-        socket.h
-        busname.c
-        busname.h
-        bus-policy.c
-        bus-policy.h
-        target.c
-        target.h
-        device.c
-        device.h
-        mount.c
-        mount.h
+        audit-fd.c
+        audit-fd.h
         automount.c
         automount.h
-        swap.c
-        swap.h
-        timer.c
-        timer.h
-        path.c
-        path.h
-        slice.c
-        slice.h
-        scope.c
-        scope.h
-        load-dropin.c
-        load-dropin.h
-        execute.c
-        execute.h
-        dynamic-user.c
-        dynamic-user.h
-        kill.c
-        kill.h
-        dbus.c
-        dbus.h
-        dbus-manager.c
-        dbus-manager.h
-        dbus-unit.c
-        dbus-unit.h
-        dbus-job.c
-        dbus-job.h
-        dbus-service.c
-        dbus-service.h
-        dbus-socket.c
-        dbus-socket.h
-        dbus-busname.c
-        dbus-busname.h
-        dbus-target.c
-        dbus-target.h
-        dbus-device.c
-        dbus-device.h
-        dbus-mount.c
-        dbus-mount.h
-        dbus-automount.c
-        dbus-automount.h
-        dbus-swap.c
-        dbus-swap.h
-        dbus-timer.c
-        dbus-timer.h
-        dbus-path.c
-        dbus-path.h
-        dbus-slice.c
-        dbus-slice.h
-        dbus-scope.c
-        dbus-scope.h
-        dbus-execute.c
-        dbus-execute.h
-        dbus-kill.c
-        dbus-kill.h
-        dbus-cgroup.c
-        dbus-cgroup.h
+        bpf-firewall.c
+        bpf-firewall.h
         cgroup.c
         cgroup.h
+        chown-recursive.c
+        chown-recursive.h
+        dbus-automount.c
+        dbus-automount.h
+        dbus-cgroup.c
+        dbus-cgroup.h
+        dbus-device.c
+        dbus-device.h
+        dbus-execute.c
+        dbus-execute.h
+        dbus-job.c
+        dbus-job.h
+        dbus-kill.c
+        dbus-kill.h
+        dbus-manager.c
+        dbus-manager.h
+        dbus-mount.c
+        dbus-mount.h
+        dbus-path.c
+        dbus-path.h
+        dbus-scope.c
+        dbus-scope.h
+        dbus-service.c
+        dbus-service.h
+        dbus-slice.c
+        dbus-slice.h
+        dbus-socket.c
+        dbus-socket.h
+        dbus-swap.c
+        dbus-swap.h
+        dbus-target.c
+        dbus-target.h
+        dbus-timer.c
+        dbus-timer.h
+        dbus-unit.c
+        dbus-unit.h
+        dbus.c
+        dbus.h
+        device.c
+        device.h
+        dynamic-user.c
+        dynamic-user.h
+        emergency-action.c
+        emergency-action.h
+        execute.c
+        execute.h
+        hostname-setup.c
+        hostname-setup.h
+        ima-setup.c
+        ima-setup.h
+        ip-address-access.c
+        ip-address-access.h
+        job.c
+        job.h
+        kill.c
+        kill.h
+        killall.c
+        killall.h
+        kmod-setup.c
+        kmod-setup.h
+        load-dropin.c
+        load-dropin.h
+        load-fragment.c
+        load-fragment.h
+        locale-setup.c
+        locale-setup.h
+        loopback-setup.c
+        loopback-setup.h
+        machine-id-setup.c
+        machine-id-setup.h
+        manager.c
+        manager.h
+        mount-setup.c
+        mount-setup.h
+        mount.c
+        mount.h
+        namespace.c
+        namespace.h
+        path.c
+        path.h
+        scope.c
+        scope.h
         selinux-access.c
         selinux-access.h
         selinux-setup.c
         selinux-setup.h
-        smack-setup.c
-        smack-setup.h
-        ima-setup.c
-        ima-setup.h
-        locale-setup.h
-        locale-setup.c
-        hostname-setup.c
-        hostname-setup.h
-        machine-id-setup.c
-        machine-id-setup.h
-        mount-setup.c
-        mount-setup.h
-        kmod-setup.c
-        kmod-setup.h
-        loopback-setup.h
-        loopback-setup.c
-        namespace.c
-        namespace.h
-        killall.h
-        killall.c
-        audit-fd.c
-        audit-fd.h
+        service.c
+        service.h
         show-status.c
         show-status.h
-        emergency-action.c
-        emergency-action.h
+        slice.c
+        slice.h
+        smack-setup.c
+        smack-setup.h
+        socket.c
+        socket.h
+        swap.c
+        swap.h
+        target.c
+        target.h
+        timer.c
+        timer.h
+        transaction.c
+        transaction.h
+        unit-printf.c
+        unit-printf.h
+        unit.c
+        unit.h
 '''.split()
 
 load_fragment_gperf_gperf = custom_target(
@@ -197,24 +214,14 @@ policy_in = configure_file(
         output : 'org.freedesktop.systemd1.policy.in',
         configuration : substs)
 
-custom_target(
+i18n.merge_file(
         'org.freedesktop.systemd1.policy',
         input : policy_in,
         output : 'org.freedesktop.systemd1.policy',
-        command : intltool_command,
+        po_dir : po_dir,
+        data_dirs : po_dir,
         install : install_polkit,
         install_dir : polkitpolicydir)
-
-# TODO: this might work with meson from git, see
-# https://github.com/mesonbuild/meson/issues/1441#issuecomment-283585493
-#
-# i18n.merge_file(
-#   'org.freedesktop.systemd1.policy',
-#   po_dir : po_dir,
-#   input : policy_in,
-#   output : 'org.freedesktop.systemd1.policy',
-#   install : install_polkit,
-#   install_dir : polkitpolicydir)
 
 install_data('system.conf',
              'user.conf',

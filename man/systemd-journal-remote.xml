@@ -1,8 +1,13 @@
 <?xml version='1.0'?> <!--*- Mode: nxml; nxml-child-indent: 2; indent-tabs-mode: nil -*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
-"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
+"http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd" [
+<!ENTITY % entities SYSTEM "custom-entities.ent" >
+%entities;
+]>
 
 <!--
+  SPDX-License-Identifier: LGPL-2.1+
+
   This file is part of systemd.
 
   Copyright 2012 Zbigniew Jędrzejewski-Szmek
@@ -106,6 +111,8 @@
 
     <variablelist>
       <varlistentry>
+        <term><arg choice="opt" rep="repeat">SOURCES</arg></term>
+
         <listitem><para>When <option>-</option> is given as a
         positional argument, events will be read from standard input.
         Other positional arguments will be treated as filenames
@@ -123,6 +130,20 @@
         <citerefentry><refentrytitle>systemd-journal-gatewayd</refentrytitle><manvolnum>8</manvolnum></citerefentry>
         instance, e.g. http://some.host:19531/ or
         https://some.host:19531/.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--getter='<replaceable>PROG</replaceable> <arg choice="opt" rep="repeat">OPTIONS</arg>'</option></term>
+
+        <listitem><para>Program to invoke to retrieve data. The journal
+        event stream must be generated on standard output.</para>
+
+        <para>Examples:</para>
+
+        <programlisting>--getter='curl "-HAccept: application/vnd.fdo.journal" https://some.host:19531/'</programlisting>
+
+        <programlisting>--getter='wget --header="Accept: application/vnd.fdo.journal" -O- https://some.host:19531/'</programlisting>
+        </listitem>
       </varlistentry>
     </variablelist>
 
@@ -180,6 +201,48 @@
         </listitem>
       </varlistentry>
 
+      <varlistentry>
+        <term><option>--key=</option></term>
+
+        <listitem><para>
+          Takes a path to a SSL key file in PEM format.
+          Defaults to <filename>&CERTIFICATE_ROOT;/private/journal-remote.pem</filename>.
+          This option can be used with <option>--listen-https=</option>.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--cert=</option></term>
+
+        <listitem><para>
+          Takes a path to a SSL certificate file in PEM format.
+          Defaults to <filename>&CERTIFICATE_ROOT;/certs/journal-remote.pem</filename>.
+          This option can be used with <option>--listen-https=</option>.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--trust=</option></term>
+
+        <listitem><para>
+          Takes a path to a SSL CA certificate file in PEM format,
+          or <option>all</option>. If <option>all</option> is set,
+          then certificate checking will be disabled.
+          Defaults to <filename>&CERTIFICATE_ROOT;/ca/trusted.pem</filename>.
+          This option can be used with <option>--listen-https=</option>.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>--gnutls-log=</option></term>
+
+        <listitem><para>
+          Takes a comma separated list of gnutls logging categories.
+          This option can be used with <option>--listen-http=</option> or
+          <option>--listen-https=</option>.
+        </para></listitem>
+      </varlistentry>
+
     </variablelist>
   </refsect1>
 
@@ -187,8 +250,7 @@
     <title>Sinks</title>
 
     <para>The location of the output journal can be specified
-    with <option>-o</option> or <option>--output=</option>. For "active"
-    sources, this option is required.
+    with <option>-o</option> or <option>--output=</option>.
     </para>
 
     <variablelist>
@@ -225,8 +287,9 @@
     escaped hostname of the source endpoint of the connection, or the
     numerical address if the hostname cannot be determined.</para>
 
-    <para>In case of "active" sources, the output file name must
-    always be given explicitly.</para>
+    <para>In the case that "active" sources are given by the positional
+    arguments or <option>--getter=</option> option, the output file name
+    must always be given explicitly.</para>
   </refsect1>
 
   <refsect1>
@@ -244,7 +307,8 @@
         is used, based on the hostname of the other endpoint of a
         connection.</para>
 
-        <para>In case of "active" sources, the output file name must
+        <para>In the case that "active" sources are given by the positional
+        arguments or <option>--getter=</option> option, the output file name must
         always be given explicitly and only <constant>none</constant>
         is allowed.</para></listitem>
       </varlistentry>
@@ -265,20 +329,6 @@
         The default is <literal>no</literal>.</para></listitem>
       </varlistentry>
 
-      <varlistentry>
-        <term><option>--getter=<replaceable>PROG --option1 --option2</replaceable></option></term>
-
-        <listitem><para>Program to invoke to retrieve data. The journal
-        event stream must be generated on standard output.</para>
-
-        <para>Examples:</para>
-
-        <programlisting>--getter='curl "-HAccept: application/vnd.fdo.journal" https://some.host:19531/'</programlisting>
-
-        <programlisting>--getter='wget --header="Accept: application/vnd.fdo.journal" -O- https://some.host:19531/'</programlisting>
-        </listitem>
-      </varlistentry>
-
       <xi:include href="standard-options.xml" xpointer="help" />
       <xi:include href="standard-options.xml" xpointer="version" />
     </variablelist>
@@ -288,7 +338,7 @@
     <title>Examples</title>
     <para>Copy local journal events to a different journal directory:
     <programlisting>
-journalctl -o export | systemd-journal-remote -o /tmp/dir -
+journalctl -o export | systemd-journal-remote -o /tmp/dir/foo.journal -
     </programlisting>
     </para>
 

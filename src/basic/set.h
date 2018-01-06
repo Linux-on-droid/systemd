@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -107,6 +108,18 @@ static inline void *set_steal_first(Set *s) {
         return internal_hashmap_steal_first(HASHMAP_BASE(s));
 }
 
+#define set_clear_with_destructor(_s, _f)               \
+        ({                                              \
+                void *_item;                            \
+                while ((_item = set_steal_first(_s)))   \
+                        _f(_item);                      \
+        })
+#define set_free_with_destructor(_s, _f)                \
+        ({                                              \
+                set_clear_with_destructor(_s, _f);      \
+                set_free(_s);                           \
+        })
+
 /* no set_steal_first_key */
 /* no set_first_key */
 
@@ -136,3 +149,5 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(Set*, set_free_free);
 
 #define _cleanup_set_free_ _cleanup_(set_freep)
 #define _cleanup_set_free_free_ _cleanup_(set_free_freep)
+
+int set_make(Set **ret, const struct hash_ops *hash_ops HASHMAP_DEBUG_PARAMS, void *add, ...);

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -17,6 +18,8 @@
   along with systemd; If not, see <http://www.gnu.org/licenses/>.
 ***/
 
+#include <stdio_ext.h>
+
 #include "bus-internal.h"
 #include "bus-introspect.h"
 #include "bus-protocol.h"
@@ -35,6 +38,8 @@ int introspect_begin(struct introspect *i, bool trusted) {
         i->f = open_memstream(&i->introspection, &i->size);
         if (!i->f)
                 return -ENOMEM;
+
+        (void) __fsetlocking(i->f, FSETLOCKING_BYCALLER);
 
         fputs(BUS_INTROSPECT_DOCTYPE
               "<node>\n", i->f);
@@ -81,7 +86,7 @@ static void introspect_write_flags(struct introspect *i, int type, int flags) {
         if (type == _SD_BUS_VTABLE_METHOD && (flags & SD_BUS_VTABLE_METHOD_NO_REPLY))
                 fputs("   <annotation name=\"org.freedesktop.DBus.Method.NoReply\" value=\"true\"/>\n", i->f);
 
-        if (type == _SD_BUS_VTABLE_PROPERTY || type == _SD_BUS_VTABLE_WRITABLE_PROPERTY) {
+        if (IN_SET(type, _SD_BUS_VTABLE_PROPERTY, _SD_BUS_VTABLE_WRITABLE_PROPERTY)) {
                 if (flags & SD_BUS_VTABLE_PROPERTY_EXPLICIT)
                         fputs("   <annotation name=\"org.freedesktop.systemd1.Explicit\" value=\"true\"/>\n", i->f);
 
@@ -94,7 +99,7 @@ static void introspect_write_flags(struct introspect *i, int type, int flags) {
         }
 
         if (!i->trusted &&
-            (type == _SD_BUS_VTABLE_METHOD || type == _SD_BUS_VTABLE_WRITABLE_PROPERTY) &&
+            IN_SET(type, _SD_BUS_VTABLE_METHOD, _SD_BUS_VTABLE_WRITABLE_PROPERTY) &&
             !(flags & SD_BUS_VTABLE_UNPRIVILEGED))
                 fputs("   <annotation name=\"org.freedesktop.systemd1.Privileged\" value=\"true\"/>\n", i->f);
 }

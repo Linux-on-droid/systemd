@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd
 
@@ -18,16 +19,22 @@
 ***/
 
 #include "alloc-util.h"
+#include "env-util.h"
 #include "hashmap.h"
+#include "log.h"
 #include "string-util.h"
 #include "strv.h"
 #include "util.h"
+
+static bool arg_slow = false;
 
 void test_hashmap_funcs(void);
 
 static void test_hashmap_replace(void) {
         Hashmap *m;
         char *val1, *val2, *val3, *val4, *val5, *r;
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&string_hash_ops);
 
@@ -67,6 +74,8 @@ static void test_hashmap_copy(void) {
         Hashmap *m, *copy;
         char *val1, *val2, *val3, *val4, *r;
 
+        log_info("%s", __func__);
+
         val1 = strdup("val1");
         assert_se(val1);
         val2 = strdup("val2");
@@ -103,6 +112,8 @@ static void test_hashmap_get_strv(void) {
         char **strv;
         char *val1, *val2, *val3, *val4;
 
+        log_info("%s", __func__);
+
         val1 = strdup("val1");
         assert_se(val1);
         val2 = strdup("val2");
@@ -138,6 +149,8 @@ static void test_hashmap_get_strv(void) {
 static void test_hashmap_move_one(void) {
         Hashmap *m, *n;
         char *val1, *val2, *val3, *val4, *r;
+
+        log_info("%s", __func__);
 
         val1 = strdup("val1");
         assert_se(val1);
@@ -177,6 +190,8 @@ static void test_hashmap_move_one(void) {
 static void test_hashmap_move(void) {
         Hashmap *m, *n;
         char *val1, *val2, *val3, *val4, *r;
+
+        log_info("%s", __func__);
 
         val1 = strdup("val1");
         assert_se(val1);
@@ -220,6 +235,8 @@ static void test_hashmap_update(void) {
         Hashmap *m;
         char *val1, *val2, *r;
 
+        log_info("%s", __func__);
+
         m = hashmap_new(&string_hash_ops);
         val1 = strdup("old_value");
         assert_se(val1);
@@ -250,6 +267,8 @@ static void test_hashmap_put(void) {
         void *val2 = (void*) "val 2";
         _cleanup_free_ char* key1 = NULL;
 
+        log_info("%s", __func__);
+
         assert_se(hashmap_ensure_allocated(&m, &string_hash_ops) >= 0);
         assert_se(m);
 
@@ -267,6 +286,8 @@ static void test_hashmap_put(void) {
 static void test_hashmap_remove(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
         char *r;
+
+        log_info("%s", __func__);
 
         r = hashmap_remove(NULL, "key 1");
         assert_se(r == NULL);
@@ -295,6 +316,8 @@ static void test_hashmap_remove2(void) {
         char val1[] = "val 1";
         char val2[] = "val 2";
         void *r, *r2;
+
+        log_info("%s", __func__);
 
         r = hashmap_remove2(NULL, "key 1", &r2);
         assert_se(r == NULL);
@@ -325,6 +348,8 @@ static void test_hashmap_remove_value(void) {
 
         char val1[] = "val 1";
         char val2[] = "val 2";
+
+        log_info("%s", __func__);
 
         r = hashmap_remove_value(NULL, "key 1", val1);
         assert_se(r == NULL);
@@ -357,6 +382,8 @@ static void test_hashmap_remove_and_put(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
         int valid;
         char *r;
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&string_hash_ops);
         assert_se(m);
@@ -391,6 +418,8 @@ static void test_hashmap_remove_and_replace(void) {
         void *key3 = UINT_TO_PTR(3);
         void *r;
         int i, j;
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&trivial_hash_ops);
         assert_se(m);
@@ -443,6 +472,8 @@ static void test_hashmap_ensure_allocated(void) {
         Hashmap *m;
         int valid_hashmap;
 
+        log_info("%s", __func__);
+
         m = hashmap_new(&string_hash_ops);
 
         valid_hashmap = hashmap_ensure_allocated(&m, &string_hash_ops);
@@ -463,6 +494,8 @@ static void test_hashmap_foreach_key(void) {
                 "key 2\0"
                 "key 3\0"
                 "key 4\0";
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&string_hash_ops);
 
@@ -493,6 +526,8 @@ static void test_hashmap_foreach(void) {
         bool value_found[] = { false, false, false, false };
         char *val1, *val2, *val3, *val4, *s;
         unsigned count;
+
+        log_info("%s", __func__);
 
         val1 = strdup("my val1");
         assert_se(val1);
@@ -544,6 +579,8 @@ static void test_hashmap_merge(void) {
         Hashmap *n;
         char *val1, *val2, *val3, *val4, *r;
 
+        log_info("%s", __func__);
+
         val1 = strdup("my val1");
         assert_se(val1);
         val2 = strdup("my val2");
@@ -577,6 +614,8 @@ static void test_hashmap_contains(void) {
         Hashmap *m;
         char *val1;
 
+        log_info("%s", __func__);
+
         val1 = strdup("my val");
         assert_se(val1);
 
@@ -597,6 +636,8 @@ static void test_hashmap_isempty(void) {
         Hashmap *m;
         char *val1;
 
+        log_info("%s", __func__);
+
         val1 = strdup("my val");
         assert_se(val1);
 
@@ -613,6 +654,8 @@ static void test_hashmap_isempty(void) {
 static void test_hashmap_size(void) {
         Hashmap *m;
         char *val1, *val2, *val3, *val4;
+
+        log_info("%s", __func__);
 
         val1 = strdup("my val");
         assert_se(val1);
@@ -644,6 +687,8 @@ static void test_hashmap_get(void) {
         char *r;
         char *val;
 
+        log_info("%s", __func__);
+
         val = strdup("my val");
         assert_se(val);
 
@@ -670,6 +715,8 @@ static void test_hashmap_get2(void) {
         char *val;
         char key_orig[] = "Key 1";
         void *key_copy;
+
+        log_info("%s", __func__);
 
         val = strdup("my val");
         assert_se(val);
@@ -710,14 +757,15 @@ static void test_hashmap_many(void) {
         Hashmap *h;
         unsigned i, j;
         void *v, *k;
-        static const struct {
+        const struct {
                 const struct hash_ops *ops;
                 unsigned n_entries;
         } tests[] = {
-                { .ops = NULL,                  .n_entries = 1 << 20 },
-                { .ops = &crippled_hashmap_ops, .n_entries = 1 << 14 },
+                { .ops = NULL,                  .n_entries = arg_slow ? 1 << 20 : 240 },
+                { .ops = &crippled_hashmap_ops, .n_entries = arg_slow ? 1 << 14 : 140 },
         };
 
+        log_info("%s (%s)", __func__, arg_slow ? "slow" : "fast");
 
         for (j = 0; j < ELEMENTSOF(tests); j++) {
                 assert_se(h = hashmap_new(tests[j].ops));
@@ -748,6 +796,8 @@ static void test_hashmap_many(void) {
 static void test_hashmap_first(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
 
+        log_info("%s", __func__);
+
         m = hashmap_new(&string_hash_ops);
         assert_se(m);
 
@@ -764,6 +814,8 @@ static void test_hashmap_first(void) {
 
 static void test_hashmap_first_key(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&string_hash_ops);
         assert_se(m);
@@ -782,6 +834,8 @@ static void test_hashmap_first_key(void) {
 static void test_hashmap_steal_first_key(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
 
+        log_info("%s", __func__);
+
         m = hashmap_new(&string_hash_ops);
         assert_se(m);
 
@@ -796,6 +850,8 @@ static void test_hashmap_steal_first(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
         int seen[3] = {};
         char *val;
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&string_hash_ops);
         assert_se(m);
@@ -815,6 +871,8 @@ static void test_hashmap_steal_first(void) {
 static void test_hashmap_clear_free_free(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
 
+        log_info("%s", __func__);
+
         m = hashmap_new(&string_hash_ops);
         assert_se(m);
 
@@ -828,6 +886,8 @@ static void test_hashmap_clear_free_free(void) {
 
 static void test_hashmap_reserve(void) {
         _cleanup_hashmap_free_ Hashmap *m = NULL;
+
+        log_info("%s", __func__);
 
         m = hashmap_new(&string_hash_ops);
 
@@ -844,6 +904,14 @@ static void test_hashmap_reserve(void) {
 }
 
 void test_hashmap_funcs(void) {
+        int r;
+
+        log_parse_environment();
+        log_open();
+
+        r = getenv_bool("SYSTEMD_SLOW_TESTS");
+        arg_slow = r >= 0 ? r : SYSTEMD_SLOW_TESTS_DEFAULT;
+
         test_hashmap_copy();
         test_hashmap_get_strv();
         test_hashmap_move_one();

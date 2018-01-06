@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -20,6 +21,7 @@
 ***/
 
 #include <alloca.h>
+#include <sched.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -31,6 +33,7 @@
 #include "format-util.h"
 #include "ioprio.h"
 #include "macro.h"
+#include "time-util.h"
 
 #define procfs_file_alloca(pid, field)                                  \
         ({                                                              \
@@ -39,7 +42,7 @@
                 if (_pid_ == 0) {                                       \
                         _r_ = ("/proc/self/" field);                    \
                 } else {                                                \
-                        _r_ = alloca(strlen("/proc/") + DECIMAL_STR_MAX(pid_t) + 1 + sizeof(field)); \
+                        _r_ = alloca(STRLEN("/proc/") + DECIMAL_STR_MAX(pid_t) + 1 + sizeof(field)); \
                         sprintf((char*) _r_, "/proc/"PID_FMT"/" field, _pid_);                       \
                 }                                                       \
                 _r_;                                                    \
@@ -59,6 +62,7 @@ int get_process_ppid(pid_t pid, pid_t *ppid);
 
 int wait_for_terminate(pid_t pid, siginfo_t *status);
 int wait_for_terminate_and_warn(const char *name, pid_t pid, bool check_exit_code);
+int wait_for_terminate_with_timeout(pid_t pid, usec_t timeout);
 
 void sigkill_wait(pid_t pid);
 void sigkill_waitp(pid_t *pid);
@@ -90,6 +94,9 @@ bool oom_score_adjust_is_valid(int oa);
 unsigned long personality_from_string(const char *p);
 const char *personality_to_string(unsigned long);
 
+int safe_personality(unsigned long p);
+int opinionated_personality(unsigned long *ret);
+
 int ioprio_class_to_string_alloc(int i, char **s);
 int ioprio_class_from_string(const char *s);
 
@@ -110,6 +117,14 @@ static inline bool nice_is_valid(int n) {
         return n >= PRIO_MIN && n < PRIO_MAX;
 }
 
+static inline bool sched_policy_is_valid(int i) {
+        return IN_SET(i, SCHED_OTHER, SCHED_BATCH, SCHED_IDLE, SCHED_FIFO, SCHED_RR);
+}
+
+static inline bool sched_priority_is_valid(int i) {
+        return i >= 0 && i <= sched_get_priority_max(SCHED_RR);
+}
+
 static inline bool ioprio_class_is_valid(int i) {
         return IN_SET(i, IOPRIO_CLASS_NONE, IOPRIO_CLASS_RT, IOPRIO_CLASS_BE, IOPRIO_CLASS_IDLE);
 }
@@ -118,4 +133,12 @@ static inline bool ioprio_priority_is_valid(int i) {
         return i >= 0 && i < IOPRIO_BE_NR;
 }
 
+static inline bool pid_is_valid(pid_t p) {
+        return p > 0;
+}
+
 int ioprio_parse_priority(const char *s, int *ret);
+
+pid_t getpid_cached(void);
+
+int must_be_root(void);

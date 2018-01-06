@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -17,19 +18,22 @@
   along with systemd; If not, see <http://www.gnu.org/licenses/>.
 ***/
 
+#include <ftw.h>
 #include <string.h>
 #include <unistd.h>
 
-#ifdef HAVE_KMOD
-#include <libkmod.h>
-#endif
-
+#include "alloc-util.h"
 #include "bus-util.h"
 #include "capability-util.h"
+#include "fileio.h"
 #include "kmod-setup.h"
 #include "macro.h"
+#include "string-util.h"
 
-#ifdef HAVE_KMOD
+#if HAVE_KMOD
+#include <libkmod.h>
+#include "module-util.h"
+
 static void systemd_kmod_log(
                 void *data,
                 int priority,
@@ -43,10 +47,45 @@ static void systemd_kmod_log(
         log_internalv(LOG_DEBUG, 0, file, line, fn, format, args);
         REENABLE_WARNING;
 }
+
+static int has_virtio_rng_nftw_cb(
+                const char *fpath,
+                const struct stat *sb,
+                int tflag,
+                struct FTW *ftwbuf) {
+
+        _cleanup_free_ char *alias = NULL;
+        int r;
+
+        if ((FTW_D == tflag) && (ftwbuf->level > 2))
+                return FTW_SKIP_SUBTREE;
+
+        if (FTW_F != tflag)
+                return FTW_CONTINUE;
+
+        if (!endswith(fpath, "/modalias"))
+                return FTW_CONTINUE;
+
+        r = read_one_line_file(fpath, &alias);
+        if (r < 0)
+                return FTW_SKIP_SIBLINGS;
+
+        if (startswith(alias, "pci:v00001AF4d00001005"))
+                return FTW_STOP;
+
+        if (startswith(alias, "pci:v00001AF4d00001044"))
+                return FTW_STOP;
+
+        return FTW_SKIP_SIBLINGS;
+}
+
+static bool has_virtio_rng(void) {
+        return (nftw("/sys/devices/pci0000:00", has_virtio_rng_nftw_cb, 64, FTW_MOUNT|FTW_PHYS|FTW_ACTIONRETVAL) == FTW_STOP);
+}
 #endif
 
 int kmod_setup(void) {
-#ifdef HAVE_KMOD
+#if HAVE_KMOD
 
         static const struct {
                 const char *module;
@@ -64,12 +103,14 @@ int kmod_setup(void) {
                 /* this should never be a module */
                 { "unix",      "/proc/net/unix",            true,   true,    NULL      },
 
-#ifdef HAVE_LIBIPTC
+#if HAVE_LIBIPTC
                 /* netfilter is needed by networkd, nspawn among others, and cannot be autoloaded */
                 { "ip_tables", "/proc/net/ip_tables_names", false,  false,   NULL      },
 #endif
+                /* virtio_rng would be loaded by udev later, but real entropy might be needed very early */
+                { "virtio_rng", NULL,                       false,  false,   has_virtio_rng },
         };
-        struct kmod_ctx *ctx = NULL;
+        _cleanup_(kmod_unrefp) struct kmod_ctx *ctx = NULL;
         unsigned int i;
         int r;
 
@@ -77,7 +118,7 @@ int kmod_setup(void) {
                 return 0;
 
         for (i = 0; i < ELEMENTSOF(kmod_table); i++) {
-                struct kmod_module *mod;
+                _cleanup_(kmod_module_unrefp) struct kmod_module *mod = NULL;
 
                 if (kmod_table[i].path && access(kmod_table[i].path, F_OK) >= 0)
                         continue;
@@ -116,12 +157,7 @@ int kmod_setup(void) {
                         log_full_errno(print_warning ? LOG_WARNING : LOG_DEBUG, r,
                                        "Failed to insert module '%s': %m", kmod_module_get_name(mod));
                 }
-
-                kmod_module_unref(mod);
         }
-
-        if (ctx)
-                kmod_unref(ctx);
 
 #endif
         return 0;

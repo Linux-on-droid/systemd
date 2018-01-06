@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -61,21 +62,26 @@ int main(int argc, char *argv[]) {
         }
 
         /* Always create the directory where resolv.conf will live */
-        r = mkdir_safe_label("/run/systemd/resolve", 0755, uid, gid);
+        r = mkdir_safe_label("/run/systemd/resolve", 0755, uid, gid, false);
         if (r < 0) {
                 log_error_errno(r, "Could not create runtime directory: %m");
                 goto finish;
         }
 
-        /* Drop privileges, but keep three caps. Note that we drop those too, later on (see below) */
-        r = drop_privileges(uid, gid,
-                            (UINT64_C(1) << CAP_NET_RAW)|          /* needed for SO_BINDTODEVICE */
-                            (UINT64_C(1) << CAP_NET_BIND_SERVICE)| /* needed to bind on port 53 */
-                            (UINT64_C(1) << CAP_SETPCAP)           /* needed in order to drop the caps later */);
-        if (r < 0)
-                goto finish;
+        /* Drop privileges, but only if we have been started as root. If we are not running as root we assume all
+         * privileges are already dropped. */
+        if (getuid() == 0) {
 
-        assert_se(sigprocmask_many(SIG_BLOCK, NULL, SIGTERM, SIGINT, SIGUSR1, SIGUSR2, -1) >= 0);
+                /* Drop privileges, but keep three caps. Note that we drop those too, later on (see below) */
+                r = drop_privileges(uid, gid,
+                                    (UINT64_C(1) << CAP_NET_RAW)|          /* needed for SO_BINDTODEVICE */
+                                    (UINT64_C(1) << CAP_NET_BIND_SERVICE)| /* needed to bind on port 53 */
+                                    (UINT64_C(1) << CAP_SETPCAP)           /* needed in order to drop the caps later */);
+                if (r < 0)
+                        goto finish;
+        }
+
+        assert_se(sigprocmask_many(SIG_BLOCK, NULL, SIGTERM, SIGINT, SIGUSR1, SIGUSR2, SIGRTMIN+1, -1) >= 0);
 
         r = manager_new(&m);
         if (r < 0) {
@@ -112,10 +118,6 @@ int main(int argc, char *argv[]) {
         sd_event_get_exit_code(m->event, &r);
 
 finish:
-        /* systemd-nspawn checks for private resolv.conf to decide whether
-           or not to mount it into the container. So just delete it. */
-        (void) unlink(PRIVATE_RESOLV_CONF);
-
         sd_notify(false,
                   "STOPPING=1\n"
                   "STATUS=Shutting down...");

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -39,3 +40,5 @@
                -ENOENT,                                         \
                -ENOMEDIUM /* cannot determine cgroup */         \
                )
+
+int enter_cgroup_subroot(void);

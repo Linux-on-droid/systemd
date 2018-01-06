@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -35,7 +36,7 @@
 #include "string-table.h"
 #include "xattr-util.h"
 
-#ifdef HAVE_SMACK
+#if ENABLE_SMACK
 bool mac_smack_use(void) {
         static int cached_use = -1;
 

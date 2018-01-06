@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -19,6 +20,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio_ext.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -93,7 +95,7 @@ int seat_save(Seat *s) {
         if (!s->started)
                 return 0;
 
-        r = mkdir_safe_label("/run/systemd/seats", 0755, 0, 0);
+        r = mkdir_safe_label("/run/systemd/seats", 0755, 0, 0, false);
         if (r < 0)
                 goto fail;
 
@@ -101,7 +103,8 @@ int seat_save(Seat *s) {
         if (r < 0)
                 goto fail;
 
-        fchmod(fileno(f), 0644);
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+        (void) fchmod(fileno(f), 0644);
 
         fprintf(f,
                 "# This is private data. Do not parse.\n"
@@ -663,8 +666,7 @@ static bool seat_name_valid_char(char c) {
                 (c >= 'a' && c <= 'z') ||
                 (c >= 'A' && c <= 'Z') ||
                 (c >= '0' && c <= '9') ||
-                c == '-' ||
-                c == '_';
+                IN_SET(c, '-', '_');
 }
 
 bool seat_name_is_valid(const char *name) {

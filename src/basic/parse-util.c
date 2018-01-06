@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -25,6 +26,7 @@
 #include <string.h>
 
 #include "alloc-util.h"
+#include "errno-list.h"
 #include "extract-word.h"
 #include "macro.h"
 #include "parse-util.h"
@@ -59,7 +61,7 @@ int parse_pid(const char *s, pid_t* ret_pid) {
         if ((unsigned long) pid != ul)
                 return -ERANGE;
 
-        if (pid <= 0)
+        if (!pid_is_valid(pid))
                 return -ERANGE;
 
         *ret_pid = pid;
@@ -152,7 +154,7 @@ int parse_size(const char *t, uint64_t base, uint64_t *size) {
         unsigned n_entries, start_pos = 0;
 
         assert(t);
-        assert(base == 1000 || base == 1024);
+        assert(IN_SET(base, 1000, 1024));
         assert(size);
 
         if (base == 1000) {
@@ -265,6 +267,64 @@ int parse_range(const char *t, unsigned *lower, unsigned *upper) {
 
         *lower = l;
         *upper = u;
+        return 0;
+}
+
+int parse_errno(const char *t) {
+        int r, e;
+
+        assert(t);
+
+        r = errno_from_name(t);
+        if (r > 0)
+                return r;
+
+        r = safe_atoi(t, &e);
+        if (r < 0)
+                return r;
+
+        if (e < 0 || e > ERRNO_MAX)
+                return -ERANGE;
+
+        return e;
+}
+
+int parse_syscall_and_errno(const char *in, char **name, int *error) {
+        _cleanup_free_ char *n = NULL;
+        char *p;
+        int e = -1;
+
+        assert(in);
+        assert(name);
+        assert(error);
+
+        /*
+         * This parse "syscall:errno" like "uname:EILSEQ", "@sync:255".
+         * If errno is omitted, then error is set to -1.
+         * Empty syscall name is not allowed.
+         * Here, we do not check that the syscall name is valid or not.
+         */
+
+        p = strchr(in, ':');
+        if (p) {
+                e = parse_errno(p + 1);
+                if (e < 0)
+                        return e;
+
+                n = strndup(in, p - in);
+        } else
+                n = strdup(in);
+
+        if (!n)
+                return -ENOMEM;
+
+        if (isempty(n))
+                return -EINVAL;
+
+        *error = e;
+        *name = n;
+        n = NULL;
+
         return 0;
 }
 

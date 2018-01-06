@@ -3,6 +3,8 @@
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 
 <!--
+  SPDX-License-Identifier: LGPL-2.1+
+
   This file is part of systemd.
 
   Copyright 2010 Lennart Poettering
@@ -183,7 +185,7 @@
     whether the specified file descriptor refers to a special file. If
     the <parameter>path</parameter> parameter is not
     <constant>NULL</constant>, it is checked whether the file
-    descriptor is bound to the specified file name. Special files in
+    descriptor is bound to the specified filename. Special files in
     this context are character device nodes and files in
     <filename>/proc</filename> or <filename>/sys</filename>.</para>
   </refsect1>

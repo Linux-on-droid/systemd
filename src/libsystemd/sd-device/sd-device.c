@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -208,15 +209,13 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
                         return -ENOMEM;
         }
 
-        devpath = syspath + strlen("/sys");
+        devpath = syspath + STRLEN("/sys");
 
         r = device_add_property_internal(device, "DEVPATH", devpath);
         if (r < 0)
                 return r;
 
-        free(device->syspath);
-        device->syspath = syspath;
-        syspath = NULL;
+        free_and_replace(device->syspath, syspath);
 
         device->devpath = devpath;
 
@@ -249,7 +248,7 @@ _public_ int sd_device_new_from_devnum(sd_device **ret, char type, dev_t devnum)
         char id[DECIMAL_STR_MAX(unsigned) * 2 + 1];
 
         assert_return(ret, -EINVAL);
-        assert_return(type == 'b' || type == 'c', -EINVAL);
+        assert_return(IN_SET(type, 'b', 'c'), -EINVAL);
 
         /* use /sys/dev/{block,char}/<maj>:<min> link */
         snprintf(id, sizeof(id), "%u:%u", major(devnum), minor(devnum));
@@ -346,9 +345,7 @@ int device_set_devtype(sd_device *device, const char *_devtype) {
         if (r < 0)
                 return r;
 
-        free(device->devtype);
-        device->devtype = devtype;
-        devtype = NULL;
+        free_and_replace(device->devtype, devtype);
 
         return 0;
 }
@@ -393,9 +390,7 @@ int device_set_devname(sd_device *device, const char *_devname) {
         if (r < 0)
                 return r;
 
-        free(device->devname);
-        device->devname = devname;
-        devname = NULL;
+        free_and_replace(device->devname, devname);
 
         return 0;
 }
@@ -563,7 +558,7 @@ int device_read_uevent_file(sd_device *device) {
                         value = &uevent[i];
                         state = VALUE;
 
-                        /* fall through */ /* to handle empty property */
+                        _fallthrough_; /* to handle empty property */
                 case VALUE:
                         if (strchr(NEWLINE, uevent[i])) {
                                 uevent[i] = '\0';
@@ -705,7 +700,7 @@ static int device_new_from_child(sd_device **ret, sd_device *child) {
         path = strdup(syspath);
         if (!path)
                 return -ENOMEM;
-        subdir = path + strlen("/sys");
+        subdir = path + STRLEN("/sys");
 
         for (;;) {
                 char *pos;
@@ -760,9 +755,7 @@ int device_set_subsystem(sd_device *device, const char *_subsystem) {
         if (r < 0)
                 return r;
 
-        free(device->subsystem);
-        device->subsystem = subsystem;
-        subsystem = NULL;
+        free_and_replace(device->subsystem, subsystem);
 
         device->subsystem_set = true;
 
@@ -785,9 +778,7 @@ static int device_set_drivers_subsystem(sd_device *device, const char *_subsyste
         if (r < 0)
                 return r;
 
-        free(device->driver_subsystem);
-        device->driver_subsystem = subsystem;
-        subsystem = NULL;
+        free_and_replace(device->driver_subsystem, subsystem);
 
         return 0;
 }
@@ -935,9 +926,7 @@ int device_set_driver(sd_device *device, const char *_driver) {
         if (r < 0)
                 return r;
 
-        free(device->driver);
-        device->driver = driver;
-        driver = NULL;
+        free_and_replace(device->driver, driver);
 
         device->driver_set = true;
 
@@ -1044,9 +1033,7 @@ static int device_set_sysname(sd_device *device) {
         if (len == 0)
                 sysnum = NULL;
 
-        free(device->sysname);
-        device->sysname = sysname;
-        sysname = NULL;
+        free_and_replace(device->sysname, sysname);
 
         device->sysnum = sysnum;
 
@@ -1636,7 +1623,7 @@ static int device_sysattrs_read_all(sd_device *device) {
                 struct stat statbuf;
 
                 /* only handle symlinks and regular files */
-                if (dent->d_type != DT_LNK && dent->d_type != DT_REG)
+                if (!IN_SET(dent->d_type, DT_LNK, DT_REG))
                         continue;
 
                 path = strjoina(syspath, "/", dent->d_name);

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -88,6 +89,8 @@ struct Link {
 
         bool loaded;
         char *state_file;
+
+        bool unicast_relevant;
 };
 
 int link_new(Manager *m, Link **ret, int ifindex);

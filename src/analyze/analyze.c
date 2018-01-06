@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -30,13 +31,14 @@
 #include "bus-error.h"
 #include "bus-unit-util.h"
 #include "bus-util.h"
+#include "calendarspec.h"
 #include "glob-util.h"
 #include "hashmap.h"
 #include "locale-util.h"
 #include "log.h"
 #include "pager.h"
 #include "parse-util.h"
-#ifdef HAVE_SECCOMP
+#if HAVE_SECCOMP
 #include "seccomp-util.h"
 #endif
 #include "special.h"
@@ -79,6 +81,7 @@ static BusTransport arg_transport = BUS_TRANSPORT_LOCAL;
 static char *arg_host = NULL;
 static bool arg_user = false;
 static bool arg_man = true;
+static bool arg_generators = false;
 
 struct boot_times {
         usec_t firmware_time;
@@ -413,7 +416,7 @@ static int acquire_time_data(sd_bus *bus, struct unit_times **out) {
                         continue;
 
                 t->name = strdup(u.id);
-                if (t->name == NULL) {
+                if (!t->name) {
                         r = log_oom();
                         goto fail;
                 }
@@ -488,10 +491,39 @@ static int pretty_boot_time(sd_bus *bus, char **_buf) {
         size_t size;
         char *ptr;
         int r;
+        usec_t activated_time = USEC_INFINITY;
+        _cleanup_free_ char* path = NULL, *unit_id = NULL;
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
 
         r = acquire_boot_times(bus, &t);
         if (r < 0)
                 return r;
+
+        path = unit_dbus_path_from_name(SPECIAL_DEFAULT_TARGET);
+        if (!path)
+                return log_oom();
+
+        r = sd_bus_get_property_string(
+                        bus,
+                        "org.freedesktop.systemd1",
+                        path,
+                        "org.freedesktop.systemd1.Unit",
+                        "Id",
+                        &error,
+                        &unit_id);
+        if (r < 0) {
+                log_error_errno(r, "default.target doesn't seem to exist: %s", bus_error_message(&error, r));
+                unit_id = NULL;
+        }
+
+        r = bus_get_uint64_property(bus, path,
+                        "org.freedesktop.systemd1.Unit",
+                        "ActiveEnterTimestampMonotonic",
+                        &activated_time);
+        if (r < 0) {
+                log_info_errno(r, "default.target seems not to be started. Continuing...");
+                activated_time = USEC_INFINITY;
+        }
 
         ptr = buf;
         size = sizeof(buf);
@@ -508,6 +540,9 @@ static int pretty_boot_time(sd_bus *bus, char **_buf) {
 
         size = strpcpyf(&ptr, size, "%s (userspace) ", format_timespan(ts, sizeof(ts), t->finish_time - t->userspace_time, USEC_PER_MSEC));
         strpcpyf(&ptr, size, "= %s", format_timespan(ts, sizeof(ts), t->firmware_time + t->finish_time, USEC_PER_MSEC));
+
+        if (unit_id && activated_time != USEC_INFINITY)
+                size = strpcpyf(&ptr, size, "\n%s reached after %s in userspace", unit_id, format_timespan(ts, sizeof(ts), activated_time - t->userspace_time, USEC_PER_MSEC));
 
         ptr = strdup(buf);
         if (!ptr)
@@ -785,7 +820,7 @@ static int list_dependencies_get_dependencies(sd_bus *bus, const char *name, cha
         assert(deps);
 
         path = unit_dbus_path_from_name(name);
-        if (path == NULL)
+        if (!path)
                 return -ENOMEM;
 
         return bus_get_unit_property_strv(bus, path, "After", deps);
@@ -843,7 +878,7 @@ static int list_dependencies_one(sd_bus *bus, const char *name, unsigned int lev
                 }
         }
 
-        if (service_longest == 0 )
+        if (service_longest == 0)
                 return r;
 
         STRV_FOREACH(c, deps) {
@@ -902,7 +937,7 @@ static int list_dependencies(sd_bus *bus, const char *name) {
         assert(bus);
 
         path = unit_dbus_path_from_name(name);
-        if (path == NULL)
+        if (!path)
                 return -ENOMEM;
 
         r = sd_bus_get_property(
@@ -1253,6 +1288,34 @@ static int set_log_level(sd_bus *bus, char **args) {
         return 0;
 }
 
+static int get_log_level(sd_bus *bus, char **args) {
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        int r;
+        _cleanup_free_ char *level = NULL;
+
+        assert(bus);
+        assert(args);
+
+        if (!strv_isempty(args)) {
+                log_error("Too many arguments.");
+                return -E2BIG;
+        }
+
+        r = sd_bus_get_property_string(
+                        bus,
+                        "org.freedesktop.systemd1",
+                        "/org/freedesktop/systemd1",
+                        "org.freedesktop.systemd1.Manager",
+                        "LogLevel",
+                        &error,
+                        &level);
+        if (r < 0)
+                return log_error_errno(r, "Failed to get log level: %s", bus_error_message(&error, r));
+
+        puts(level);
+        return 0;
+}
+
 static int set_log_target(sd_bus *bus, char **args) {
         _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
         int r;
@@ -1280,7 +1343,35 @@ static int set_log_target(sd_bus *bus, char **args) {
         return 0;
 }
 
-#ifdef HAVE_SECCOMP
+static int get_log_target(sd_bus *bus, char **args) {
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        int r;
+        _cleanup_free_ char *target = NULL;
+
+        assert(bus);
+        assert(args);
+
+        if (!strv_isempty(args)) {
+                log_error("Too many arguments.");
+                return -E2BIG;
+        }
+
+        r = sd_bus_get_property_string(
+                        bus,
+                        "org.freedesktop.systemd1",
+                        "/org/freedesktop/systemd1",
+                        "org.freedesktop.systemd1.Manager",
+                        "LogTarget",
+                        &error,
+                        &target);
+        if (r < 0)
+                return log_error_errno(r, "Failed to get log target: %s", bus_error_message(&error, r));
+
+        puts(target);
+        return 0;
+}
+
+#if HAVE_SECCOMP
 static void dump_syscall_filter(const SyscallFilterSet *set) {
         const char *syscall;
 
@@ -1337,6 +1428,70 @@ static int dump_syscall_filters(char** names) {
 }
 #endif
 
+static int test_calendar(char **args) {
+        int ret = 0, r;
+        char **p;
+        usec_t n;
+
+        if (strv_isempty(args)) {
+                log_error("Expected at least one calendar specification string as argument.");
+                return -EINVAL;
+        }
+
+        n = now(CLOCK_REALTIME);
+
+        STRV_FOREACH(p, args) {
+                _cleanup_(calendar_spec_freep) CalendarSpec *spec = NULL;
+                _cleanup_free_ char *t = NULL;
+                usec_t next;
+
+                r = calendar_spec_from_string(*p, &spec);
+                if (r < 0) {
+                        ret = log_error_errno(r, "Failed to parse calendar specification '%s': %m", *p);
+                        continue;
+                }
+
+                r = calendar_spec_normalize(spec);
+                if (r < 0) {
+                        ret = log_error_errno(r, "Failed to normalize calendar specification '%s': %m", *p);
+                        continue;
+                }
+
+                r = calendar_spec_to_string(spec, &t);
+                if (r < 0) {
+                        ret = log_error_errno(r, "Failed to fomat calendar specification '%s': %m", *p);
+                        continue;
+                }
+
+                if (!streq(t, *p))
+                        printf("  Original form: %s\n", *p);
+
+                printf("Normalized form: %s\n", t);
+
+                r = calendar_spec_next_usec(spec, n, &next);
+                if (r == -ENOENT)
+                        printf("    Next elapse: never\n");
+                else if (r < 0) {
+                        ret = log_error_errno(r, "Failed to determine next elapse for '%s': %m", *p);
+                        continue;
+                } else {
+                        char buffer[CONST_MAX(FORMAT_TIMESTAMP_MAX, FORMAT_TIMESTAMP_RELATIVE_MAX)];
+
+                        printf("    Next elapse: %s\n", format_timestamp(buffer, sizeof(buffer), next));
+
+                        if (!in_utc_timezone())
+                                printf("       (in UTC): %s\n", format_timestamp_utc(buffer, sizeof(buffer), next));
+
+                        printf("       From now: %s\n", format_timestamp_relative(buffer, sizeof(buffer), next));
+                }
+
+                if (*(p+1))
+                        putchar('\n');
+        }
+
+        return ret;
+}
+
 static void help(void) {
 
         pager_open(arg_no_pager, false);
@@ -1357,6 +1512,7 @@ static void help(void) {
                "     --fuzz=SECONDS        Also print also services which finished SECONDS\n"
                "                           earlier than the latest in the branch\n"
                "     --man[=BOOL]          Do [not] check for existence of man pages\n\n"
+               "     --generators[=BOOL]   Do [not] run unit generators (requires privileges)\n\n"
                "Commands:\n"
                "  time                     Print time spent in the kernel\n"
                "  blame                    Print list of running units ordered by time to init\n"
@@ -1365,9 +1521,12 @@ static void help(void) {
                "  dot                      Output dependency graph in man:dot(1) format\n"
                "  set-log-level LEVEL      Set logging threshold for manager\n"
                "  set-log-target TARGET    Set logging target for manager\n"
+               "  get-log-level            Get logging threshold for manager\n"
+               "  get-log-target           Get logging target for manager\n"
                "  dump                     Output state serialization of service manager\n"
                "  syscall-filter [NAME...] Print list of syscalls in seccomp filter\n"
                "  verify FILE...           Check unit files for correctness\n"
+               "  calendar SPEC...         Validate repetitive calendar time events\n"
                , program_invocation_short_name);
 
         /* When updating this list, including descriptions, apply
@@ -1387,6 +1546,7 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_FUZZ,
                 ARG_NO_PAGER,
                 ARG_MAN,
+                ARG_GENERATORS,
         };
 
         static const struct option options[] = {
@@ -1401,6 +1561,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "fuzz",         required_argument, NULL, ARG_FUZZ             },
                 { "no-pager",     no_argument,       NULL, ARG_NO_PAGER         },
                 { "man",          optional_argument, NULL, ARG_MAN              },
+                { "generators",   optional_argument, NULL, ARG_GENERATORS       },
                 { "host",         required_argument, NULL, 'H'                  },
                 { "machine",      required_argument, NULL, 'M'                  },
                 {}
@@ -1483,6 +1644,20 @@ static int parse_argv(int argc, char *argv[]) {
 
                         break;
 
+                case ARG_GENERATORS:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0) {
+                                        log_error("Failed to parse --generators= argument.");
+                                        return -EINVAL;
+                                }
+
+                                arg_generators = !!r;
+                        } else
+                                arg_generators = true;
+
+                        break;
+
                 case '?':
                         return -EINVAL;
 
@@ -1508,7 +1683,8 @@ int main(int argc, char *argv[]) {
         if (streq_ptr(argv[optind], "verify"))
                 r = verify_units(argv+optind+1,
                                  arg_user ? UNIT_FILE_USER : UNIT_FILE_SYSTEM,
-                                 arg_man);
+                                 arg_man,
+                                 arg_generators);
         else {
                 _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
 
@@ -1532,10 +1708,16 @@ int main(int argc, char *argv[]) {
                         r = dump(bus, argv+optind+1);
                 else if (streq(argv[optind], "set-log-level"))
                         r = set_log_level(bus, argv+optind+1);
+                else if (streq(argv[optind], "get-log-level"))
+                        r = get_log_level(bus, argv+optind+1);
                 else if (streq(argv[optind], "set-log-target"))
                         r = set_log_target(bus, argv+optind+1);
+                else if (streq(argv[optind], "get-log-target"))
+                        r = get_log_target(bus, argv+optind+1);
                 else if (streq(argv[optind], "syscall-filter"))
                         r = dump_syscall_filters(argv+optind+1);
+                else if (streq(argv[optind], "calendar"))
+                        r = test_calendar(argv+optind+1);
                 else
                         log_error("Unknown operation '%s'.", argv[optind]);
         }

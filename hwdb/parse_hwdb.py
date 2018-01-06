@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- Mode: python; coding: utf-8; indent-tabs-mode: nil -*- */
+#  SPDX-License-Identifier: MIT
 #
 # This file is part of systemd. It is distrubuted under the MIT license, see
 # below.
@@ -65,6 +66,7 @@ UDEV_TAG = Word(string.ascii_uppercase, alphanums + '_')
 
 TYPES = {'mouse':    ('usb', 'bluetooth', 'ps2', '*'),
          'evdev':    ('name', 'atkbd', 'input'),
+         'id-input': ('modalias'),
          'touchpad': ('i8042', 'rmi', 'bluetooth', 'usb'),
          'joystick': ('i8042', 'rmi', 'bluetooth', 'usb'),
          'keyboard': ('name', ),
@@ -105,6 +107,18 @@ def property_grammar():
              ('MOUSE_WHEEL_CLICK_ANGLE_HORIZONTAL', INTEGER),
              ('MOUSE_WHEEL_CLICK_COUNT', INTEGER),
              ('MOUSE_WHEEL_CLICK_COUNT_HORIZONTAL', INTEGER),
+             ('ID_INPUT', Literal('1')),
+             ('ID_INPUT_ACCELEROMETER', Literal('1')),
+             ('ID_INPUT_JOYSTICK', Literal('1')),
+             ('ID_INPUT_KEY', Literal('1')),
+             ('ID_INPUT_KEYBOARD', Literal('1')),
+             ('ID_INPUT_MOUSE', Literal('1')),
+             ('ID_INPUT_POINTINGSTICK', Literal('1')),
+             ('ID_INPUT_SWITCH', Literal('1')),
+             ('ID_INPUT_TABLET', Literal('1')),
+             ('ID_INPUT_TABLET_PAD', Literal('1')),
+             ('ID_INPUT_TOUCHPAD', Literal('1')),
+             ('ID_INPUT_TOUCHSCREEN', Literal('1')),
              ('ID_INPUT_TRACKBALL', Literal('1')),
              ('MOUSE_WHEEL_TILT_HORIZONTAL', Literal('1')),
              ('MOUSE_WHEEL_TILT_VERTICAL', Literal('1')),
@@ -168,6 +182,20 @@ def check_one_default(prop, settings):
     if len(defaults) > 1:
         error('More than one star entry: {!r}', prop)
 
+def check_one_mount_matrix(prop, value):
+    numbers = [s for s in value if s not in {';', ','}]
+    if len(numbers) != 9:
+        error('Wrong accel matrix: {!r}', prop)
+    try:
+        numbers = [abs(float(number)) for number in numbers]
+    except ValueError:
+        error('Wrong accel matrix: {!r}', prop)
+    bad_x, bad_y, bad_z = max(numbers[0:3]) == 0, max(numbers[3:6]) == 0, max(numbers[6:9]) == 0
+    if bad_x or bad_y or bad_z:
+        error('Mount matrix is all zero in {} row: {!r}',
+              'x' if bad_x else ('y' if bad_y else 'z'),
+              prop)
+
 def check_one_keycode(prop, value):
     if value != '!' and ecodes is not None:
         key = 'KEY_' + value.upper()
@@ -194,6 +222,8 @@ def check_properties(groups):
             prop_names.add(parsed.NAME)
             if parsed.NAME == 'MOUSE_DPI':
                 check_one_default(prop, parsed.VALUE.SETTINGS)
+            elif parsed.NAME == 'ACCEL_MOUNT_MATRIX':
+                check_one_mount_matrix(prop, parsed.VALUE)
             elif parsed.NAME.startswith('KEYBOARD_KEY_'):
                 check_one_keycode(prop, parsed.VALUE)
 

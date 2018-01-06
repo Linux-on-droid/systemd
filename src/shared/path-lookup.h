@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -27,7 +28,8 @@ typedef struct LookupPaths LookupPaths;
 #include "macro.h"
 
 typedef enum LookupPathsFlags {
-        LOOKUP_PATHS_EXCLUDE_GENERATED = 1,
+        LOOKUP_PATHS_EXCLUDE_GENERATED   = 1 << 0,
+        LOOKUP_PATHS_TEMPORARY_GENERATED = 1 << 1,
 } LookupPathsFlags;
 
 struct LookupPaths {
@@ -60,9 +62,18 @@ struct LookupPaths {
 
         /* The root directory prepended to all items above, or NULL */
         char *root_dir;
+
+        /* A temporary directory when running in test mode, to be nuked */
+        char *temporary_dir;
 };
 
 int lookup_paths_init(LookupPaths *p, UnitFileScope scope, LookupPathsFlags flags, const char *root_dir);
+int xdg_user_dirs(char ***ret_config_dirs, char ***ret_data_dirs);
+int xdg_user_runtime_dir(char **ret, const char *suffix);
+int xdg_user_config_dir(char **ret, const char *suffix);
+int xdg_user_data_dir(char **ret, const char *suffix);
+bool path_is_user_data_dir(const char *path);
+bool path_is_user_config_dir(const char *path);
 
 int lookup_paths_reduce(LookupPaths *p);
 

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -55,8 +56,8 @@ int main(int argc, char *argv[]) {
         server_flush_to_var(&server, true);
         server_flush_dev_kmsg(&server);
 
-        log_debug("systemd-journald running as pid "PID_FMT, getpid());
-        server_driver_message(&server,
+        log_debug("systemd-journald running as pid "PID_FMT, getpid_cached());
+        server_driver_message(&server, 0,
                               "MESSAGE_ID=" SD_MESSAGE_JOURNAL_START_STR,
                               LOG_MESSAGE("Journal started"),
                               NULL);
@@ -91,7 +92,7 @@ int main(int argc, char *argv[]) {
                         t = server.oldest_file_usec + server.max_retention_usec - n;
                 }
 
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
                 if (server.system_journal) {
                         usec_t u;
 
@@ -114,8 +115,8 @@ int main(int argc, char *argv[]) {
                 server_maybe_warn_forward_syslog_missed(&server);
         }
 
-        log_debug("systemd-journald stopped as pid "PID_FMT, getpid());
-        server_driver_message(&server,
+        log_debug("systemd-journald stopped as pid "PID_FMT, getpid_cached());
+        server_driver_message(&server, 0,
                               "MESSAGE_ID=" SD_MESSAGE_JOURNAL_STOP_STR,
                               LOG_MESSAGE("Journal stopped"),
                               NULL);

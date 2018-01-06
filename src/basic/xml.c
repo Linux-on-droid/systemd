@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -208,7 +209,7 @@ int xml_tokenize(const char **p, char **name, void **state, unsigned *line) {
                         if (*c == '=') {
                                 c++;
 
-                                if (*c == '\'' || *c == '\"') {
+                                if (IN_SET(*c, '\'', '\"')) {
                                         /* Tag with a quoted value */
 
                                         e = strchr(c+1, *c);

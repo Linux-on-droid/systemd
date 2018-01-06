@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
  This file is part of systemd.
 
@@ -58,7 +59,7 @@ static const char* const link_dirs[] = {
         "/etc/systemd/network",
         "/run/systemd/network",
         "/usr/lib/systemd/network",
-#ifdef HAVE_SPLIT_USR
+#if HAVE_SPLIT_USR
         "/lib/systemd/network",
 #endif
         NULL};
@@ -175,7 +176,7 @@ static int load_link(link_config_ctx *ctx, const char *filename) {
         r = config_parse(NULL, filename, file,
                          "Match\0Link\0Ethernet\0",
                          config_item_perf_lookup, link_config_gperf_lookup,
-                         false, false, true, link);
+                         CONFIG_PARSE_WARN, link);
         if (r < 0)
                 return r;
         else
@@ -213,7 +214,7 @@ int link_config_load(link_config_ctx *ctx) {
         /* update timestamp */
         paths_check_timestamp(link_dirs, &ctx->link_dirs_ts_usec, true);
 
-        r = conf_files_list_strv(&files, ".link", NULL, link_dirs);
+        r = conf_files_list_strv(&files, ".link", NULL, 0, link_dirs);
         if (r < 0)
                 return log_error_errno(r, "failed to enumerate link files: %m");
 
@@ -327,7 +328,7 @@ static bool should_rename(struct udev_device *device, bool respect_predictable) 
                 /* the kernel claims to have given a predictable name */
                 if (respect_predictable)
                         return false;
-                /* fall through */
+                _fallthrough_;
         case NET_NAME_ENUM:
         default:
                 /* the name is known to be bad, or of an unknown type */

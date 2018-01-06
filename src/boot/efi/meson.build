@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 efi_headers = files('''
         console.h
         disk.h
@@ -30,7 +47,7 @@ stub_sources = '''
         stub.c
 '''.split()
 
-if conf.get('ENABLE_EFI', false) and get_option('gnu-efi') != 'false'
+if conf.get('ENABLE_EFI') == 1 and get_option('gnu-efi') != 'false'
         efi_cc = get_option('efi-cc')
         efi_ld = get_option('efi-ld')
 
@@ -64,7 +81,7 @@ if have_gnu_efi
         efi_conf = configuration_data()
         efi_conf.set_quoted('PACKAGE_VERSION', meson.project_version())
         efi_conf.set_quoted('EFI_MACHINE_TYPE_NAME', EFI_MACHINE_TYPE_NAME)
-        efi_conf.set('SD_BOOT_LOG_TPM', get_option('tpm'))
+        efi_conf.set10('ENABLE_TPM', get_option('tpm'))
         efi_conf.set('SD_TPM_PCR', get_option('tpm-pcrindex'))
 
         efi_config_h = configure_file(

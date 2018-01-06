@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -60,6 +61,7 @@ typedef struct Tunnel {
 
         bool pmtudisc;
         bool copy_dscp;
+        bool independent;
 } Tunnel;
 
 DEFINE_NETDEV_CAST(IPIP, Tunnel);

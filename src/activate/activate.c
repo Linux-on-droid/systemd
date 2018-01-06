@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -31,6 +32,7 @@
 #include "fd-util.h"
 #include "log.h"
 #include "macro.h"
+#include "process-util.h"
 #include "signal-util.h"
 #include "socket-util.h"
 #include "string-util.h"
@@ -221,7 +223,7 @@ static int exec_process(const char* name, char **argv, char **env, int start_fd,
                 if (asprintf((char**)(envp + n_env++), "LISTEN_FDS=%i", n_fds) < 0)
                         return log_oom();
 
-                if (asprintf((char**)(envp + n_env++), "LISTEN_PID=" PID_FMT, getpid()) < 0)
+                if (asprintf((char**)(envp + n_env++), "LISTEN_PID=" PID_FMT, getpid_cached()) < 0)
                         return log_oom();
 
                 if (arg_fdnames) {
@@ -271,7 +273,7 @@ static int fork_and_exec_process(const char* child, char** argv, char **env, int
         if (!joined)
                 return log_oom();
 
-        parent_pid = getpid();
+        parent_pid = getpid_cached();
 
         child_pid = fork();
         if (child_pid < 0)

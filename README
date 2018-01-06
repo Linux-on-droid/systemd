@@ -8,9 +8,6 @@ WEB SITE:
 
 GIT:
         git@github.com:systemd/systemd.git
-        https://github.com/systemd/systemd.git
-
-GITWEB:
         https://github.com/systemd/systemd
 
 MAILING LIST:
@@ -97,6 +94,10 @@ REQUIREMENTS:
         Required for CPUQuota= in resource control unit settings
           CONFIG_CFS_BANDWIDTH
 
+        Required for IPAddressDeny= and IPAddressAllow= in resource control
+        unit settings
+          CONFIG_CGROUP_BPF
+
         For UEFI systems:
           CONFIG_EFIVAR_FS
           CONFIG_EFI_PARTITION
@@ -109,6 +110,14 @@ REQUIREMENTS:
         assign these budgets automatically this cannot really be
         fixed, and it's best to disable group scheduling hence.
            CONFIG_RT_GROUP_SCHED=n
+
+        It's a good idea to disable the implicit creation of networking bonding
+        devices by the kernel networking bonding module, so that the
+        automatically created "bond0" interface doesn't conflict with any such
+        device created by systemd-networkd (or other tools). Ideally there
+        would be a kernel compile-time option for this, but there currently
+        isn't. The next best thing is to make this change through a modprobe.d
+        drop-in. This is shipped by default, see modprobe.d/systemd.conf.
 
         Note that kernel auditing is broken when used with systemd's
         container code. When using systemd in conjunction with
@@ -126,9 +135,8 @@ REQUIREMENTS:
 
         glibc >= 2.16
         libcap
-        libmount >= 2.27.1 (from util-linux)
-                (util-linux < 2.29 *must* be built with --enable-libmount-force-mountinfo,
-                 and later versions without --enable-libmount-support-mtab.)
+        libmount >= 2.30 (from util-linux)
+                (util-linux *must* be built without --enable-libmount-support-mtab)
         libseccomp >= 2.3.1 (optional)
         libblkid >= 2.24 (from util-linux) (optional)
         libkmod >= 15 (optional)
@@ -145,7 +153,14 @@ REQUIREMENTS:
         libpython (optional)
         libidn2 or libidn (optional)
         elfutils >= 158 (optional)
-        make, gcc, and similar tools
+        polkit (optional)
+        pkg-config
+        gperf
+        docbook-xsl (optional, required for documentation)
+        xsltproc    (optional, required for documentation)
+        python-lxml (optional, required to build the indices)
+        python, meson, ninja
+        gcc, awk, sed, grep, m4, and similar tools
 
         During runtime, you need the following additional
         dependencies:
@@ -156,18 +171,6 @@ REQUIREMENTS:
                 policy directory (--with-dbuspolicydir=/etc/dbus-1/system.d).
         dracut (optional)
         PolicyKit (optional)
-
-        Two build systems are supported: meson + ninja-build and autools + make.
-
-        The following tools are needed with both systems:
-
-        pkg-config
-        gperf >= 3.1
-        docbook-xsl (optional, required for documentation)
-        xsltproc    (optional, required for documentation)
-        python-lxml (optional, required to build the indices)
-
-        When building with meson, python and ninja-build are required.
 
         To build in directory build/:
           meson build/ && ninja -C build
@@ -185,19 +188,7 @@ REQUIREMENTS:
           sudo ninja install
           DESTDIR=... ninja install
 
-        When building with autotools, the following tools are needed:
-
-        automake
-        autoconf
-        libtool
-        intltool
-        python (optional)
-
-        The build system is initialized with ./autogen.sh and the usual
-          ./configure && make
-        should be used.
-
-        A tar ball can be created with:
+        A tarball can be created with:
           git archive --format=tar --prefix=systemd-222/ v222 | xz > systemd-222.tar.xz
 
         When systemd-hostnamed is used, it is strongly recommended to
@@ -205,6 +196,16 @@ REQUIREMENTS:
         dynamically changing hostnames, the hostname stays resolvable
         under all circumstances. In fact, systemd-hostnamed will warn
         if nss-myhostname is not installed.
+
+        nss-systemd must be enabled on systemd systems, as that's required for
+        DynamicUser= to work. Note that we ship services out-of-the-box that
+        make use of DynamicUser= now, hence enabling nss-systemd is not
+        optional.
+
+        Note that the build prefix for systemd must be /usr. -Dsplit-usr=false
+        (which is the default and does not need to be specified) is the
+        recommended setting, and -Dsplit-usr=true should be used on systems
+        which have /usr on a separate partition.
 
         Additional packages are necessary to run some tests:
         - busybox            (used by test/TEST-13-NSPAWN-SMOKE)
@@ -220,7 +221,7 @@ USERS AND GROUPS:
         even in the very early boot stages, where no other databases
         and network are available:
 
-        audio, cdrom, dialout, disk, input, kmem, lp, tape, tty, video
+        audio, cdrom, dialout, disk, input, kmem, kvm, lp, render, tape, tty, video
 
         During runtime, the journal daemon requires the
         "systemd-journal" system group to exist. New journal files will
@@ -286,16 +287,16 @@ SYSV INIT.D SCRIPTS:
         needs to look like, and provide an implementation at the marked places.
 
 WARNINGS:
-        systemd will warn you during boot if /usr is on a different
-        file system than /. While in systemd itself very little will
-        break if /usr is on a separate partition, many of its
-        dependencies very likely will break sooner or later in one
-        form or another. For example, udev rules tend to refer to
-        binaries in /usr, binaries that link to libraries in /usr or
-        binaries that refer to data files in /usr. Since these
-        breakages are not always directly visible, systemd will warn
-        about this, since this kind of file system setup is not really
-        supported anymore by the basic set of Linux OS components.
+        systemd will warn during early boot if /usr is not already mounted at
+        this point (that means: either located on the same file system as / or
+        already mounted in the initrd). While in systemd itself very little
+        will break if /usr is on a separate, late-mounted partition, many of
+        its dependencies very likely will break sooner or later in one form or
+        another. For example, udev rules tend to refer to binaries in /usr,
+        binaries that link to libraries in /usr or binaries that refer to data
+        files in /usr. Since these breakages are not always directly visible,
+        systemd will warn about this, since this kind of file system setup is
+        not really supported anymore by the basic set of Linux OS components.
 
         systemd requires that the /run mount point exists. systemd also
         requires that /var/run is a symlink to /run.
@@ -304,9 +305,12 @@ WARNINGS:
         https://www.freedesktop.org/wiki/Software/systemd/separate-usr-is-broken
 
         To run systemd under valgrind, compile with VALGRIND defined
-        (e.g. ./configure CPPFLAGS='... -DVALGRIND=1'). Otherwise,
-        false positives will be triggered by code which violates
-        some rules but is actually safe.
+        (e.g. CPPFLAGS='... -DVALGRIND=1' meson <options>) and have valgrind
+        development headers installed (i.e. valgrind-devel or
+        equivalent). Otherwise, false positives will be triggered by code which
+        violates some rules but is actually safe. Note that valgrind generates
+        nice output only on exit(), hence on shutdown we don't execve()
+        systemd-shutdown.
 
 ENGINEERING AND CONSULTING SERVICES:
         Kinvolk (https://kinvolk.io) offers professional engineering

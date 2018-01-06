@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -19,9 +20,10 @@
 
 #include <netinet/in.h>
 #include <poll.h>
+#include <stdio_ext.h>
 #include <sys/ioctl.h>
 
-#ifdef HAVE_LIBIDN2
+#if HAVE_LIBIDN2
 #include <idn2.h>
 #endif
 
@@ -40,6 +42,7 @@
 #include "random-util.h"
 #include "resolved-bus.h"
 #include "resolved-conf.h"
+#include "resolved-dnssd.h"
 #include "resolved-dns-stub.h"
 #include "resolved-etc-hosts.h"
 #include "resolved-llmnr.h"
@@ -328,9 +331,9 @@ static int manager_network_monitor_listen(Manager *m) {
 
 static int determine_hostname(char **full_hostname, char **llmnr_hostname, char **mdns_hostname) {
         _cleanup_free_ char *h = NULL, *n = NULL;
-#if defined(HAVE_LIBIDN2)
+#if HAVE_LIBIDN2
         _cleanup_free_ char *utf8 = NULL;
-#elif defined(HAVE_LIBIDN)
+#elif HAVE_LIBIDN
         int k;
 #endif
         char label[DNS_LABEL_MAX];
@@ -356,7 +359,7 @@ static int determine_hostname(char **full_hostname, char **llmnr_hostname, char 
                 return -EINVAL;
         }
 
-#if defined(HAVE_LIBIDN2)
+#if HAVE_LIBIDN2
         r = idn2_to_unicode_8z8z(label, &utf8, 0);
         if (r != IDN2_OK)
                 return log_error("Failed to undo IDNA: %s", idn2_strerror(r));
@@ -364,7 +367,7 @@ static int determine_hostname(char **full_hostname, char **llmnr_hostname, char 
 
         r = strlen(utf8);
         decoded = utf8;
-#elif defined(HAVE_LIBIDN)
+#elif HAVE_LIBIDN
         k = dns_label_undo_idna(label, r, label, sizeof label);
         if (k < 0)
                 return log_error_errno(k, "Failed to undo IDNA: %m");
@@ -519,8 +522,11 @@ static int manager_sigusr1(sd_event_source *s, const struct signalfd_siginfo *si
         _cleanup_free_ char *buffer = NULL;
         _cleanup_fclose_ FILE *f = NULL;
         Manager *m = userdata;
+        DnsServer *server;
         size_t size = 0;
         DnsScope *scope;
+        Iterator i;
+        Link *l;
 
         assert(s);
         assert(si);
@@ -530,8 +536,18 @@ static int manager_sigusr1(sd_event_source *s, const struct signalfd_siginfo *si
         if (!f)
                 return log_oom();
 
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+
         LIST_FOREACH(scopes, scope, m->dns_scopes)
                 dns_scope_dump(scope, f);
+
+        LIST_FOREACH(servers, server, m->dns_servers)
+                dns_server_dump(server, f);
+        LIST_FOREACH(servers, server, m->fallback_dns_servers)
+                dns_server_dump(server, f);
+        HASHMAP_FOREACH(l, m->links, i)
+                LIST_FOREACH(servers, server, l->dns_servers)
+                        dns_server_dump(server, f);
 
         if (fflush_and_check(f) < 0)
                 return log_oom();
@@ -549,6 +565,17 @@ static int manager_sigusr2(sd_event_source *s, const struct signalfd_siginfo *si
 
         manager_flush_caches(m);
 
+        return 0;
+}
+
+static int manager_sigrtmin1(sd_event_source *s, const struct signalfd_siginfo *si, void *userdata) {
+        Manager *m = userdata;
+
+        assert(s);
+        assert(si);
+        assert(m);
+
+        manager_reset_server_features(m);
         return 0;
 }
 
@@ -598,6 +625,10 @@ int manager_new(Manager **ret) {
         if (r < 0)
                 return r;
 
+        r = dnssd_load(m);
+        if (r < 0)
+                log_warning_errno(r, "Failed to load DNS-SD configuration files: %m");
+
         r = dns_scope_new(m, &m->unicast_scope, NULL, DNS_PROTOCOL_DNS, AF_UNSPEC);
         if (r < 0)
                 return r;
@@ -616,6 +647,7 @@ int manager_new(Manager **ret) {
 
         (void) sd_event_add_signal(m->event, &m->sigusr1_event_source, SIGUSR1, manager_sigusr1, m);
         (void) sd_event_add_signal(m->event, &m->sigusr2_event_source, SIGUSR2, manager_sigusr2, m);
+        (void) sd_event_add_signal(m->event, &m->sigrtmin1_event_source, SIGRTMIN+1, manager_sigrtmin1, m);
 
         manager_cleanup_saved_user(m);
 
@@ -639,6 +671,7 @@ int manager_start(Manager *m) {
 
 Manager *manager_free(Manager *m) {
         Link *l;
+        DnssdService *s;
 
         if (!m)
                 return NULL;
@@ -679,6 +712,7 @@ Manager *manager_free(Manager *m) {
 
         sd_event_source_unref(m->sigusr1_event_source);
         sd_event_source_unref(m->sigusr2_event_source);
+        sd_event_source_unref(m->sigrtmin1_event_source);
 
         sd_event_unref(m->event);
 
@@ -693,6 +727,10 @@ Manager *manager_free(Manager *m) {
         free(m->full_hostname);
         free(m->llmnr_hostname);
         free(m->mdns_hostname);
+
+        while ((s = hashmap_first(m->dnssd_services)))
+               dnssd_service_free(s);
+        hashmap_free(m->dnssd_services);
 
         dns_trust_anchor_flush(&m->trust_anchor);
         manager_etc_hosts_flush(m);
@@ -723,7 +761,7 @@ int manager_recv(Manager *m, int fd, DnsProtocol protocol, DnsPacket **ret) {
         if (ms < 0)
                 return ms;
 
-        r = dns_packet_new(&p, protocol, ms);
+        r = dns_packet_new(&p, protocol, ms, DNS_PACKET_SIZE_MAX);
         if (r < 0)
                 return r;
 
@@ -741,7 +779,7 @@ int manager_recv(Manager *m, int fd, DnsProtocol protocol, DnsPacket **ret) {
         if (l == 0)
                 return 0;
         if (l < 0) {
-                if (errno == EAGAIN || errno == EINTR)
+                if (IN_SET(errno, EAGAIN, EINTR))
                         return 0;
 
                 return -errno;
@@ -1069,6 +1107,7 @@ int manager_find_ifindex(Manager *m, int family, const union in_addr_union *in_a
 void manager_refresh_rrs(Manager *m) {
         Iterator i;
         Link *l;
+        DnssdService *s;
 
         assert(m);
 
@@ -1077,25 +1116,27 @@ void manager_refresh_rrs(Manager *m) {
         m->mdns_host_ipv4_key = dns_resource_key_unref(m->mdns_host_ipv4_key);
         m->mdns_host_ipv6_key = dns_resource_key_unref(m->mdns_host_ipv6_key);
 
+        if (m->mdns_support == RESOLVE_SUPPORT_YES)
+                HASHMAP_FOREACH(s, m->dnssd_services, i)
+                        if (dnssd_update_rrs(s) < 0)
+                                log_warning("Failed to refresh DNS-SD service '%s'", s->name);
+
         HASHMAP_FOREACH(l, m->links, i) {
                 link_add_rrs(l, true);
                 link_add_rrs(l, false);
         }
 }
 
-int manager_next_hostname(Manager *m) {
+static int manager_next_random_name(const char *old, char **ret_new) {
         const char *p;
         uint64_t u, a;
-        char *h, *k;
-        int r;
+        char *n;
 
-        assert(m);
-
-        p = strchr(m->llmnr_hostname, 0);
+        p = strchr(old, 0);
         assert(p);
 
-        while (p > m->llmnr_hostname) {
-                if (!strchr("0123456789", p[-1]))
+        while (p > old) {
+                if (!strchr(DIGITS, p[-1]))
                         break;
 
                 p--;
@@ -1114,22 +1155,32 @@ int manager_next_hostname(Manager *m) {
         random_bytes(&a, sizeof(a));
         u += 1 + a % 10;
 
-        if (asprintf(&h, "%.*s%" PRIu64, (int) (p - m->llmnr_hostname), m->llmnr_hostname, u) < 0)
+        if (asprintf(&n, "%.*s%" PRIu64, (int) (p - old), old, u) < 0)
                 return -ENOMEM;
 
-        r = dns_name_concat(h, "local", &k);
-        if (r < 0) {
-                free(h);
+        *ret_new = n;
+
+        return 0;
+}
+
+int manager_next_hostname(Manager *m) {
+        _cleanup_free_ char *h = NULL, *k = NULL;
+        int r;
+
+        assert(m);
+
+        r = manager_next_random_name(m->llmnr_hostname, &h);
+        if (r < 0)
                 return r;
-        }
+
+        r = dns_name_concat(h, "local", &k);
+        if (r < 0)
+                return r;
 
         log_info("Hostname conflict, changing published hostname from '%s' to '%s'.", m->llmnr_hostname, h);
 
-        free(m->llmnr_hostname);
-        m->llmnr_hostname = h;
-
-        free(m->mdns_hostname);
-        m->mdns_hostname = k;
+        free_and_replace(m->llmnr_hostname, h);
+        free_and_replace(m->mdns_hostname, k);
 
         manager_refresh_rrs(m);
 
@@ -1396,6 +1447,19 @@ void manager_flush_caches(Manager *m) {
         log_info("Flushed all caches.");
 }
 
+void manager_reset_server_features(Manager *m) {
+        Iterator i;
+        Link *l;
+
+        dns_server_reset_features_all(m->dns_servers);
+        dns_server_reset_features_all(m->fallback_dns_servers);
+
+        HASHMAP_FOREACH(l, m->links, i)
+                dns_server_reset_features_all(l->dns_servers);
+
+        log_info("Resetting learnt feature levels on all servers.");
+}
+
 void manager_cleanup_saved_user(Manager *m) {
         _cleanup_closedir_ DIR *d = NULL;
         struct dirent *de;
@@ -1449,4 +1513,37 @@ void manager_cleanup_saved_user(Manager *m) {
 
                 (void) unlink(p);
         }
+}
+
+bool manager_next_dnssd_names(Manager *m) {
+        Iterator i;
+        DnssdService *s;
+        bool tried = false;
+        int r;
+
+        assert(m);
+
+        HASHMAP_FOREACH(s, m->dnssd_services, i) {
+                _cleanup_free_ char * new_name = NULL;
+
+                if (!s->withdrawn)
+                        continue;
+
+                r = manager_next_random_name(s->name_template, &new_name);
+                if (r < 0) {
+                        log_warning_errno(r, "Failed to get new name for service '%s': %m", s->name);
+                        continue;
+                }
+
+                free_and_replace(s->name_template, new_name);
+
+                s->withdrawn = false;
+
+                tried = true;
+        }
+
+        if (tried)
+                manager_refresh_rrs(m);
+
+        return tried;
 }

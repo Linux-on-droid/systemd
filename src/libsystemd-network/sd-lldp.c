@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -218,7 +219,7 @@ static int lldp_receive_datagram(sd_event_source *s, int fd, uint32_t revents, v
 
         length = recv(fd, LLDP_NEIGHBOR_RAW(n), n->raw_size, MSG_DONTWAIT);
         if (length < 0) {
-                if (errno == EAGAIN || errno == EINTR)
+                if (IN_SET(errno, EAGAIN, EINTR))
                         return 0;
 
                 return log_lldp_errno(errno, "Failed to read LLDP datagram: %m");

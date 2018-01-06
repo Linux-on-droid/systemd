@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
     This file is part of systemd.
 
@@ -91,7 +92,7 @@ static int netdev_bridge_post_create(NetDev *netdev, Link *link, sd_netlink_mess
                         return log_netdev_error_errno(netdev, r, "Could not append IFLA_BR_MAX_AGE attribute: %m");
         }
 
-        if (b->ageing_time > 0) {
+        if (b->ageing_time != USEC_INFINITY) {
                 r = sd_netlink_message_append_u32(req, IFLA_BR_AGEING_TIME, usec_to_jiffies(b->ageing_time));
                 if (r < 0)
                         return log_netdev_error_errno(netdev, r, "Could not append IFLA_BR_AGEING_TIME attribute: %m");
@@ -101,6 +102,12 @@ static int netdev_bridge_post_create(NetDev *netdev, Link *link, sd_netlink_mess
                 r = sd_netlink_message_append_u16(req, IFLA_BR_PRIORITY, b->priority);
                 if (r < 0)
                         return log_netdev_error_errno(netdev, r, "Could not append IFLA_BR_PRIORITY attribute: %m");
+        }
+
+        if (b->group_fwd_mask > 0) {
+                r = sd_netlink_message_append_u16(req, IFLA_BR_GROUP_FWD_MASK, b->group_fwd_mask);
+                if (r < 0)
+                        return log_netdev_error_errno(netdev, r, "Could not append IFLA_BR_GROUP_FWD_MASK attribute: %m");
         }
 
         if (b->default_pvid != VLANID_INVALID) {
@@ -163,6 +170,7 @@ static void bridge_init(NetDev *n) {
         b->stp = -1;
         b->default_pvid = VLANID_INVALID;
         b->forward_delay = USEC_INFINITY;
+        b->ageing_time = USEC_INFINITY;
 }
 
 const NetDevVTable bridge_vtable = {

@@ -1,8 +1,8 @@
 From: Martin Pitt <martin.pitt@ubuntu.com>
 Date: Mon, 27 Apr 2015 15:29:13 +0200
 Subject: Revert "core: one step back again,
- for nspawn we actually can't wait for cgroups running empty since
- systemd will get exactly zero notifications about it"
+ for nspawn we actually can't wait for cgroups running empty since systemd
+ will get exactly zero notifications about it"
 
 This reverts commit 743970d2ea6d08aa7c7bff8220f6b7702f2b1db7.
 
@@ -14,10 +14,10 @@ Bug-Fedora: https://bugzilla.redhat.com/show_bug.cgi?id=1141137
  1 file changed, 1 insertion(+), 17 deletions(-)
 
 diff --git a/src/core/unit.c b/src/core/unit.c
-index b28eeb2..d923836 100644
+index 7af8425..5aa32c2 100644
 --- a/src/core/unit.c
 +++ b/src/core/unit.c
-@@ -3942,23 +3942,7 @@ int unit_kill_context(
+@@ -4501,23 +4501,7 @@ int unit_kill_context(
  
                  } else if (r > 0) {
  
@@ -36,7 +36,7 @@ index b28eeb2..d923836 100644
 -                         * them. */
 -
 -                        if (cg_unified_controller(SYSTEMD_CGROUP_CONTROLLER) > 0 ||
--                            (detect_container() == 0 && !unit_cgroup_delegate(u)))
+-                            (detect_container() == 0 && !UNIT_CGROUP_BOOL(u, delegate)))
 -                                wait_for_exit = true;
 +                        wait_for_exit = true;
  

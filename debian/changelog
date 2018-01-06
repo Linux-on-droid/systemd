@@ -1,3 +1,151 @@
+systemd (236-2) unstable; urgency=medium
+
+  * Downgrade priority of libudev1 to optional.
+    This makes it compliant with recent versions of debian-policy which
+    recommends to use priority optional for library packages.
+  * Clarify NEWS entry about removal of system users.
+    Mention in the recent NEWS entry that the associated system groups
+    should be removed as well. (Closes: #885061)
+  * cryptsetup-generator: Don't mistake NULL input as OOM.
+    Fixes systemd-cryptsetup-generator failing to run during boot.
+    (Closes: #885201)
+  * analyze: Use normal bus connection for "plot" verb.
+    Fixes "systemd-analyze plot" failing to run as root. (Closes: #884506)
+  * Stop re-enabling systemd services on every upgrade.
+    This was done so changes to the [Install] section would be applied on
+    upgrades. Forcefully re-enabling a service might overwrite local
+    modifications though and thus far, none of the affected services did
+    actually change its [Install] section. So remove this code from the
+    maintainer scripts as it was apparently doing more harm then good.
+    (Closes: #869354)
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 02 Jan 2018 00:35:14 +0100
+
+systemd (236-1) unstable; urgency=medium
+
+  [ Martin Pitt ]
+  * debian/tests/upstream: Only show ≥ warning in journal dumps.
+    Showing the entire debug log is too hard to scan visually, and most of
+    the time the warnings and errors are sufficient to explain a failure.
+    Put the journal files into the artifacts though, in case the debug
+    information is necessary.
+
+  [ Michael Biebl ]
+  * New upstream version 236
+    - nspawn: Adjust path to static resolv.conf to support split usr.
+      (Closes: #881310)
+    - networkd: Don't stop networkd if CONFIG_FIB_RULES=n in kernel.
+      (Closes: #881823)
+    - core: Fix segfault in compile_bind_mounts() when BindPaths= or
+      BindReadOnlyPaths= is set. (Closes: #883380)
+    - meson: Link NSS modules with -z nodelete to fix memory leak in
+      nss-systemd. (Closes: #883407)
+    - logind: Make sure we don't acces m->action_what if it's not initialized.
+      (Closes: #882270)
+    - systemctl: Ignore shutdown's "-t" argument. (Closes: #882245)
+    - core: Be more defensive if we can't determine per-connection socket
+      peer. (Closes: #879603)
+    - bpf-firewall: Actually invoke BPF_PROG_ATTACH to check whether
+      cgroup/bpf is available. (Closes: #878965)
+  * Rebase patches
+  * Update symbols file for libsystemd0
+  * Bump Standards-Version to 4.1.2
+  * Clean up old /var/lib/systemd/clock on upgrade.
+    The clock file used by systemd-timesyncd is now stored in
+    StateDirectory=systemd/timesync. (Closes: #883605)
+  * Stop creating systemd-timesync system user.
+    DynamicUser=yes has been enabled for systemd-timesyncd.service so
+    allocating a system user statically is no longer necessary.
+  * Document removal of systemd-{timesync,journal-gateway,journal-upload} user.
+    We no longer create those system users as the corresponding services now
+    use DynamicUser=yes. Removing those system users automatically is tricky,
+    as the relevant services might be running during upgrade. Add a NEWS
+    entry instead which documents this change.
+  * Revert "udev-rules: Permission changes for /dev/dri/renderD*"
+    This would introduce a new system group "render". As the name is rather
+    generic, this needs further discussion first, so revert this change for
+    now.
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 17 Dec 2017 21:45:51 +0100
+
+systemd (235-3) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * Switch from XC-Package-Type to Package-Type. As of dpkg-dev 1.15.7
+    Package-Type is recognized as an official field name.
+  * Install modprobe configuration file to /lib/modprobe.d.
+    Otherwise it is not read by kmod. (Closes: #879191)
+
+  [ Felipe Sateler ]
+  * Backport upstream (partial) fix for combined DynamicUser= + User=
+    UID was not allowed to be different to GID, which is normally the case in
+    debian, due to the group users being allocated the GID 100 without an
+    equivalent UID 100 being allocated.
+  * Backport upstream patches to fully make DynamicUser=yes + static,
+    pre-existing User= work.
+
+  [ Martin Pitt ]
+  * Add missing python3-minimal dependency to systemd-tests
+  * Drop long-obsolete systemd-bus-proxy system user
+    systemd-bus-proxy hasn't been shipped since before stretch and never
+    created any files. Thus clean up the obsolete system user on upgrades.
+    (Closes: #878182)
+  * Drop static systemd-journal-gateway system user
+    systemd-journal-gatewayd.service now uses DynamicUser=, so we don't need
+    to create this statically any more. Don't remove the user on upgrades
+    though, as there is likely still be a running process. (Closes: #878183)
+  * Use DynamicUser= for systemd-journal-upload.service.
+  * Add Recommends: libnss-systemd to systemd-sysv.
+    This is useful to actually be able to resolve dynamically created system
+    users with DynamicUser=true. This concept is going to be used much more
+    in future versions and (hopefully) third-party .services, so pulling it
+    into the default installation seems prudent now.
+  * resolved: Fix loop on packets with pseudo dns types.
+    (CVE-2017-15908, Closes: #880026, LP: #1725351)
+  * bpf-firewall: Properly handle kernels without BPF cgroup but with TRIE maps.
+    Fixes "Detaching egress BPF: Invalid argument" log spam. (Closes: #878965)
+  * Fix MemoryDenyWriteExecution= bypass with pkey_mprotect() (LP: #1725348)
+
+ -- Martin Pitt <mpitt@debian.org>  Wed, 15 Nov 2017 09:34:00 +0100
+
+systemd (235-2) unstable; urgency=medium
+
+  * Revert "tests: when running a manager object in a test, migrate to private
+    cgroup subroot first"
+    This was causing test suite failures when running inside a chroot.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 11 Oct 2017 00:46:07 +0200
+
+systemd (235-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 235
+    - cryptsetup-generator: use remote-cryptsetup.target when _netdev is
+      present (Closes: #852534)
+    - tmpfiles: change btmp mode 0600 → 0660 (Closes: #870638)
+    - networkd: For IPv6 addresses do not treat IFA_F_DEPRECATED as not ready
+      (Closes: #869995)
+    - exec-util,conf-files: skip non-executable files in execute_directories()
+      (Closes: #867902)
+    - man: update udevadm -y/--sysname-match documentation (Closes: #865081)
+    - tmpfiles: silently ignore any path that passes through autofs
+      (Closes: #805553)
+    - shared: end string with % if one was found at the end of a expandible
+      string (Closes: #865450)
+  * Refresh patches
+  * Bump Build-Depends on libmount-dev to (>= 2.30)
+  * Install new modprobe.d config file
+  * Bump Standards-Version to 4.1.1
+
+  [ Martin Pitt ]
+  * Merge logind-kill-off autopkgtest into logind test.
+    This was horribly inefficient as a separate test (from commit
+    6bd0dab41e), as that cost two VM resets plus accompanying boots; and
+    this does not change any state thus does not require this kind of
+    isolation.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 10 Oct 2017 18:29:28 +0200
+
 systemd (234-3~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.

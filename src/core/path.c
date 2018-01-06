@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -97,7 +98,7 @@ int path_spec_watch(PathSpec *s, sd_event_io_handler_t handler) {
 
                 r = inotify_add_watch(s->inotify_fd, s->path, flags);
                 if (r < 0) {
-                        if (errno == EACCES || errno == ENOENT) {
+                        if (IN_SET(errno, EACCES, ENOENT)) {
                                 if (cut)
                                         *cut = tmp;
                                 break;
@@ -168,14 +169,14 @@ int path_spec_fd_event(PathSpec *s, uint32_t revents) {
 
         l = read(s->inotify_fd, &buffer, sizeof(buffer));
         if (l < 0) {
-                if (errno == EAGAIN || errno == EINTR)
+                if (IN_SET(errno, EAGAIN, EINTR))
                         return 0;
 
                 return log_error_errno(errno, "Failed to read inotify event: %m");
         }
 
         FOREACH_INOTIFY_EVENT(e, buffer, l) {
-                if ((s->type == PATH_CHANGED || s->type == PATH_MODIFIED) &&
+                if (IN_SET(s->type, PATH_CHANGED, PATH_MODIFIED) &&
                     s->primary_wd == e->wd)
                         r = 1;
         }
@@ -224,7 +225,7 @@ static bool path_spec_check_good(PathSpec *s, bool initial) {
 static void path_spec_mkdir(PathSpec *s, mode_t mode) {
         int r;
 
-        if (s->type == PATH_EXISTS || s->type == PATH_EXISTS_GLOB)
+        if (IN_SET(s->type, PATH_EXISTS, PATH_EXISTS_GLOB))
                 return;
 
         r = mkdir_p_label(s->path, mode);
@@ -277,14 +278,14 @@ static void path_done(Unit *u) {
         path_free_specs(p);
 }
 
-static int path_add_mount_links(Path *p) {
+static int path_add_mount_dependencies(Path *p) {
         PathSpec *s;
         int r;
 
         assert(p);
 
         LIST_FOREACH(spec, s, p->specs) {
-                r = unit_require_mounts_for(UNIT(p), s->path);
+                r = unit_require_mounts_for(UNIT(p), s->path, UNIT_DEPENDENCY_FILE);
                 if (r < 0)
                         return r;
         }
@@ -314,17 +315,33 @@ static int path_add_default_dependencies(Path *p) {
         if (!UNIT(p)->default_dependencies)
                 return 0;
 
-        r = unit_add_dependency_by_name(UNIT(p), UNIT_BEFORE, SPECIAL_PATHS_TARGET, NULL, true);
+        r = unit_add_dependency_by_name(UNIT(p), UNIT_BEFORE, SPECIAL_PATHS_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
         if (r < 0)
                 return r;
 
         if (MANAGER_IS_SYSTEM(UNIT(p)->manager)) {
-                r = unit_add_two_dependencies_by_name(UNIT(p), UNIT_AFTER, UNIT_REQUIRES, SPECIAL_SYSINIT_TARGET, NULL, true);
+                r = unit_add_two_dependencies_by_name(UNIT(p), UNIT_AFTER, UNIT_REQUIRES, SPECIAL_SYSINIT_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
                 if (r < 0)
                         return r;
         }
 
-        return unit_add_two_dependencies_by_name(UNIT(p), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_SHUTDOWN_TARGET, NULL, true);
+        return unit_add_two_dependencies_by_name(UNIT(p), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_SHUTDOWN_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
+}
+
+static int path_add_trigger_dependencies(Path *p) {
+        Unit *x;
+        int r;
+
+        assert(p);
+
+        if (!hashmap_isempty(UNIT(p)->dependencies[UNIT_TRIGGERS]))
+                return 0;
+
+        r = unit_load_related_unit(UNIT(p), ".service", &x);
+        if (r < 0)
+                return r;
+
+        return unit_add_two_dependencies(UNIT(p), UNIT_BEFORE, UNIT_TRIGGERS, x, true, UNIT_DEPENDENCY_IMPLICIT);
 }
 
 static int path_load(Unit *u) {
@@ -340,19 +357,11 @@ static int path_load(Unit *u) {
 
         if (u->load_state == UNIT_LOADED) {
 
-                if (set_isempty(u->dependencies[UNIT_TRIGGERS])) {
-                        Unit *x;
+                r = path_add_trigger_dependencies(p);
+                if (r < 0)
+                        return r;
 
-                        r = unit_load_related_unit(u, ".service", &x);
-                        if (r < 0)
-                                return r;
-
-                        r = unit_add_two_dependencies(u, UNIT_BEFORE, UNIT_TRIGGERS, x, true);
-                        if (r < 0)
-                                return r;
-                }
-
-                r = path_add_mount_links(p);
+                r = path_add_mount_dependencies(p);
                 if (r < 0)
                         return r;
 
@@ -441,8 +450,7 @@ static int path_coldplug(Unit *u) {
 
         if (p->deserialized_state != p->state) {
 
-                if (p->deserialized_state == PATH_WAITING ||
-                    p->deserialized_state == PATH_RUNNING)
+                if (IN_SET(p->deserialized_state, PATH_WAITING, PATH_RUNNING))
                         path_enter_waiting(p, true, true);
                 else
                         path_set_state(p, p->deserialized_state);
@@ -456,6 +464,9 @@ static void path_enter_dead(Path *p, PathResult f) {
 
         if (p->result == PATH_SUCCESS)
                 p->result = f;
+
+        if (p->result != PATH_SUCCESS)
+                log_unit_warning(UNIT(p), "Failed with result '%s'.", path_result_to_string(p->result));
 
         path_set_state(p, p->result != PATH_SUCCESS ? PATH_FAILED : PATH_DEAD);
 }
@@ -563,7 +574,7 @@ static int path_start(Unit *u) {
         int r;
 
         assert(p);
-        assert(p->state == PATH_DEAD || p->state == PATH_FAILED);
+        assert(IN_SET(p->state, PATH_DEAD, PATH_FAILED));
 
         trigger = UNIT_TRIGGER(u);
         if (!trigger || trigger->load_state != UNIT_LOADED) {
@@ -593,7 +604,7 @@ static int path_stop(Unit *u) {
         Path *p = PATH(u);
 
         assert(p);
-        assert(p->state == PATH_WAITING || p->state == PATH_RUNNING);
+        assert(IN_SET(p->state, PATH_WAITING, PATH_RUNNING));
 
         path_enter_dead(p, PATH_SUCCESS);
         return 1;
@@ -667,8 +678,7 @@ static int path_dispatch_io(sd_event_source *source, int fd, uint32_t revents, v
 
         p = PATH(s->unit);
 
-        if (p->state != PATH_WAITING &&
-            p->state != PATH_RUNNING)
+        if (!IN_SET(p->state, PATH_WAITING, PATH_RUNNING))
                 return 0;
 
         /* log_debug("inotify wakeup on %s.", u->id); */

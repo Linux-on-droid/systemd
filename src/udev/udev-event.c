@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 2003-2013 Kay Sievers <kay@vrfy.org>
  *
@@ -230,7 +231,7 @@ static size_t subst_format_var(struct udev_event *event, struct udev_device *dev
                         break;
                 devnode = udev_device_get_devnode(dev_parent);
                 if (devnode != NULL)
-                        l = strpcpy(&s, l, devnode + strlen("/dev/"));
+                        l = strpcpy(&s, l, devnode + STRLEN("/dev/"));
                 break;
         }
         case SUBST_DEVNODE:
@@ -241,7 +242,8 @@ static size_t subst_format_var(struct udev_event *event, struct udev_device *dev
                 if (event->name != NULL)
                         l = strpcpy(&s, l, event->name);
                 else if (udev_device_get_devnode(dev) != NULL)
-                        l = strpcpy(&s, l, udev_device_get_devnode(dev) + strlen("/dev/"));
+                        l = strpcpy(&s, l,
+                                    udev_device_get_devnode(dev) + STRLEN("/dev/"));
                 else
                         l = strpcpy(&s, l, udev_device_get_sysname(dev));
                 break;
@@ -251,9 +253,12 @@ static size_t subst_format_var(struct udev_event *event, struct udev_device *dev
                 list_entry = udev_device_get_devlinks_list_entry(dev);
                 if (list_entry == NULL)
                         break;
-                l = strpcpy(&s, l, udev_list_entry_get_name(list_entry) + strlen("/dev/"));
+                l = strpcpy(&s, l,
+                            udev_list_entry_get_name(list_entry) + STRLEN("/dev/"));
                 udev_list_entry_foreach(list_entry, udev_list_entry_get_next(list_entry))
-                        l = strpcpyl(&s, l, " ", udev_list_entry_get_name(list_entry) + strlen("/dev/"), NULL);
+                        l = strpcpyl(&s, l, " ",
+                                     udev_list_entry_get_name(list_entry) + STRLEN("/dev/"),
+                                     NULL);
                 break;
         }
         case SUBST_ROOT:
@@ -362,7 +367,7 @@ size_t udev_event_apply_format(struct udev_event *event,
                         }
 copy:
                         /* copy char */
-                        if (l == 0)
+                        if (l < 2) /* need space for this char and the terminating NUL */
                                 goto out;
                         s[0] = from[0];
                         from++;
@@ -377,12 +382,12 @@ subst:
                         unsigned int i;
 
                         from++;
-                        for (i = 0; from[i] != '}'; i++) {
+                        for (i = 0; from[i] != '}'; i++)
                                 if (from[i] == '\0') {
                                         log_error("missing closing brace for format '%s'", src);
                                         goto out;
                                 }
-                        }
+
                         if (i >= sizeof(attrbuf))
                                 goto out;
                         memcpy(attrbuf, from, i);
@@ -407,6 +412,7 @@ subst:
         }
 
 out:
+        assert(l >= 1);
         s[0] = '\0';
         return l;
 }
@@ -719,10 +725,12 @@ int udev_build_argv(struct udev *udev, char *cmd, int *argc, char *argv[]) {
 
         pos = cmd;
         while (pos != NULL && pos[0] != '\0') {
-                if (pos[0] == '\'') {
-                        /* do not separate quotes */
+                if (IN_SET(pos[0], '\'', '"')) {
+                        /* do not separate quotes or double quotes */
+                        char delim[2] = { pos[0], '\0' };
+
                         pos++;
-                        argv[i] = strsep(&pos, "\'");
+                        argv[i] = strsep(&pos, delim);
                         if (pos != NULL)
                                 while (pos[0] == ' ')
                                         pos++;

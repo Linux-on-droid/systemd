@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -25,8 +26,10 @@
 
 #include "af-list.h"
 #include "alloc-util.h"
+#include "bus-common-errors.h"
 #include "bus-error.h"
 #include "bus-util.h"
+#include "dns-domain.h"
 #include "escape.h"
 #include "gcrypt-util.h"
 #include "in-addr-util.h"
@@ -72,8 +75,19 @@ static enum {
         MODE_STATISTICS,
         MODE_RESET_STATISTICS,
         MODE_FLUSH_CACHES,
+        MODE_RESET_SERVER_FEATURES,
         MODE_STATUS,
+        MODE_SET_LINK,
+        MODE_REVERT_LINK,
 } arg_mode = MODE_RESOLVE_HOST;
+
+static struct in_addr_data *arg_set_dns = NULL;
+static size_t arg_n_set_dns = 0;
+static char **arg_set_domain = NULL;
+static char *arg_set_llmnr = NULL;
+static char *arg_set_mdns = NULL;
+static char *arg_set_dnssec = NULL;
+static char **arg_set_nta = NULL;
 
 static ServiceFamily service_family_from_string(const char *s) {
         if (s == NULL || streq(s, "tcp"))
@@ -357,7 +371,7 @@ static int output_rr_packet(const void *d, size_t l, int ifindex) {
         int r;
         char ifname[IF_NAMESIZE] = "";
 
-        r = dns_packet_new(&p, DNS_PROTOCOL_DNS, 0);
+        r = dns_packet_new(&p, DNS_PROTOCOL_DNS, 0, DNS_PACKET_SIZE_MAX);
         if (r < 0)
                 return log_oom();
 
@@ -1055,6 +1069,24 @@ static int flush_caches(sd_bus *bus) {
         return 0;
 }
 
+static int reset_server_features(sd_bus *bus) {
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        int r;
+
+        r = sd_bus_call_method(bus,
+                               "org.freedesktop.resolve1",
+                               "/org/freedesktop/resolve1",
+                               "org.freedesktop.resolve1.Manager",
+                               "ResetServerFeatures",
+                               &error,
+                               NULL,
+                               NULL);
+        if (r < 0)
+                return log_error_errno(r, "Failed to reset server features: %s", bus_error_message(&error, r));
+
+        return 0;
+}
+
 static int map_link_dns_servers(sd_bus *bus, const char *member, sd_bus_message *m, sd_bus_error *error, void *userdata) {
         char ***l = userdata;
         int r;
@@ -1525,10 +1557,238 @@ static int status_all(sd_bus *bus) {
         return r;
 }
 
+static int set_link(sd_bus *bus) {
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        int r = 0, q;
+
+        assert(bus);
+
+        if (arg_n_set_dns > 0) {
+                _cleanup_(sd_bus_message_unrefp) sd_bus_message *req = NULL;
+                size_t i;
+
+                q = sd_bus_message_new_method_call(
+                                bus,
+                                &req,
+                                "org.freedesktop.resolve1",
+                                "/org/freedesktop/resolve1",
+                                "org.freedesktop.resolve1.Manager",
+                                "SetLinkDNS");
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_message_append(req, "i", arg_ifindex);
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_message_open_container(req, 'a', "(iay)");
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                for (i = 0; i < arg_n_set_dns; i++) {
+                        q = sd_bus_message_open_container(req, 'r', "iay");
+                        if (q < 0)
+                                return bus_log_create_error(q);
+
+                        q = sd_bus_message_append(req, "i", arg_set_dns[i].family);
+                        if (q < 0)
+                                return bus_log_create_error(q);
+
+                        q = sd_bus_message_append_array(req, 'y', &arg_set_dns[i].address, FAMILY_ADDRESS_SIZE(arg_set_dns[i].family));
+                        if (q < 0)
+                                return bus_log_create_error(q);
+
+                        q = sd_bus_message_close_container(req);
+                        if (q < 0)
+                                return bus_log_create_error(q);
+                }
+
+                q = sd_bus_message_close_container(req);
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_call(bus, req, 0, &error, NULL);
+                if (q < 0) {
+                        if (sd_bus_error_has_name(&error, BUS_ERROR_LINK_BUSY))
+                                goto is_managed;
+
+                        log_error_errno(q, "Failed to set DNS configuration: %s", bus_error_message(&error, q));
+                        if (r == 0)
+                                r = q;
+                }
+        }
+
+        if (!strv_isempty(arg_set_domain)) {
+                _cleanup_(sd_bus_message_unrefp) sd_bus_message *req = NULL;
+                char **p;
+
+                q = sd_bus_message_new_method_call(
+                                bus,
+                                &req,
+                                "org.freedesktop.resolve1",
+                                "/org/freedesktop/resolve1",
+                                "org.freedesktop.resolve1.Manager",
+                                "SetLinkDomains");
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_message_append(req, "i", arg_ifindex);
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_message_open_container(req, 'a', "(sb)");
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                STRV_FOREACH(p, arg_set_domain) {
+                        const char *n;
+
+                        n = **p == '~' ? *p + 1 : *p;
+                        q = sd_bus_message_append(req, "(sb)", n, **p == '~');
+                        if (q < 0)
+                                return bus_log_create_error(q);
+                }
+
+                q = sd_bus_message_close_container(req);
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_call(bus, req, 0, &error, NULL);
+                if (q < 0) {
+                        if (sd_bus_error_has_name(&error, BUS_ERROR_LINK_BUSY))
+                                goto is_managed;
+
+                        log_error_errno(q, "Failed to set domain configuration: %s", bus_error_message(&error, q));
+                        if (r == 0)
+                                r = q;
+                }
+        }
+
+        if (arg_set_llmnr) {
+                q = sd_bus_call_method(bus,
+                                       "org.freedesktop.resolve1",
+                                       "/org/freedesktop/resolve1",
+                                       "org.freedesktop.resolve1.Manager",
+                                       "SetLinkLLMNR",
+                                       &error,
+                                       NULL,
+                                       "is", arg_ifindex, arg_set_llmnr);
+                if (q < 0) {
+                        if (sd_bus_error_has_name(&error, BUS_ERROR_LINK_BUSY))
+                                goto is_managed;
+
+                        log_error_errno(q, "Failed to set LLMNR configuration: %s", bus_error_message(&error, q));
+                        if (r == 0)
+                                r = q;
+                }
+        }
+
+        if (arg_set_mdns) {
+                q = sd_bus_call_method(bus,
+                                       "org.freedesktop.resolve1",
+                                       "/org/freedesktop/resolve1",
+                                       "org.freedesktop.resolve1.Manager",
+                                       "SetLinkMulticastDNS",
+                                       &error,
+                                       NULL,
+                                       "is", arg_ifindex, arg_set_mdns);
+                if (q < 0) {
+                        if (sd_bus_error_has_name(&error, BUS_ERROR_LINK_BUSY))
+                                goto is_managed;
+
+                        log_error_errno(q, "Failed to set MulticastDNS configuration: %s", bus_error_message(&error, q));
+                        if (r == 0)
+                                r = q;
+                }
+        }
+
+        if (arg_set_dnssec) {
+                q = sd_bus_call_method(bus,
+                                       "org.freedesktop.resolve1",
+                                       "/org/freedesktop/resolve1",
+                                       "org.freedesktop.resolve1.Manager",
+                                       "SetLinkDNSSEC",
+                                       &error,
+                                       NULL,
+                                       "is", arg_ifindex, arg_set_dnssec);
+                if (q < 0) {
+                        if (sd_bus_error_has_name(&error, BUS_ERROR_LINK_BUSY))
+                                goto is_managed;
+
+                        log_error_errno(q, "Failed to set DNSSEC configuration: %s", bus_error_message(&error, q));
+                        if (r == 0)
+                                r = q;
+                }
+        }
+
+        if (!strv_isempty(arg_set_nta)) {
+                _cleanup_(sd_bus_message_unrefp) sd_bus_message *req = NULL;
+
+                q = sd_bus_message_new_method_call(
+                                bus,
+                                &req,
+                                "org.freedesktop.resolve1",
+                                "/org/freedesktop/resolve1",
+                                "org.freedesktop.resolve1.Manager",
+                                "SetLinkDNSSECNegativeTrustAnchors");
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_message_append(req, "i", arg_ifindex);
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_message_append_strv(req, arg_set_nta);
+                if (q < 0)
+                        return bus_log_create_error(q);
+
+                q = sd_bus_call(bus, req, 0, &error, NULL);
+                if (q < 0) {
+                        if (sd_bus_error_has_name(&error, BUS_ERROR_LINK_BUSY))
+                                goto is_managed;
+
+                        log_error_errno(q, "Failed to set DNSSEC NTA configuration: %s", bus_error_message(&error, q));
+                        if (r == 0)
+                                r = q;
+                }
+        }
+
+        return r;
+
+is_managed:
+        {
+                char ifname[IFNAMSIZ];
+
+                return log_error_errno(q,
+                                       "The specified interface %s is managed by systemd-networkd. Operation refused.\n"
+                                       "Please configure DNS settings for systemd-networkd managed interfaces directly in their .network files.", strna(if_indextoname(arg_ifindex, ifname)));
+        }
+}
+
+static int revert_link(sd_bus *bus) {
+        _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+        int r;
+
+        assert(bus);
+
+        r = sd_bus_call_method(bus,
+                               "org.freedesktop.resolve1",
+                               "/org/freedesktop/resolve1",
+                               "org.freedesktop.resolve1.Manager",
+                               "RevertLink",
+                               &error,
+                               NULL,
+                               "i", arg_ifindex);
+        if (r < 0)
+                return log_error_errno(r, "Failed to revert interface configuration: %s", bus_error_message(&error, r));
+
+        return 0;
+}
+
 static void help_protocol_types(void) {
         if (arg_legend)
                 puts("Known protocol types:");
-        puts("dns\nllmnr\nllmnr-ipv4\nllmnr-ipv6\nmdns\nmnds-ipv4\nmdns-ipv6");
+        puts("dns\nllmnr\nllmnr-ipv4\nllmnr-ipv6\nmdns\nmdns-ipv4\nmdns-ipv6");
 }
 
 static void help_dns_types(void) {
@@ -1588,6 +1848,15 @@ static void help(void) {
                "     --reset-statistics     Reset resolver statistics\n"
                "     --status               Show link and server status\n"
                "     --flush-caches         Flush all local DNS caches\n"
+               "     --reset-server-features\n"
+               "                            Forget learnt DNS server feature levels\n"
+               "     --set-dns=SERVER       Set per-interface DNS server address\n"
+               "     --set-domain=DOMAIN    Set per-interface search domain\n"
+               "     --set-llmnr=MODE       Set per-interface LLMNR mode\n"
+               "     --set-mdns=MODE        Set per-interface MulticastDNS mode\n"
+               "     --set-dnssec=MODE      Set per-interface DNSSEC mode\n"
+               "     --set-nta=DOMAIN       Set per-interface DNSSEC NTA\n"
+               "     --revert               Revert per-interface configuration\n"
                , program_invocation_short_name);
 }
 
@@ -1607,30 +1876,46 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_RESET_STATISTICS,
                 ARG_STATUS,
                 ARG_FLUSH_CACHES,
+                ARG_RESET_SERVER_FEATURES,
                 ARG_NO_PAGER,
+                ARG_SET_DNS,
+                ARG_SET_DOMAIN,
+                ARG_SET_LLMNR,
+                ARG_SET_MDNS,
+                ARG_SET_DNSSEC,
+                ARG_SET_NTA,
+                ARG_REVERT_LINK,
         };
 
         static const struct option options[] = {
-                { "help",             no_argument,       NULL, 'h'                  },
-                { "version",          no_argument,       NULL, ARG_VERSION          },
-                { "type",             required_argument, NULL, 't'                  },
-                { "class",            required_argument, NULL, 'c'                  },
-                { "legend",           required_argument, NULL, ARG_LEGEND           },
-                { "interface",        required_argument, NULL, 'i'                  },
-                { "protocol",         required_argument, NULL, 'p'                  },
-                { "cname",            required_argument, NULL, ARG_CNAME            },
-                { "service",          no_argument,       NULL, ARG_SERVICE          },
-                { "service-address",  required_argument, NULL, ARG_SERVICE_ADDRESS  },
-                { "service-txt",      required_argument, NULL, ARG_SERVICE_TXT      },
-                { "openpgp",          no_argument,       NULL, ARG_OPENPGP          },
-                { "tlsa",             optional_argument, NULL, ARG_TLSA             },
-                { "raw",              optional_argument, NULL, ARG_RAW              },
-                { "search",           required_argument, NULL, ARG_SEARCH           },
-                { "statistics",       no_argument,       NULL, ARG_STATISTICS,      },
-                { "reset-statistics", no_argument,       NULL, ARG_RESET_STATISTICS },
-                { "status",           no_argument,       NULL, ARG_STATUS           },
-                { "flush-caches",     no_argument,       NULL, ARG_FLUSH_CACHES     },
-                { "no-pager",         no_argument,       NULL, ARG_NO_PAGER         },
+                { "help",                  no_argument,       NULL, 'h'                       },
+                { "version",               no_argument,       NULL, ARG_VERSION               },
+                { "type",                  required_argument, NULL, 't'                       },
+                { "class",                 required_argument, NULL, 'c'                       },
+                { "legend",                required_argument, NULL, ARG_LEGEND                },
+                { "interface",             required_argument, NULL, 'i'                       },
+                { "protocol",              required_argument, NULL, 'p'                       },
+                { "cname",                 required_argument, NULL, ARG_CNAME                 },
+                { "service",               no_argument,       NULL, ARG_SERVICE               },
+                { "service-address",       required_argument, NULL, ARG_SERVICE_ADDRESS       },
+                { "service-txt",           required_argument, NULL, ARG_SERVICE_TXT           },
+                { "openpgp",               no_argument,       NULL, ARG_OPENPGP               },
+                { "tlsa",                  optional_argument, NULL, ARG_TLSA                  },
+                { "raw",                   optional_argument, NULL, ARG_RAW                   },
+                { "search",                required_argument, NULL, ARG_SEARCH                },
+                { "statistics",            no_argument,       NULL, ARG_STATISTICS,           },
+                { "reset-statistics",      no_argument,       NULL, ARG_RESET_STATISTICS      },
+                { "status",                no_argument,       NULL, ARG_STATUS                },
+                { "flush-caches",          no_argument,       NULL, ARG_FLUSH_CACHES          },
+                { "reset-server-features", no_argument,       NULL, ARG_RESET_SERVER_FEATURES },
+                { "no-pager",              no_argument,       NULL, ARG_NO_PAGER              },
+                { "set-dns",               required_argument, NULL, ARG_SET_DNS               },
+                { "set-domain",            required_argument, NULL, ARG_SET_DOMAIN            },
+                { "set-llmnr",             required_argument, NULL, ARG_SET_LLMNR             },
+                { "set-mdns",              required_argument, NULL, ARG_SET_MDNS              },
+                { "set-dnssec",            required_argument, NULL, ARG_SET_DNSSEC            },
+                { "set-nta",               required_argument, NULL, ARG_SET_NTA               },
+                { "revert",                no_argument,       NULL, ARG_REVERT_LINK           },
                 {}
         };
 
@@ -1814,12 +2099,94 @@ static int parse_argv(int argc, char *argv[]) {
                         arg_mode = MODE_FLUSH_CACHES;
                         break;
 
+                case ARG_RESET_SERVER_FEATURES:
+                        arg_mode = MODE_RESET_SERVER_FEATURES;
+                        break;
+
                 case ARG_STATUS:
                         arg_mode = MODE_STATUS;
                         break;
 
                 case ARG_NO_PAGER:
                         arg_no_pager = true;
+                        break;
+
+                case ARG_SET_DNS: {
+                        struct in_addr_data data, *n;
+
+                        r = in_addr_from_string_auto(optarg, &data.family, &data.address);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to parse DNS server address: %s", optarg);
+
+                        n = realloc(arg_set_dns, sizeof(struct in_addr_data) * (arg_n_set_dns + 1));
+                        if (!n)
+                                return log_oom();
+                        arg_set_dns = n;
+
+                        arg_set_dns[arg_n_set_dns++] = data;
+                        arg_mode = MODE_SET_LINK;
+                        break;
+                }
+
+                case ARG_SET_DOMAIN: {
+                        const char *p;
+
+                        p = optarg[0] == '~' ? optarg + 1 : optarg;
+
+                        r = dns_name_is_valid(p);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to validate specified domain %s: %m", p);
+                        if (r == 0)
+                                return log_error_errno(r, "Domain not valid: %s", p);
+
+                        r = strv_extend(&arg_set_domain, optarg);
+                        if (r < 0)
+                                return log_oom();
+
+                        arg_mode = MODE_SET_LINK;
+                        break;
+                }
+
+                case ARG_SET_LLMNR:
+                        r = free_and_strdup(&arg_set_llmnr, optarg);
+                        if (r < 0)
+                                return log_oom();
+
+                        arg_mode = MODE_SET_LINK;
+                        break;
+
+                case ARG_SET_MDNS:
+                        r = free_and_strdup(&arg_set_mdns, optarg);
+                        if (r < 0)
+                                return log_oom();
+
+                        arg_mode = MODE_SET_LINK;
+                        break;
+
+                case ARG_SET_DNSSEC:
+                        r = free_and_strdup(&arg_set_dnssec, optarg);
+                        if (r < 0)
+                                return log_oom();
+
+                        arg_mode = MODE_SET_LINK;
+                        break;
+
+                case ARG_SET_NTA:
+                        r = dns_name_is_valid(optarg);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to validate specified domain %s: %m", optarg);
+                        if (r == 0)
+                                return log_error_errno(r, "Domain not valid: %s", optarg);
+
+                        r = strv_extend(&arg_set_nta, optarg);
+                        if (r < 0)
+                                return log_oom();
+
+                        arg_mode = MODE_SET_LINK;
+                        break;
+
+                case ARG_REVERT_LINK:
+                        arg_mode = MODE_REVERT_LINK;
                         break;
 
                 case '?':
@@ -1844,6 +2211,19 @@ static int parse_argv(int argc, char *argv[]) {
 
         if (arg_class != 0 && arg_type == 0)
                 arg_type = DNS_TYPE_A;
+
+        if (IN_SET(arg_mode, MODE_SET_LINK, MODE_REVERT_LINK)) {
+
+                if (arg_ifindex <= 0) {
+                        log_error("--set-dns=, --set-domain=, --set-llmnr=, --set-mdns=, --set-dnssec=, --set-nta= and --revert require --interface=.");
+                        return -EINVAL;
+                }
+
+                if (arg_ifindex == LOOPBACK_IFINDEX) {
+                        log_error("Interface can't be the loopback interface (lo). Sorry.");
+                        return -EINVAL;
+                }
+        }
 
         return 1 /* work to do */;
 }
@@ -1999,6 +2379,16 @@ int main(int argc, char **argv) {
                 r = flush_caches(bus);
                 break;
 
+        case MODE_RESET_SERVER_FEATURES:
+                if (argc > optind) {
+                        log_error("Too many arguments.");
+                        r = -EINVAL;
+                        goto finish;
+                }
+
+                r = reset_server_features(bus);
+                break;
+
         case MODE_STATUS:
 
                 if (argc > optind) {
@@ -2026,10 +2416,38 @@ int main(int argc, char **argv) {
                         r = status_all(bus);
 
                 break;
+
+
+        case MODE_SET_LINK:
+                if (argc > optind) {
+                        log_error("Too many arguments.");
+                        r = -EINVAL;
+                        goto finish;
+                }
+
+                r = set_link(bus);
+                break;
+
+        case MODE_REVERT_LINK:
+                if (argc > optind) {
+                        log_error("Too many arguments.");
+                        r = -EINVAL;
+                        goto finish;
+                }
+
+                r = revert_link(bus);
+                break;
         }
 
 finish:
         pager_close();
+
+        free(arg_set_dns);
+        strv_free(arg_set_domain);
+        free(arg_set_llmnr);
+        free(arg_set_mdns);
+        free(arg_set_dnssec);
+        strv_free(arg_set_nta);
 
         return r == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

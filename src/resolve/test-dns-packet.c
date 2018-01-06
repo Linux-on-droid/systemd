@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd
 
@@ -75,7 +76,7 @@ static void test_packet_from_file(const char* filename, bool canonical) {
                 assert_se(packet_size > 0);
                 assert_se(offset + 8 + packet_size <= data_size);
 
-                assert_se(dns_packet_new(&p, DNS_PROTOCOL_DNS, 0) >= 0);
+                assert_se(dns_packet_new(&p, DNS_PROTOCOL_DNS, 0, DNS_PACKET_SIZE_MAX) >= 0);
 
                 assert_se(dns_packet_append_blob(p, data + offset + 8, packet_size, NULL) >= 0);
                 assert_se(dns_packet_read_rr(p, &rr, NULL, NULL) >= 0);
@@ -90,7 +91,7 @@ static void test_packet_from_file(const char* filename, bool canonical) {
 
                 assert_se(dns_resource_record_to_wire_format(rr, canonical) >= 0);
 
-                assert_se(dns_packet_new(&p2, DNS_PROTOCOL_DNS, 0) >= 0);
+                assert_se(dns_packet_new(&p2, DNS_PROTOCOL_DNS, 0, DNS_PACKET_SIZE_MAX) >= 0);
                 assert_se(dns_packet_append_blob(p2, rr->wire_format, rr->wire_format_size, NULL) >= 0);
                 assert_se(dns_packet_read_rr(p2, &rr2, NULL, NULL) >= 0);
 

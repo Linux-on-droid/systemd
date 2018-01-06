@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -26,7 +27,7 @@ typedef struct Vrf Vrf;
 struct Vrf {
         NetDev meta;
 
-        uint32_t table_id;
+        uint32_t table;
 };
 
 DEFINE_NETDEV_CAST(VRF, Vrf);

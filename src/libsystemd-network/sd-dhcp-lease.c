@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -21,6 +22,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdio_ext.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -392,9 +394,7 @@ static int lease_parse_domain(const uint8_t *option, size_t len, char **ret) {
         if (dns_name_is_root(normalized))
                 return -EINVAL;
 
-        free(*ret);
-        *ret = normalized;
-        normalized = NULL;
+        free_and_replace(*ret, normalized);
 
         return 0;
 }
@@ -471,7 +471,7 @@ static int lease_parse_routes(
                 struct sd_dhcp_route *route = *routes + *routes_size;
                 int r;
 
-                r = in_addr_default_prefixlen((struct in_addr*) option, &route->dst_prefixlen);
+                r = in4_addr_default_prefixlen((struct in_addr*) option, &route->dst_prefixlen);
                 if (r < 0) {
                         log_debug("Failed to determine destination prefix length from class based IP, ignoring");
                         continue;
@@ -683,9 +683,7 @@ int dhcp_lease_parse_options(uint8_t code, uint8_t len, const void *option, void
                         return 0;
                 }
 
-                free(lease->timezone);
-                lease->timezone = tz;
-                tz = NULL;
+                free_and_replace(lease->timezone, tz);
 
                 break;
         }
@@ -879,7 +877,8 @@ int dhcp_lease_save(sd_dhcp_lease *lease, const char *lease_file) {
         if (r < 0)
                 goto fail;
 
-        fchmod(fileno(f), 0644);
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+        (void) fchmod(fileno(f), 0644);
 
         fprintf(f,
                 "# This is private data. Do not parse.\n");
@@ -990,7 +989,7 @@ int dhcp_lease_save(sd_dhcp_lease *lease, const char *lease_file) {
         }
 
         LIST_FOREACH(options, option, lease->private_options) {
-                char key[strlen("OPTION_000")+1];
+                char key[STRLEN("OPTION_000")+1];
 
                 xsprintf(key, "OPTION_%" PRIu8, option->tag);
                 r = serialize_dhcp_option(f, key, option->data, option->length);
@@ -1253,7 +1252,7 @@ int dhcp_lease_set_default_subnet_mask(sd_dhcp_lease *lease) {
         address.s_addr = lease->address;
 
         /* fall back to the default subnet masks based on address class */
-        r = in_addr_default_subnet_mask(&address, &mask);
+        r = in4_addr_default_subnet_mask(&address, &mask);
         if (r < 0)
                 return r;
 

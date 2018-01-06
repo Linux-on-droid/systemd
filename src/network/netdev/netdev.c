@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -47,6 +48,7 @@
 #include "netdev/dummy.h"
 #include "netdev/vrf.h"
 #include "netdev/vcan.h"
+#include "netdev/vxcan.h"
 
 const NetDevVTable * const netdev_vtable[_NETDEV_KIND_MAX] = {
         [NETDEV_KIND_BRIDGE] = &bridge_vtable,
@@ -72,6 +74,7 @@ const NetDevVTable * const netdev_vtable[_NETDEV_KIND_MAX] = {
         [NETDEV_KIND_VRF] = &vrf_vtable,
         [NETDEV_KIND_VCAN] = &vcan_vtable,
         [NETDEV_KIND_GENEVE] = &geneve_vtable,
+        [NETDEV_KIND_VXCAN] = &vxcan_vtable,
 };
 
 static const char* const netdev_kind_table[_NETDEV_KIND_MAX] = {
@@ -98,6 +101,7 @@ static const char* const netdev_kind_table[_NETDEV_KIND_MAX] = {
         [NETDEV_KIND_VRF] = "vrf",
         [NETDEV_KIND_VCAN] = "vcan",
         [NETDEV_KIND_GENEVE] = "geneve",
+        [NETDEV_KIND_VXCAN] = "vxcan",
 };
 
 DEFINE_STRING_TABLE_LOOKUP(netdev_kind, NetDevKind);
@@ -601,6 +605,7 @@ static int netdev_load_one(Manager *manager, const char *filename) {
         _cleanup_free_ NetDev *netdev_raw = NULL;
         _cleanup_fclose_ FILE *file = NULL;
         const char *dropin_dirname;
+        bool independent = false;
         int r;
 
         assert(manager);
@@ -629,7 +634,7 @@ static int netdev_load_one(Manager *manager, const char *filename) {
         r = config_parse_many(filename, network_dirs, dropin_dirname,
                               "Match\0NetDev\0",
                               config_item_perf_lookup, network_netdev_gperf_lookup,
-                              true, netdev_raw);
+                              CONFIG_PARSE_WARN, netdev_raw);
         if (r < 0)
                 return r;
 
@@ -670,7 +675,7 @@ static int netdev_load_one(Manager *manager, const char *filename) {
         r = config_parse(NULL, filename, file,
                          NETDEV_VTABLE(netdev)->sections,
                          config_item_perf_lookup, network_netdev_gperf_lookup,
-                         false, false, false, netdev);
+                         CONFIG_PARSE_WARN, netdev);
         if (r < 0)
                 return r;
 
@@ -704,11 +709,49 @@ static int netdev_load_one(Manager *manager, const char *filename) {
         case NETDEV_CREATE_INDEPENDENT:
                 r = netdev_create(netdev, NULL, NULL);
                 if (r < 0)
-                        return 0;
+                        return r;
 
                 break;
         default:
                 break;
+        }
+
+        switch (netdev->kind) {
+        case NETDEV_KIND_IPIP:
+                independent = IPIP(netdev)->independent;
+                break;
+        case NETDEV_KIND_GRE:
+                independent = GRE(netdev)->independent;
+                break;
+        case NETDEV_KIND_GRETAP:
+                independent = GRETAP(netdev)->independent;
+                break;
+        case NETDEV_KIND_IP6GRE:
+                independent = IP6GRE(netdev)->independent;
+                break;
+        case NETDEV_KIND_IP6GRETAP:
+                independent = IP6GRETAP(netdev)->independent;
+                break;
+        case NETDEV_KIND_SIT:
+                independent = SIT(netdev)->independent;
+                break;
+        case NETDEV_KIND_VTI:
+                independent = VTI(netdev)->independent;
+                break;
+        case NETDEV_KIND_VTI6:
+                independent = VTI6(netdev)->independent;
+                break;
+        case NETDEV_KIND_IP6TNL:
+                independent = IP6TNL(netdev)->independent;
+                break;
+        default:
+                break;
+        }
+
+        if (independent) {
+                r = netdev_create(netdev, NULL, NULL);
+                if (r < 0)
+                        return r;
         }
 
         netdev = NULL;
@@ -727,7 +770,7 @@ int netdev_load(Manager *manager) {
         while ((netdev = hashmap_first(manager->netdevs)))
                 netdev_unref(netdev);
 
-        r = conf_files_list_strv(&files, ".netdev", NULL, network_dirs);
+        r = conf_files_list_strv(&files, ".netdev", NULL, 0, network_dirs);
         if (r < 0)
                 return log_error_errno(r, "Failed to enumerate netdev files: %m");
 

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -435,7 +436,7 @@ enum nss_status _nss_mymachines_getpwnam_r(
         if (!machine_name_is_valid(machine))
                 goto not_found;
 
-        if (getenv_bool("SYSTEMD_NSS_BYPASS_BUS") > 0)
+        if (getenv_bool_secure("SYSTEMD_NSS_BYPASS_BUS") > 0)
                 /* Make sure we can't deadlock if we are invoked by dbus-daemon. This way, it won't be able to resolve
                  * these UIDs, but that should be unproblematic as containers should never be able to connect to a bus
                  * running on the host. */
@@ -479,7 +480,7 @@ enum nss_status _nss_mymachines_getpwnam_r(
 
         pwd->pw_name = buffer;
         pwd->pw_uid = mapped;
-        pwd->pw_gid = 65534; /* nobody */
+        pwd->pw_gid = GID_NOBODY;
         pwd->pw_gecos = buffer;
         pwd->pw_passwd = (char*) "*"; /* locked */
         pwd->pw_dir = (char*) "/";
@@ -519,7 +520,7 @@ enum nss_status _nss_mymachines_getpwuid_r(
         if (uid < HOST_UID_LIMIT)
                 goto not_found;
 
-        if (getenv_bool("SYSTEMD_NSS_BYPASS_BUS") > 0)
+        if (getenv_bool_secure("SYSTEMD_NSS_BYPASS_BUS") > 0)
                 goto not_found;
 
         r = sd_bus_open_system(&bus);
@@ -556,7 +557,7 @@ enum nss_status _nss_mymachines_getpwuid_r(
 
         pwd->pw_name = buffer;
         pwd->pw_uid = uid;
-        pwd->pw_gid = 65534; /* nobody */
+        pwd->pw_gid = GID_NOBODY;
         pwd->pw_gecos = buffer;
         pwd->pw_passwd = (char*) "*"; /* locked */
         pwd->pw_dir = (char*) "/";
@@ -613,7 +614,7 @@ enum nss_status _nss_mymachines_getgrnam_r(
         if (!machine_name_is_valid(machine))
                 goto not_found;
 
-        if (getenv_bool("SYSTEMD_NSS_BYPASS_BUS") > 0)
+        if (getenv_bool_secure("SYSTEMD_NSS_BYPASS_BUS") > 0)
                 goto not_found;
 
         r = sd_bus_open_system(&bus);
@@ -691,7 +692,7 @@ enum nss_status _nss_mymachines_getgrgid_r(
         if (gid < HOST_GID_LIMIT)
                 goto not_found;
 
-        if (getenv_bool("SYSTEMD_NSS_BYPASS_BUS") > 0)
+        if (getenv_bool_secure("SYSTEMD_NSS_BYPASS_BUS") > 0)
                 goto not_found;
 
         r = sd_bus_open_system(&bus);

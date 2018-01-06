@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -33,7 +34,7 @@
 #include "time-util.h"
 #include "util.h"
 
-#ifdef ENABLE_POLKIT
+#if ENABLE_POLKIT
 static pid_t agent_pid = 0;
 
 int polkit_agent_open(void) {

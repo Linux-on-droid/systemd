@@ -1,7 +1,9 @@
 #!/bin/bash
 # -*- mode: shell-script; indent-tabs-mode: nil; sh-basic-offset: 4; -*-
 # ex: ts=8 sw=4 sts=4 et filetype=sh
+set -e
 TEST_DESCRIPTION="cryptsetup systemd setup"
+TEST_NO_NSPAWN=1
 
 . $TEST_BASE_DIR/test-functions
 
@@ -24,21 +26,12 @@ check_result_qemu() {
 }
 
 
-test_run() {
-    if run_qemu; then
-        check_result_qemu || return 1
-    else
-        dwarn "can't run QEMU, skipping"
-    fi
-    return 0
-}
-
 test_setup() {
     create_empty_image
     echo -n test >$TESTDIR/keyfile
     cryptsetup -q luksFormat ${LOOPDEV}p2 $TESTDIR/keyfile
     cryptsetup luksOpen ${LOOPDEV}p2 varcrypt <$TESTDIR/keyfile
-    mkfs.ext3 -L var /dev/mapper/varcrypt
+    mkfs.ext4 -L var /dev/mapper/varcrypt
     mkdir -p $TESTDIR/root
     mount ${LOOPDEV}p1 $TESTDIR/root
     mkdir -p $TESTDIR/root/var
@@ -74,7 +67,7 @@ EOF
         cat $initdir/etc/crypttab | ddebug
 
         cat >>$initdir/etc/fstab <<EOF
-/dev/mapper/varcrypt    /var    ext3    defaults 0 1
+/dev/mapper/varcrypt    /var    ext4    defaults 0 1
 EOF
     ) || return 1
 
@@ -86,9 +79,9 @@ EOF
 }
 
 test_cleanup() {
-    umount $TESTDIR/root/var 2>/dev/null
+    [ -d $TESTDIR/root/var ] && mountpoint $TESTDIR/root/var && umount $TESTDIR/root/var
     [[ -b /dev/mapper/varcrypt ]] && cryptsetup luksClose /dev/mapper/varcrypt
-    umount $TESTDIR/root 2>/dev/null
+    umount $TESTDIR/root 2>/dev/null || true
     [[ $LOOPDEV ]] && losetup -d $LOOPDEV
     return 0
 }

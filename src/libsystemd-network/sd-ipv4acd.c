@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -287,8 +288,7 @@ static int ipv4acd_on_timeout(sd_event_source *s, uint64_t usec, void *userdata)
                         break;
                 }
 
-                /* fall through */
-
+                _fallthrough_;
         case IPV4ACD_STATE_WAITING_ANNOUNCE:
                 /* Send announcement packet */
                 r = arp_send_announcement(acd->fd, acd->ifindex, acd->address, &acd->mac_addr);
@@ -354,7 +354,7 @@ static int ipv4acd_on_packet(
 
         n = recv(fd, &packet, sizeof(struct ether_arp), 0);
         if (n < 0) {
-                if (errno == EAGAIN || errno == EINTR)
+                if (IN_SET(errno, EAGAIN, EINTR))
                         return 0;
 
                 log_ipv4acd_errno(acd, errno, "Failed to read ARP packet: %m");

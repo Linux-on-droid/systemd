@@ -1,3 +1,5 @@
+#  SPDX-License-Identifier: LGPL-2.1+
+#
 #  This file is part of systemd.
 #
 #  systemd is free software; you can redistribute it and/or modify it
@@ -29,4 +31,6 @@ RestrictNamespaces=yes
 RestrictAddressFamilies=AF_UNIX
 SystemCallFilter=~@clock @cpu-emulation @debug @keyring @module @mount @obsolete @raw-io @reboot @swap
 SystemCallArchitectures=native
+LockPersonality=yes
+IPAddressDeny=any
 ReadWritePaths=/etc

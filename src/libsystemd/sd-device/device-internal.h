@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -104,6 +105,8 @@ typedef enum DeviceAction {
         DEVICE_ACTION_MOVE,
         DEVICE_ACTION_ONLINE,
         DEVICE_ACTION_OFFLINE,
+        DEVICE_ACTION_BIND,
+        DEVICE_ACTION_UNBIND,
         _DEVICE_ACTION_MAX,
         _DEVICE_ACTION_INVALID = -1,
 } DeviceAction;

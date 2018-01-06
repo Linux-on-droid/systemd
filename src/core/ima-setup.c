@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -33,7 +34,7 @@
 #define IMA_POLICY_PATH "/etc/ima/ima-policy"
 
 int ima_setup(void) {
-#ifdef HAVE_IMA
+#if ENABLE_IMA
         _cleanup_fclose_ FILE *input = NULL;
         _cleanup_close_ int imafd = -1;
         unsigned lineno = 0;
@@ -61,7 +62,7 @@ int ima_setup(void) {
         }
 
         /* attempt to write the name of the policy file into sysfs file */
-        if (write(imafd, IMA_POLICY_PATH, strlen(IMA_POLICY_PATH)) > 0)
+        if (write(imafd, IMA_POLICY_PATH, STRLEN(IMA_POLICY_PATH)) > 0)
                 goto done;
 
         /* fall back to copying the policy line-by-line */
@@ -93,6 +94,6 @@ int ima_setup(void) {
 
 done:
         log_info("Successfully loaded the IMA custom policy "IMA_POLICY_PATH".");
-#endif /* HAVE_IMA */
+#endif /* ENABLE_IMA */
         return 0;
 }

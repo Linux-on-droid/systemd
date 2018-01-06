@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 sources = files('''
         netdev/bond.c
         netdev/bond.h
@@ -27,6 +44,8 @@ sources = files('''
         netdev/vxlan.h
         netdev/geneve.c
         netdev/geneve.h
+        netdev/vxcan.c
+        netdev/vxcan.h
         networkd-address-label.c
         networkd-address-label.h
         networkd-address-pool.c
@@ -61,6 +80,8 @@ sources = files('''
         networkd-network.h
         networkd-route.c
         networkd-route.h
+        networkd-routing-policy-rule.c
+        networkd-routing-policy-rule.h
         networkd-util.c
         networkd-util.h
 '''.split())
@@ -79,7 +100,7 @@ networkctl_sources = files('networkctl.c')
 
 network_include_dir = include_directories('.')
 
-if conf.get('ENABLE_NETWORKD', false)
+if conf.get('ENABLE_NETWORKD') == 1
         networkd_gperf_c = custom_target(
                 'networkd-gperf.c',
                 input : 'networkd-gperf.gperf',
@@ -134,6 +155,12 @@ if conf.get('ENABLE_NETWORKD', false)
       libsystemd_network,
       libshared],
      [threads]],
+
+    [['src/network/test-routing-policy-rule.c'],
+     [libnetworkd_core,
+      libsystemd_network,
+      libudev],
+     []],
 
     [['src/network/test-network-tables.c',
       'src/network/test-network-tables.c',

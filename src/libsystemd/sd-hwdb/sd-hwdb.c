@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -317,7 +318,7 @@ static const char hwdb_bin_paths[] =
         "/etc/systemd/hwdb/hwdb.bin\0"
         "/etc/udev/hwdb.bin\0"
         "/usr/lib/systemd/hwdb/hwdb.bin\0"
-#ifdef HAVE_SPLIT_USR
+#if HAVE_SPLIT_USR
         "/lib/systemd/hwdb/hwdb.bin\0"
 #endif
         UDEVLIBEXECDIR "/hwdb.bin\0";

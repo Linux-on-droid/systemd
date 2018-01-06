@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -75,7 +76,7 @@ static void test_conf_files_list(bool use_root) {
 
         log_debug("/* Check when filtered by suffix */");
 
-        assert_se(conf_files_list(&found_files, ".conf", root_dir, search_1, search_2, NULL) == 0);
+        assert_se(conf_files_list(&found_files, ".conf", root_dir, 0, search_1, search_2, NULL) == 0);
         strv_print(found_files);
 
         assert_se(found_files);
@@ -84,7 +85,7 @@ static void test_conf_files_list(bool use_root) {
         assert_se(found_files[2] == NULL);
 
         log_debug("/* Check when unfiltered */");
-        assert_se(conf_files_list(&found_files2, NULL, root_dir, search_1, search_2, NULL) == 0);
+        assert_se(conf_files_list(&found_files2, NULL, root_dir, 0, search_1, search_2, NULL) == 0);
         strv_print(found_files2);
 
         assert_se(found_files2);

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -21,15 +22,17 @@
 #include <pwd.h>
 #include <sys/file.h>
 
+#include "clean-ipc.h"
 #include "dynamic-user.h"
 #include "fd-util.h"
+#include "fileio.h"
 #include "fs-util.h"
+#include "io-util.h"
 #include "parse-util.h"
 #include "random-util.h"
 #include "stdio-util.h"
 #include "string-util.h"
 #include "user-util.h"
-#include "fileio.h"
 
 /* Takes a value generated randomly or by hashing and turns it into a UID in the right range */
 #define UID_CLAMP_INTO_RANGE(rnd) (((uid_t) (rnd) % (DYNAMIC_UID_MAX - DYNAMIC_UID_MIN + 1)) + DYNAMIC_UID_MIN)
@@ -80,7 +83,7 @@ static int dynamic_user_add(Manager *m, const char *name, int storage_socket[2],
         return 0;
 }
 
-int dynamic_user_acquire(Manager *m, const char *name, DynamicUser** ret) {
+static int dynamic_user_acquire(Manager *m, const char *name, DynamicUser** ret) {
         _cleanup_close_pair_ int storage_socket[2] = { -1, -1 };
         DynamicUser *d;
         int r;
@@ -144,7 +147,7 @@ int dynamic_user_acquire(Manager *m, const char *name, DynamicUser** ret) {
 
 static int make_uid_symlinks(uid_t uid, const char *name, bool b) {
 
-        char path1[strlen("/run/systemd/dynamic-uid/direct:") + DECIMAL_STR_MAX(uid_t) + 1];
+        char path1[STRLEN("/run/systemd/dynamic-uid/direct:") + DECIMAL_STR_MAX(uid_t) + 1];
         const char *path2;
         int r = 0, k;
 
@@ -172,7 +175,7 @@ static int make_uid_symlinks(uid_t uid, const char *name, bool b) {
                         r = k;
         }
 
-        if (b && symlink(path1 + strlen("/run/systemd/dynamic-uid/direct:"), path2) < 0) {
+        if (b && symlink(path1 + STRLEN("/run/systemd/dynamic-uid/direct:"), path2) < 0) {
                 k = log_warning_errno(errno,  "Failed to symlink \"%s\": %m", path2);
                 if (r == 0)
                         r = k;
@@ -181,33 +184,89 @@ static int make_uid_symlinks(uid_t uid, const char *name, bool b) {
         return r;
 }
 
-static int pick_uid(const char *name, uid_t *ret_uid) {
+static int pick_uid(char **suggested_paths, const char *name, uid_t *ret_uid) {
+
+        /* Find a suitable free UID. We use the following strategy to find a suitable UID:
+         *
+         * 1. Initially, we try to read the UID of a number of specified paths. If any of these UIDs works, we use
+         *    them. We use in order to increase the chance of UID reuse, if StateDirectory=, CacheDirectory= or
+         *    LogDirectory= are used, as reusing the UID these directories are owned by saves us from having to
+         *    recursively chown() them to new users.
+         *
+         * 2. If that didn't yield a currently unused UID, we hash the user name, and try to use that. This should be
+         *    pretty good, as the use ris by default derived from the unit name, and hence the same service and same
+         *    user should usually get the same UID as long as our hashing doesn't clash.
+         *
+         * 3. Finally, if that didn't work, we randomly pick UIDs, until we find one that is empty.
+         *
+         * Since the dynamic UID space is relatively small we'll stop trying after 100 iterations, giving up. */
+
+        enum {
+                PHASE_SUGGESTED,  /* the first phase, reusing directory ownership UIDs */
+                PHASE_HASHED,     /* the second phase, deriving a UID from the username by hashing */
+                PHASE_RANDOM,     /* the last phase, randomly picking UIDs */
+        } phase = PHASE_SUGGESTED;
 
         static const uint8_t hash_key[] = {
                 0x37, 0x53, 0x7e, 0x31, 0xcf, 0xce, 0x48, 0xf5,
                 0x8a, 0xbb, 0x39, 0x57, 0x8d, 0xd9, 0xec, 0x59
         };
 
-        unsigned n_tries = 100;
-        uid_t candidate;
+        unsigned n_tries = 100, current_suggested = 0;
         int r;
-
-        /* A static user by this name does not exist yet. Let's find a free ID then, and use that. We start with a UID
-         * generated as hash from the user name. */
-        candidate = UID_CLAMP_INTO_RANGE(siphash24(name, strlen(name), hash_key));
 
         (void) mkdir("/run/systemd/dynamic-uid", 0755);
 
         for (;;) {
-                char lock_path[strlen("/run/systemd/dynamic-uid/") + DECIMAL_STR_MAX(uid_t) + 1];
+                char lock_path[STRLEN("/run/systemd/dynamic-uid/") + DECIMAL_STR_MAX(uid_t) + 1];
                 _cleanup_close_ int lock_fd = -1;
+                uid_t candidate;
                 ssize_t l;
 
                 if (--n_tries <= 0) /* Give up retrying eventually */
                         return -EBUSY;
 
+                switch (phase) {
+
+                case PHASE_SUGGESTED: {
+                        struct stat st;
+
+                        if (!suggested_paths || !suggested_paths[current_suggested]) {
+                                /* We reached the end of the suggested paths list, let's try by hashing the name */
+                                phase = PHASE_HASHED;
+                                continue;
+                        }
+
+                        if (stat(suggested_paths[current_suggested++], &st) < 0)
+                                continue; /* We can't read the UID of this path, but that doesn't matter, just try the next */
+
+                        candidate = st.st_uid;
+                        break;
+                }
+
+                case PHASE_HASHED:
+                        /* A static user by this name does not exist yet. Let's find a free ID then, and use that. We
+                         * start with a UID generated as hash from the user name. */
+                        candidate = UID_CLAMP_INTO_RANGE(siphash24(name, strlen(name), hash_key));
+
+                        /* If this one fails, we should proceed with random tries */
+                        phase = PHASE_RANDOM;
+                        break;
+
+                case PHASE_RANDOM:
+
+                        /* Pick another random UID, and see if that works for us. */
+                        random_bytes(&candidate, sizeof(candidate));
+                        candidate = UID_CLAMP_INTO_RANGE(candidate);
+                        break;
+
+                default:
+                        assert_not_reached("unknown phase");
+                }
+
+                /* Make sure whatever we picked here actually is in the right range */
                 if (!uid_is_dynamic(candidate))
-                        goto next;
+                        continue;
 
                 xsprintf(lock_path, "/run/systemd/dynamic-uid/" UID_FMT, candidate);
 
@@ -220,7 +279,7 @@ static int pick_uid(const char *name, uid_t *ret_uid) {
 
                         r = flock(lock_fd, LOCK_EX|LOCK_NB); /* Try to get a BSD file lock on the UID lock file */
                         if (r < 0) {
-                                if (errno == EBUSY || errno == EAGAIN)
+                                if (IN_SET(errno, EBUSY, EAGAIN))
                                         goto next; /* already in use */
 
                                 return -errno;
@@ -237,20 +296,23 @@ static int pick_uid(const char *name, uid_t *ret_uid) {
                 }
 
                 /* Some superficial check whether this UID/GID might already be taken by some static user */
-                if (getpwuid(candidate) || getgrgid((gid_t) candidate)) {
+                if (getpwuid(candidate) ||
+                    getgrgid((gid_t) candidate) ||
+                    search_ipc(candidate, (gid_t) candidate) != 0) {
                         (void) unlink(lock_path);
-                        goto next;
+                        continue;
                 }
 
                 /* Let's store the user name in the lock file, so that we can use it for looking up the username for a UID */
                 l = pwritev(lock_fd,
                             (struct iovec[2]) {
-                                    { .iov_base = (char*) name, .iov_len = strlen(name) },
-                                    { .iov_base = (char[1]) { '\n' }, .iov_len = 1 }
+                                    IOVEC_INIT_STRING(name),
+                                    IOVEC_INIT((char[1]) { '\n' }, 1),
                             }, 2, 0);
                 if (l < 0) {
+                        r = -errno;
                         (void) unlink(lock_path);
-                        return -errno;
+                        return r;
                 }
 
                 (void) ftruncate(lock_fd, l);
@@ -263,18 +325,13 @@ static int pick_uid(const char *name, uid_t *ret_uid) {
                 return r;
 
         next:
-                /* Pick another random UID, and see if that works for us. */
-                random_bytes(&candidate, sizeof(candidate));
-                candidate = UID_CLAMP_INTO_RANGE(candidate);
+                ;
         }
 }
 
 static int dynamic_user_pop(DynamicUser *d, uid_t *ret_uid, int *ret_lock_fd) {
         uid_t uid = UID_INVALID;
-        struct iovec iov = {
-                .iov_base = &uid,
-                .iov_len = sizeof(uid),
-        };
+        struct iovec iov = IOVEC_INIT(&uid, sizeof(uid));
         union {
                 struct cmsghdr cmsghdr;
                 uint8_t buf[CMSG_SPACE(sizeof(int))];
@@ -314,10 +371,7 @@ static int dynamic_user_pop(DynamicUser *d, uid_t *ret_uid, int *ret_lock_fd) {
 }
 
 static int dynamic_user_push(DynamicUser *d, uid_t uid, int lock_fd) {
-        struct iovec iov = {
-                .iov_base = &uid,
-                .iov_len = sizeof(uid),
-        };
+        struct iovec iov = IOVEC_INIT(&uid, sizeof(uid));
         union {
                 struct cmsghdr cmsghdr;
                 uint8_t buf[CMSG_SPACE(sizeof(int))];
@@ -357,7 +411,7 @@ static int dynamic_user_push(DynamicUser *d, uid_t uid, int lock_fd) {
 }
 
 static void unlink_uid_lock(int lock_fd, uid_t uid, const char *name) {
-        char lock_path[strlen("/run/systemd/dynamic-uid/") + DECIMAL_STR_MAX(uid_t) + 1];
+        char lock_path[STRLEN("/run/systemd/dynamic-uid/") + DECIMAL_STR_MAX(uid_t) + 1];
 
         if (lock_fd < 0)
                 return;
@@ -368,31 +422,55 @@ static void unlink_uid_lock(int lock_fd, uid_t uid, const char *name) {
         (void) make_uid_symlinks(uid, name, false); /* remove direct lookup symlinks */
 }
 
-int dynamic_user_realize(DynamicUser *d, uid_t *ret) {
+static int lockfp(int fd, int *fd_lock) {
+        if (lockf(fd, F_LOCK, 0) < 0)
+                return -errno;
+        *fd_lock = fd;
+        return 0;
+}
 
-        _cleanup_close_ int etc_passwd_lock_fd = -1, uid_lock_fd = -1;
-        uid_t uid = UID_INVALID;
+static void unlockfp(int *fd_lock) {
+        if (*fd_lock < 0)
+                return;
+        lockf(*fd_lock, F_ULOCK, 0);
+        *fd_lock = -1;
+}
+
+static int dynamic_user_realize(
+                DynamicUser *d,
+                char **suggested_dirs,
+                uid_t *ret_uid, gid_t *ret_gid,
+                bool is_user) {
+
+        _cleanup_(unlockfp) int storage_socket0_lock = -1;
+        _cleanup_close_ int uid_lock_fd = -1;
+        _cleanup_close_ int etc_passwd_lock_fd = -1;
+        uid_t num = UID_INVALID; /* a uid if is_user, and a gid otherwise */
+        gid_t gid = GID_INVALID; /* a gid if is_user, ignored otherwise */
         int r;
 
         assert(d);
+        assert(is_user == !!ret_uid);
+        assert(ret_gid);
 
         /* Acquire a UID for the user name. This will allocate a UID for the user name if the user doesn't exist
          * yet. If it already exists its existing UID/GID will be reused. */
 
-        if (lockf(d->storage_socket[0], F_LOCK, 0) < 0)
-                return -errno;
+        r = lockfp(d->storage_socket[0], &storage_socket0_lock);
+        if (r < 0)
+                return r;
 
-        r = dynamic_user_pop(d, &uid, &uid_lock_fd);
+        r = dynamic_user_pop(d, &num, &uid_lock_fd);
         if (r < 0) {
                 int new_uid_lock_fd;
                 uid_t new_uid;
 
                 if (r != -EAGAIN)
-                        goto finish;
+                        return r;
 
                 /* OK, nothing stored yet, let's try to find something useful. While we are working on this release the
                  * lock however, so that nobody else blocks on our NSS lookups. */
-                (void) lockf(d->storage_socket[0], F_ULOCK, 0);
+                unlockfp(&storage_socket0_lock);
 
                 /* Let's see if a proper, static user or group by this name exists. Try to take the lock on
                  * /etc/passwd, if that fails with EROFS then /etc is read-only. In that case it's fine if we don't
@@ -402,47 +480,58 @@ int dynamic_user_realize(DynamicUser *d, uid_t *ret) {
                         return etc_passwd_lock_fd;
 
                 /* First, let's parse this as numeric UID */
-                r = parse_uid(d->name, &uid);
+                r = parse_uid(d->name, &num);
                 if (r < 0) {
                         struct passwd *p;
                         struct group *g;
 
-                        /* OK, this is not a numeric UID. Let's see if there's a user by this name */
-                        p = getpwnam(d->name);
-                        if (p)
-                                uid = p->pw_uid;
-
-                        /* Let's see if there's a group by this name */
-                        g = getgrnam(d->name);
-                        if (g) {
-                                /* If the UID/GID of the user/group of the same don't match, refuse operation */
-                                if (uid != UID_INVALID && uid != (uid_t) g->gr_gid)
-                                        return -EILSEQ;
-
-                                uid = (uid_t) g->gr_gid;
+                        if (is_user) {
+                                /* OK, this is not a numeric UID. Let's see if there's a user by this name */
+                                p = getpwnam(d->name);
+                                if (p) {
+                                        num = p->pw_uid;
+                                        gid = p->pw_gid;
+                                } else {
+                                        /* if the user does not exist but the group with the same name exists, refuse operation */
+                                        g = getgrnam(d->name);
+                                        if (g)
+                                                return -EILSEQ;
+                                }
+                        } else {
+                                /* Let's see if there's a group by this name */
+                                g = getgrnam(d->name);
+                                if (g)
+                                        num = (uid_t) g->gr_gid;
+                                else {
+                                        /* if the group does not exist but the user with the same name exists, refuse operation */
+                                        p = getpwnam(d->name);
+                                        if (p)
+                                                return -EILSEQ;
+                                }
                         }
                 }
 
-                if (uid == UID_INVALID) {
+                if (num == UID_INVALID) {
                         /* No static UID assigned yet, excellent. Let's pick a new dynamic one, and lock it. */
 
-                        uid_lock_fd = pick_uid(d->name, &uid);
+                        uid_lock_fd = pick_uid(suggested_dirs, d->name, &num);
                         if (uid_lock_fd < 0)
                                 return uid_lock_fd;
                 }
 
                 /* So, we found a working UID/lock combination. Let's see if we actually still need it. */
-                if (lockf(d->storage_socket[0], F_LOCK, 0) < 0) {
-                        unlink_uid_lock(uid_lock_fd, uid, d->name);
-                        return -errno;
+                r = lockfp(d->storage_socket[0], &storage_socket0_lock);
+                if (r < 0) {
+                        unlink_uid_lock(uid_lock_fd, num, d->name);
+                        return r;
                 }
 
                 r = dynamic_user_pop(d, &new_uid, &new_uid_lock_fd);
                 if (r < 0) {
                         if (r != -EAGAIN) {
                                 /* OK, something bad happened, let's get rid of the bits we acquired. */
-                                unlink_uid_lock(uid_lock_fd, uid, d->name);
-                                goto finish;
+                                unlink_uid_lock(uid_lock_fd, num, d->name);
+                                return r;
                         }
 
                         /* Great! Nothing is stored here, still. Store our newly acquired data. */
@@ -450,10 +539,10 @@ int dynamic_user_realize(DynamicUser *d, uid_t *ret) {
                         /* Hmm, so as it appears there's now something stored in the storage socket. Throw away what we
                          * acquired, and use what's stored now. */
 
-                        unlink_uid_lock(uid_lock_fd, uid, d->name);
+                        unlink_uid_lock(uid_lock_fd, num, d->name);
                         safe_close(uid_lock_fd);
 
-                        uid = new_uid;
+                        num = new_uid;
                         uid_lock_fd = new_uid_lock_fd;
                 }
         }
@@ -461,19 +550,21 @@ int dynamic_user_realize(DynamicUser *d, uid_t *ret) {
         /* If the UID/GID was already allocated dynamically, push the data we popped out back in. If it was already
          * allocated statically, push the UID back too, but do not push the lock fd in. If we allocated the UID
          * dynamically right here, push that in along with the lock fd for it. */
-        r = dynamic_user_push(d, uid, uid_lock_fd);
+        r = dynamic_user_push(d, num, uid_lock_fd);
         if (r < 0)
-                goto finish;
+                return r;
 
-        *ret = uid;
-        r = 0;
+        if (is_user) {
+                *ret_uid = num;
+                *ret_gid = gid != GID_INVALID ? gid : num;
+        } else
+                *ret_gid = num;
 
-finish:
-        (void) lockf(d->storage_socket[0], F_ULOCK, 0);
-        return r;
+        return 0;
 }
 
-int dynamic_user_current(DynamicUser *d, uid_t *ret) {
+static int dynamic_user_current(DynamicUser *d, uid_t *ret) {
+        _cleanup_(unlockfp) int storage_socket0_lock = -1;
         _cleanup_close_ int lock_fd = -1;
         uid_t uid;
         int r;
@@ -483,26 +574,23 @@ int dynamic_user_current(DynamicUser *d, uid_t *ret) {
 
         /* Get the currently assigned UID for the user, if there's any. This simply pops the data from the storage socket, and pushes it back in right-away. */
 
-        if (lockf(d->storage_socket[0], F_LOCK, 0) < 0)
-                return -errno;
+        r = lockfp(d->storage_socket[0], &storage_socket0_lock);
+        if (r < 0)
+                return r;
 
         r = dynamic_user_pop(d, &uid, &lock_fd);
         if (r < 0)
-                goto finish;
+                return r;
 
         r = dynamic_user_push(d, uid, lock_fd);
         if (r < 0)
-                goto finish;
+                return r;
 
         *ret = uid;
-        r = 0;
-
-finish:
-        (void) lockf(d->storage_socket[0], F_ULOCK, 0);
-        return r;
+        return 0;
 }
 
-DynamicUser* dynamic_user_ref(DynamicUser *d) {
+static DynamicUser* dynamic_user_ref(DynamicUser *d) {
         if (!d)
                 return NULL;
 
@@ -512,7 +600,7 @@ DynamicUser* dynamic_user_ref(DynamicUser *d) {
         return d;
 }
 
-DynamicUser* dynamic_user_unref(DynamicUser *d) {
+static DynamicUser* dynamic_user_unref(DynamicUser *d) {
         if (!d)
                 return NULL;
 
@@ -527,6 +615,7 @@ DynamicUser* dynamic_user_unref(DynamicUser *d) {
 }
 
 static int dynamic_user_close(DynamicUser *d) {
+        _cleanup_(unlockfp) int storage_socket0_lock = -1;
         _cleanup_close_ int lock_fd = -1;
         uid_t uid;
         int r;
@@ -534,28 +623,23 @@ static int dynamic_user_close(DynamicUser *d) {
         /* Release the user ID, by releasing the lock on it, and emptying the storage socket. After this the user is
          * unrealized again, much like it was after it the DynamicUser object was first allocated. */
 
-        if (lockf(d->storage_socket[0], F_LOCK, 0) < 0)
-                return -errno;
+        r = lockfp(d->storage_socket[0], &storage_socket0_lock);
+        if (r < 0)
+                return r;
 
         r = dynamic_user_pop(d, &uid, &lock_fd);
-        if (r == -EAGAIN) {
+        if (r == -EAGAIN)
                 /* User wasn't realized yet, nothing to do. */
-                r = 0;
-                goto finish;
-        }
+                return 0;
         if (r < 0)
-                goto finish;
+                return r;
 
         /* This dynamic user was realized and dynamically allocated. In this case, let's remove the lock file. */
         unlink_uid_lock(lock_fd, uid, d->name);
-        r = 1;
-
-finish:
-        (void) lockf(d->storage_socket[0], F_ULOCK, 0);
-        return r;
+        return 1;
 }
 
-DynamicUser* dynamic_user_destroy(DynamicUser *d) {
+static DynamicUser* dynamic_user_destroy(DynamicUser *d) {
         if (!d)
                 return NULL;
 
@@ -660,7 +744,7 @@ void dynamic_user_vacuum(Manager *m, bool close_user) {
 }
 
 int dynamic_user_lookup_uid(Manager *m, uid_t uid, char **ret) {
-        char lock_path[strlen("/run/systemd/dynamic-uid/") + DECIMAL_STR_MAX(uid_t) + 1];
+        char lock_path[STRLEN("/run/systemd/dynamic-uid/") + DECIMAL_STR_MAX(uid_t) + 1];
         _cleanup_free_ char *user = NULL;
         uid_t check_uid;
         int r;
@@ -749,7 +833,7 @@ int dynamic_creds_acquire(DynamicCreds *creds, Manager *m, const char *user, con
         return 0;
 }
 
-int dynamic_creds_realize(DynamicCreds *creds, uid_t *uid, gid_t *gid) {
+int dynamic_creds_realize(DynamicCreds *creds, char **suggested_paths, uid_t *uid, gid_t *gid) {
         uid_t u = UID_INVALID;
         gid_t g = GID_INVALID;
         int r;
@@ -761,21 +845,19 @@ int dynamic_creds_realize(DynamicCreds *creds, uid_t *uid, gid_t *gid) {
         /* Realize both the referenced user and group */
 
         if (creds->user) {
-                r = dynamic_user_realize(creds->user, &u);
+                r = dynamic_user_realize(creds->user, suggested_paths, &u, &g, true);
                 if (r < 0)
                         return r;
         }
 
         if (creds->group && creds->group != creds->user) {
-                r = dynamic_user_realize(creds->group, &g);
+                r = dynamic_user_realize(creds->group, suggested_paths, NULL, &g, false);
                 if (r < 0)
                         return r;
-        } else
-                g = u;
+        }
 
         *uid = u;
         *gid = g;
-
         return 0;
 }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #  -*- Mode: python; coding: utf-8; indent-tabs-mode: nil -*- */
+# SPDX-License-Identifier: LGPL-2.1+
 #
 #  This file is part of systemd.
 #
@@ -22,7 +23,7 @@
 import collections
 import sys
 import re
-from xml_helper import *
+from xml_helper import xml_parse, xml_print, tree
 
 MDASH = ' — ' if sys.version_info.major >= 3 else ' -- '
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #  -*- Mode: python; coding: utf-8; indent-tabs-mode: nil -*- */
+# SPDX-License-Identifier: LGPL-2.1+
 #
 #  This file is part of systemd.
 #
@@ -21,7 +22,7 @@
 import sys
 import collections
 import re
-from xml_helper import *
+from xml_helper import xml_parse, xml_print, tree
 from copy import deepcopy
 
 TEMPLATE = '''\

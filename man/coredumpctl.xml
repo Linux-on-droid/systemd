@@ -3,6 +3,8 @@
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 
 <!--
+  SPDX-License-Identifier: LGPL-2.1+
+
   This file is part of systemd.
 
   Copyright 2012 Zbigniew Jędrzejewski-Szmek
@@ -142,7 +144,7 @@
         <term><option>-q</option></term>
         <term><option>--quiet</option></term>
 
-        <listitem><para>Suppresses info messages about lack
+        <listitem><para>Suppresses informational messages about lack
         of access to journal files and possible in-flight coredumps.
         </para></listitem>
       </varlistentry>
@@ -193,7 +195,7 @@
           <varlistentry>
             <term>COREFILE</term>
             <listitem><para>Information whether the coredump was stored, and whether
-            it is still accessible: <literal>none</literal> means the the core was
+            it is still accessible: <literal>none</literal> means the core was
             not stored, <literal>-</literal> means that it was not available (for
             example because the process was not terminated by a signal),
             <literal>present</literal> means that the core file is accessible by the

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -19,13 +20,13 @@
 
 #include "selinux-access.h"
 
-#ifdef HAVE_SELINUX
+#if HAVE_SELINUX
 
 #include <errno.h>
 #include <selinux/avc.h>
 #include <selinux/selinux.h>
 #include <stdio.h>
-#ifdef HAVE_AUDIT
+#if HAVE_AUDIT
 #include <libaudit.h>
 #endif
 
@@ -112,7 +113,7 @@ _printf_(2, 3) static int log_callback(int type, const char *fmt, ...) {
         va_list ap;
         const char *fmt2;
 
-#ifdef HAVE_AUDIT
+#if HAVE_AUDIT
         int fd;
 
         fd = get_audit_fd();

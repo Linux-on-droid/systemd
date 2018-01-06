@@ -1,4 +1,23 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 basic_sources_plain = files('''
+        MurmurHash2.c
+        MurmurHash2.h
         af-list.c
         af-list.h
         alloc-util.c
@@ -16,6 +35,8 @@ basic_sources_plain = files('''
         bitmap.c
         bitmap.h
         blkid-util.h
+        bpf-program.c
+        bpf-program.h
         btrfs-ctree.h
         btrfs-util.c
         btrfs-util.h
@@ -24,10 +45,10 @@ basic_sources_plain = files('''
         bus-label.h
         calendarspec.c
         calendarspec.h
-        capability-util.c
-        capability-util.h
         cap-list.c
         cap-list.h
+        capability-util.c
+        capability-util.h
         cgroup-util.c
         cgroup-util.h
         chattr-util.c
@@ -40,6 +61,8 @@ basic_sources_plain = files('''
         copy.h
         cpu-set-util.c
         cpu-set-util.h
+        crypt-util.c
+        crypt-util.h
         def.h
         device-nodes.c
         device-nodes.h
@@ -61,10 +84,10 @@ basic_sources_plain = files('''
         extract-word.h
         fd-util.c
         fd-util.h
-        fileio.c
-        fileio.h
         fileio-label.c
         fileio-label.h
+        fileio.c
+        fileio.h
         format-util.h
         fs-util.c
         fs-util.h
@@ -82,9 +105,9 @@ basic_sources_plain = files('''
         hostname-util.h
         in-addr-util.c
         in-addr-util.h
-        ioprio.h
         io-util.c
         io-util.h
+        ioprio.h
         journal-importer.c
         journal-importer.h
         khash.c
@@ -106,13 +129,12 @@ basic_sources_plain = files('''
         mempool.c
         mempool.h
         missing_syscall.h
+        mkdir-label.c
         mkdir.c
         mkdir.h
-        mkdir-label.c
+        module-util.h
         mount-util.c
         mount-util.h
-        MurmurHash2.c
-        MurmurHash2.h
         nss-util.h
         ordered-set.c
         ordered-set.h
@@ -138,9 +160,12 @@ basic_sources_plain = files('''
         rlimit-util.h
         rm-rf.c
         rm-rf.h
+        securebits-util.c
+        securebits-util.h
         securebits.h
         selinux-util.c
         selinux-util.h
+        set.c
         set.h
         sigbus.c
         sigbus.h
@@ -178,6 +203,8 @@ basic_sources_plain = files('''
         unaligned.h
         unit-name.c
         unit-name.h
+        unit-def.c
+        unit-def.h
         user-util.c
         user-util.h
         utf8.c

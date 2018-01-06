@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -38,7 +39,7 @@ static bool arg_path = false;
 
 static void help(void) {
         printf("%s [OPTIONS...] [NAME...]\n\n"
-               "Show system and user paths.\n\n"
+               "Escape strings for usage in systemd unit names.\n\n"
                "  -h --help               Show this help\n"
                "     --version            Show package version\n"
                "     --suffix=SUFFIX      Unit suffix to append to escaped strings\n"

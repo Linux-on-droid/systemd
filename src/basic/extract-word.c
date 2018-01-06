@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -152,7 +153,7 @@ int extract_first_word(const char **p, char **ret, const char *separators, Extra
                         for (;; (*p)++, c = **p) {
                                 if (c == 0)
                                         goto finish_force_terminate;
-                                else if ((c == '\'' || c == '"') && (flags & EXTRACT_QUOTES)) {
+                                else if (IN_SET(c, '\'', '"') && (flags & EXTRACT_QUOTES)) {
                                         quote = c;
                                         break;
                                 } else if (c == '\\' && !(flags & EXTRACT_RETAIN_ESCAPE)) {

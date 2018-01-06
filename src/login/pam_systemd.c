@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -41,10 +42,12 @@
 #include "login-util.h"
 #include "macro.h"
 #include "parse-util.h"
+#include "process-util.h"
 #include "socket-util.h"
 #include "strv.h"
 #include "terminal-util.h"
 #include "util.h"
+#include "path-util.h"
 
 static int parse_argv(
                 pam_handle_t *handle,
@@ -334,7 +337,9 @@ _public_ PAM_EXTERN int pam_sm_open_session(
                 type ="tty";
                 class = "user";
                 tty = NULL;
-        }
+        } else
+                /* Chop off leading /dev prefix that some clients specify, but others do not. */
+                tty = skip_dev_prefix(tty);
 
         /* If this fails vtnr will be 0, that's intended */
         if (!isempty(cvtnr))
@@ -372,7 +377,7 @@ _public_ PAM_EXTERN int pam_sm_open_session(
         if (debug)
                 pam_syslog(handle, LOG_DEBUG, "Asking logind to create session: "
                            "uid="UID_FMT" pid="PID_FMT" service=%s type=%s class=%s desktop=%s seat=%s vtnr=%"PRIu32" tty=%s display=%s remote=%s remote_user=%s remote_host=%s",
-                           pw->pw_uid, getpid(),
+                           pw->pw_uid, getpid_cached(),
                            strempty(service),
                            type, class, strempty(desktop),
                            strempty(seat), vtnr, strempty(tty), strempty(display),
@@ -387,7 +392,7 @@ _public_ PAM_EXTERN int pam_sm_open_session(
                                &reply,
                                "uusssssussbssa(sv)",
                                (uint32_t) pw->pw_uid,
-                               (uint32_t) getpid(),
+                               (uint32_t) getpid_cached(),
                                service,
                                type,
                                class,

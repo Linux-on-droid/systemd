@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -24,6 +25,8 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
+#include "alloc-util.h"
+#include "def.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "hostname-util.h"
@@ -90,9 +93,7 @@ static bool hostname_valid_char(char c) {
                 (c >= 'a' && c <= 'z') ||
                 (c >= 'A' && c <= 'Z') ||
                 (c >= '0' && c <= '9') ||
-                c == '-' ||
-                c == '_' ||
-                c == '.';
+                IN_SET(c, '-', '_', '.');
 }
 
 /**
@@ -196,8 +197,11 @@ bool is_gateway_hostname(const char *hostname) {
          * synthetic "gateway" host. */
 
         return
-                strcaseeq(hostname, "gateway") ||
-                strcaseeq(hostname, "gateway.");
+                strcaseeq(hostname, "_gateway") || strcaseeq(hostname, "_gateway.")
+#if ENABLE_COMPAT_GATEWAY_HOSTNAME
+                || strcaseeq(hostname, "gateway") || strcaseeq(hostname, "gateway.")
+#endif
+                ;
 }
 
 int sethostname_idempotent(const char *s) {
@@ -217,35 +221,87 @@ int sethostname_idempotent(const char *s) {
         return 1;
 }
 
-int read_hostname_config(const char *path, char **hostname) {
-        _cleanup_fclose_ FILE *f = NULL;
-        char l[LINE_MAX];
-        char *name = NULL;
+int shorten_overlong(const char *s, char **ret) {
+        char *h, *p;
 
-        assert(path);
-        assert(hostname);
+        /* Shorten an overlong name to HOST_NAME_MAX or to the first dot,
+         * whatever comes earlier. */
+
+        assert(s);
+
+        h = strdup(s);
+        if (!h)
+                return -ENOMEM;
+
+        if (hostname_is_valid(h, false)) {
+                *ret = h;
+                return 0;
+        }
+
+        p = strchr(h, '.');
+        if (p)
+                *p = 0;
+
+        strshorten(h, HOST_NAME_MAX);
+
+        if (!hostname_is_valid(h, false)) {
+                free(h);
+                return -EDOM;
+        }
+
+        *ret = h;
+        return 1;
+}
+
+int read_etc_hostname_stream(FILE *f, char **ret) {
+        int r;
+
+        assert(f);
+        assert(ret);
+
+        for (;;) {
+                _cleanup_free_ char *line = NULL;
+                char *p;
+
+                r = read_line(f, LONG_LINE_MAX, &line);
+                if (r < 0)
+                        return r;
+                if (r == 0) /* EOF without any hostname? the file is empty, let's treat that exactly like no file at all: ENOENT */
+                        return -ENOENT;
+
+                p = strstrip(line);
+
+                /* File may have empty lines or comments, ignore them */
+                if (!IN_SET(*p, '\0', '#')) {
+                        char *copy;
+
+                        hostname_cleanup(p); /* normalize the hostname */
+
+                        if (!hostname_is_valid(p, true)) /* check that the hostname we return is valid */
+                                return -EBADMSG;
+
+                        copy = strdup(p);
+                        if (!copy)
+                                return -ENOMEM;
+
+                        *ret = copy;
+                        return 0;
+                }
+        }
+}
+
+int read_etc_hostname(const char *path, char **ret) {
+        _cleanup_fclose_ FILE *f = NULL;
+
+        assert(ret);
+
+        if (!path)
+                path = "/etc/hostname";
 
         f = fopen(path, "re");
         if (!f)
                 return -errno;
 
-        /* may have comments, ignore them */
-        FOREACH_LINE(l, f, return -errno) {
-                truncate_nl(l);
-                if (l[0] != '\0' && l[0] != '#') {
-                        /* found line with value */
-                        name = hostname_cleanup(l);
-                        name = strdup(name);
-                        if (!name)
-                                return -ENOMEM;
-                        break;
-                }
-        }
+        return read_etc_hostname_stream(f, ret);
 
-        if (!name)
-                /* no non-empty line found */
-                return -ENOENT;
-
-        *hostname = name;
-        return 0;
 }

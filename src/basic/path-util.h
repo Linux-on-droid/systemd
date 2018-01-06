@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -30,7 +31,7 @@
 #define DEFAULT_PATH_NORMAL "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 #define DEFAULT_PATH_SPLIT_USR DEFAULT_PATH_NORMAL ":/sbin:/bin"
 
-#ifdef HAVE_SPLIT_USR
+#if HAVE_SPLIT_USR
 #  define DEFAULT_PATH DEFAULT_PATH_SPLIT_USR
 #else
 #  define DEFAULT_PATH DEFAULT_PATH_NORMAL
@@ -129,9 +130,10 @@ char *prefix_root(const char *root, const char *path);
 int parse_path_argument_and_warn(const char *path, bool suppress_root, char **arg);
 
 char* dirname_malloc(const char *path);
+const char *last_path_component(const char *path);
 
 bool filename_is_valid(const char *p) _pure_;
-bool path_is_safe(const char *p) _pure_;
+bool path_is_normalized(const char *p) _pure_;
 
 char *file_in_same_dir(const char *path, const char *filename);
 
@@ -143,3 +145,13 @@ bool is_deviceallow_pattern(const char *path);
 int systemd_installation_has_version(const char *root, unsigned minimal_version);
 
 bool dot_or_dot_dot(const char *path);
+
+static inline const char *skip_dev_prefix(const char *p) {
+        const char *e;
+
+        /* Drop any /dev prefix if there is any */
+
+        e = path_startswith(p, "/dev/");
+
+        return e ?: p;
+}

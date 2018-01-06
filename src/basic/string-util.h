@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -120,7 +121,7 @@ char *strjoin_real(const char *x, ...) _sentinel_;
         ({                                                              \
                 const char *_appendees_[] = { a, __VA_ARGS__ };         \
                 char *_d_, *_p_;                                        \
-                int _len_ = 0;                                          \
+                size_t _len_ = 0;                                          \
                 unsigned _i_;                                           \
                 for (_i_ = 0; _i_ < ELEMENTSOF(_appendees_) && _appendees_[_i_]; _i_++) \
                         _len_ += strlen(_appendees_[_i_]);              \
@@ -133,7 +134,19 @@ char *strjoin_real(const char *x, ...) _sentinel_;
 
 char *strstrip(char *s);
 char *delete_chars(char *s, const char *bad);
+char *delete_trailing_chars(char *s, const char *bad);
 char *truncate_nl(char *s);
+
+static inline char *skip_leading_chars(const char *s, const char *bad) {
+
+        if (!s)
+                return NULL;
+
+        if (!bad)
+                bad = WHITESPACE;
+
+        return (char*) s + strspn(s, bad);
+}
 
 char ascii_tolower(char x);
 char *ascii_strlower(char *s);
@@ -158,7 +171,7 @@ bool string_has_cc(const char *p, const char *ok) _pure_;
 char *ellipsize_mem(const char *s, size_t old_length_bytes, size_t new_length_columns, unsigned percent);
 char *ellipsize(const char *s, size_t length, unsigned percent);
 
-bool nulstr_contains(const char*nulstr, const char *needle);
+bool nulstr_contains(const char *nulstr, const char *needle);
 
 char* strshorten(char *s, size_t l);
 
@@ -166,7 +179,9 @@ char *strreplace(const char *text, const char *old_string, const char *new_strin
 
 char *strip_tab_ansi(char **p, size_t *l);
 
-char *strextend(char **x, ...) _sentinel_;
+char *strextend_with_separator(char **x, const char *separator, ...) _sentinel_;
+
+#define strextend(x, ...) strextend_with_separator(x, NULL, __VA_ARGS__)
 
 char *strrep(const char *s, unsigned n);
 
@@ -189,7 +204,7 @@ static inline void *memmem_safe(const void *haystack, size_t haystacklen, const 
         return memmem(haystack, haystacklen, needle, needlelen);
 }
 
-#if !HAVE_DECL_EXPLICIT_BZERO
+#if !HAVE_EXPLICIT_BZERO
 void explicit_bzero(void *p, size_t l);
 #endif
 
@@ -200,3 +215,10 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(char *, string_free_erase);
 #define _cleanup_string_free_erase_ _cleanup_(string_free_erasep)
 
 bool string_is_safe(const char *p) _pure_;
+
+static inline size_t strlen_ptr(const char *s) {
+        if (!s)
+                return 0;
+
+        return strlen(s);
+}

@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
+# Copyright 2017 Zbigniew Jędrzejewski-Szmek
+#
+# systemd is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# systemd is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with systemd; If not, see <http://www.gnu.org/licenses/>.
+
 awkscript = 'test-hashmap-ordered.awk'
 test_hashmap_ordered_c = custom_target(
         'test-hashmap-ordered.c',
@@ -37,12 +54,17 @@ test_dlopen_c = files('test-dlopen.c')
 
 ############################################################
 
+test_systemd_tmpfiles_py = find_program('test-systemd-tmpfiles.py')
+
+############################################################
+
 tests += [
         [['src/test/test-device-nodes.c'],
          [],
          []],
 
-        [['src/test/test-engine.c'],
+        [['src/test/test-engine.c',
+          'src/test/test-helper.c'],
          [libcore,
           libudev,
           libsystemd_internal],
@@ -105,7 +127,8 @@ tests += [
          [],
          'ENABLE_EFI'],
 
-        [['src/test/test-unit-name.c'],
+        [['src/test/test-unit-name.c',
+          'src/test/test-helper.c'],
          [libcore,
           libshared],
          [threads,
@@ -115,7 +138,8 @@ tests += [
           libmount,
           libblkid]],
 
-        [['src/test/test-unit-file.c'],
+        [['src/test/test-unit-file.c',
+          'src/test/test-helper.c'],
          [libcore,
           libshared],
          [threads,
@@ -135,7 +159,8 @@ tests += [
 
         [['src/test/test-async.c'],
          [],
-         []],
+         [],
+         '', 'timeout=120'],
 
         [['src/test/test-locale-util.c'],
          [],
@@ -229,6 +254,10 @@ tests += [
          [],
          []],
 
+        [['src/test/test-specifier.c'],
+         [],
+         []],
+
         [['src/test/test-string-util.c'],
          [],
          []],
@@ -271,6 +300,10 @@ tests += [
          [libcap]],
 
         [['src/test/test-socket-util.c'],
+         [],
+         []],
+
+        [['src/test/test-in-addr-util.c'],
          [],
          []],
 
@@ -332,6 +365,17 @@ tests += [
          [libbasic],
          []],
 
+        [['src/test/test-bpf.c',
+          'src/test/test-helper.c'],
+         [libcore,
+          libshared],
+         [libmount,
+          threads,
+          librt,
+          libseccomp,
+          libselinux,
+          libblkid]],
+
         [['src/test/test-hashmap.c',
           'src/test/test-hashmap-plain.c',
           test_hashmap_ordered_c],
@@ -385,7 +429,7 @@ tests += [
          [],
          []],
 
-        [['src/test/test-time.c'],
+        [['src/test/test-time-util.c'],
          [],
          []],
 
@@ -456,7 +500,8 @@ tests += [
          '', 'manual'],
 
 
-        [['src/test/test-cgroup-mask.c'],
+        [['src/test/test-cgroup-mask.c',
+          'src/test/test-helper.c'],
          [libcore,
           libshared],
          [threads,
@@ -486,7 +531,8 @@ tests += [
          [],
          []],
 
-        [['src/test/test-path.c'],
+        [['src/test/test-path.c',
+          'src/test/test-helper.c'],
          [libcore,
           libshared],
          [threads,
@@ -496,7 +542,8 @@ tests += [
           libmount,
           libblkid]],
 
-        [['src/test/test-execute.c'],
+        [['src/test/test-execute.c',
+          'src/test/test-helper.c'],
          [libcore,
           libshared],
          [threads,
@@ -524,7 +571,8 @@ tests += [
          [],
          []],
 
-        [['src/test/test-sched-prio.c'],
+        [['src/test/test-sched-prio.c',
+          'src/test/test-helper.c'],
          [libcore,
           libshared],
          [threads,
@@ -625,7 +673,8 @@ tests += [
           libshared],
          [threads,
           libxz,
-          liblz4]],
+          liblz4],
+         '', 'timeout=360'],
 
         [['src/journal/test-journal-stream.c'],
          [libjournal_core,
@@ -756,21 +805,10 @@ tests += [
          [],
          []],
 
-        [['src/libsystemd/sd-bus/test-bus-kernel.c'],
-         [],
-         []],
-
-        [['src/libsystemd/sd-bus/test-bus-kernel-bloom.c'],
-         [],
-         []],
-
         [['src/libsystemd/sd-bus/test-bus-benchmark.c'],
          [],
-         [threads]],
-
-        [['src/libsystemd/sd-bus/test-bus-zero-copy.c'],
-         [],
-         []],
+         [threads],
+         '', 'manual'],
 
         [['src/libsystemd/sd-bus/test-bus-introspect.c'],
          [],

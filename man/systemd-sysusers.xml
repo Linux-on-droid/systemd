@@ -3,6 +3,8 @@
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 
 <!--
+  SPDX-License-Identifier: LGPL-2.1+
+
   This file is part of systemd.
 
   Copyright 2014 Lennart Poettering
@@ -74,7 +76,7 @@
     specified in
     <citerefentry><refentrytitle>sysusers.d</refentrytitle><manvolnum>5</manvolnum></citerefentry>
     are searched for a matching file. If the string
-    <filename>-</filename> is specified as filename, entries from the
+    <literal>-</literal> is specified instead of a filename, entries from the
     standard input of the process are read.</para>
   </refsect1>
 

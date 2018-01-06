@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -58,7 +59,7 @@ typedef struct Set Set;                       /* Stores just keys */
 typedef struct {
         unsigned idx;         /* index of an entry to be iterated next */
         const void *next_key; /* expected value of that entry's key pointer */
-#ifdef ENABLE_DEBUG_HASHMAP
+#if ENABLE_DEBUG_HASHMAP
         unsigned put_count;   /* hashmap's put_count recorded at start of iteration */
         unsigned rem_count;   /* hashmap's rem_count in previous iteration */
         unsigned prev_idx;    /* idx in previous iteration */
@@ -89,7 +90,7 @@ typedef struct {
                 (Hashmap*)(h), \
                 (void)0)
 
-#ifdef ENABLE_DEBUG_HASHMAP
+#if ENABLE_DEBUG_HASHMAP
 # define HASHMAP_DEBUG_PARAMS , const char *func, const char *file, int line
 # define HASHMAP_DEBUG_SRC_ARGS   , __func__, __FILE__, __LINE__
 # define HASHMAP_DEBUG_PASS_ARGS   , func, file, line
@@ -327,6 +328,29 @@ static inline void *hashmap_first(Hashmap *h) {
 static inline void *ordered_hashmap_first(OrderedHashmap *h) {
         return internal_hashmap_first(HASHMAP_BASE(h));
 }
+
+#define hashmap_clear_with_destructor(_s, _f)                   \
+        ({                                                      \
+                void *_item;                                    \
+                while ((_item = hashmap_steal_first(_s)))       \
+                        _f(_item);                              \
+        })
+#define hashmap_free_with_destructor(_s, _f)                    \
+        ({                                                      \
+                hashmap_clear_with_destructor(_s, _f);          \
+                hashmap_free(_s);                               \
+        })
+#define ordered_hashmap_clear_with_destructor(_s, _f)                   \
+        ({                                                              \
+                void *_item;                                            \
+                while ((_item = ordered_hashmap_steal_first(_s)))       \
+                        _f(_item);                                      \
+        })
+#define ordered_hashmap_free_with_destructor(_s, _f)                    \
+        ({                                                              \
+                ordered_hashmap_clear_with_destructor(_s, _f);          \
+                ordered_hashmap_free(_s);                               \
+        })
 
 /* no hashmap_next */
 void *ordered_hashmap_next(OrderedHashmap *h, const void *key);

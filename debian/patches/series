@@ -1,9 +1,5 @@
-test-condition-don-t-assume-that-all-non-root-users-are-n.patch
-tests-ignore-router-state-in-networkd-test-6390.patch
-seccomp-arm64-x32-do-not-have-_sysctl.patch
-seccomp-arm64-does-not-have-mmap2.patch
-test-seccomp-arm64-does-not-have-access-and-poll.patch
-shared-Add-a-linker-script-so-that-all-functions-are-tagg.patch
+cryptsetup-generator-Don-t-mistake-NULL-input-as-OOM-7688.patch
+analyze-use-normal-bus-connection-for-plot-verb-7685.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
@@ -27,6 +23,5 @@ debian/Revert-core-set-RLIMIT_CORE-to-unlimited-by-default.patch
 debian/Revert-core-enable-TasksMax-for-all-services-by-default-a.patch
 debian/Let-graphical-session-pre.target-be-manually-started.patch
 debian/Add-env-variable-for-machine-ID-path.patch
-debian/Mark-test-timesync-as-manual.patch
 debian/Avoid-requiring-a-kvm-system-group.patch
-debian/Revert-units-Tell-login-to-preserve-environment.patch
+debian/Revert-udev-rules-Permission-changes-for-dev-dri-renderD.patch

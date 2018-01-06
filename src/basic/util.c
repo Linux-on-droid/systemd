@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -34,9 +35,11 @@
 #include <unistd.h>
 
 #include "alloc-util.h"
+#include "btrfs-util.h"
 #include "build.h"
 #include "cgroup-util.h"
 #include "def.h"
+#include "device-nodes.h"
 #include "dirent-util.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -102,7 +105,7 @@ int socket_from_display(const char *display, char **path) {
 
         k = strspn(display+1, "0123456789");
 
-        f = new(char, strlen("/tmp/.X11-unix/X") + k + 1);
+        f = new(char, STRLEN("/tmp/.X11-unix/X") + k + 1);
         if (!f)
                 return -ENOMEM;
 
@@ -116,75 +119,51 @@ int socket_from_display(const char *display, char **path) {
 }
 
 int block_get_whole_disk(dev_t d, dev_t *ret) {
-        char *p, *s;
+        char p[SYS_BLOCK_PATH_MAX("/partition")];
+        _cleanup_free_ char *s = NULL;
         int r;
         unsigned n, m;
 
         assert(ret);
 
         /* If it has a queue this is good enough for us */
-        if (asprintf(&p, "/sys/dev/block/%u:%u/queue", major(d), minor(d)) < 0)
-                return -ENOMEM;
-
-        r = access(p, F_OK);
-        free(p);
-
-        if (r >= 0) {
+        xsprintf_sys_block_path(p, "/queue", d);
+        if (access(p, F_OK) >= 0) {
                 *ret = d;
                 return 0;
         }
 
         /* If it is a partition find the originating device */
-        if (asprintf(&p, "/sys/dev/block/%u:%u/partition", major(d), minor(d)) < 0)
-                return -ENOMEM;
-
-        r = access(p, F_OK);
-        free(p);
-
-        if (r < 0)
+        xsprintf_sys_block_path(p, "/partition", d);
+        if (access(p, F_OK) < 0)
                 return -ENOENT;
 
         /* Get parent dev_t */
-        if (asprintf(&p, "/sys/dev/block/%u:%u/../dev", major(d), minor(d)) < 0)
-                return -ENOMEM;
-
+        xsprintf_sys_block_path(p, "/../dev", d);
         r = read_one_line_file(p, &s);
-        free(p);
-
         if (r < 0)
                 return r;
 
         r = sscanf(s, "%u:%u", &m, &n);
-        free(s);
-
         if (r != 2)
                 return -EINVAL;
 
         /* Only return this if it is really good enough for us. */
-        if (asprintf(&p, "/sys/dev/block/%u:%u/queue", m, n) < 0)
-                return -ENOMEM;
+        xsprintf_sys_block_path(p, "/queue", makedev(m, n));
+        if (access(p, F_OK) < 0)
+                return -ENOENT;
 
-        r = access(p, F_OK);
-        free(p);
-
-        if (r >= 0) {
-                *ret = makedev(m, n);
-                return 0;
-        }
-
-        return -ENOENT;
+        *ret = makedev(m, n);
+        return 0;
 }
 
 bool kexec_loaded(void) {
-       bool loaded = false;
-       char *s;
+       _cleanup_free_ char *s = NULL;
 
-       if (read_one_line_file("/sys/kernel/kexec_loaded", &s) >= 0) {
-               if (s[0] == '1')
-                       loaded = true;
-               free(s);
-       }
-       return loaded;
+       if (read_one_line_file("/sys/kernel/kexec_loaded", &s) < 0)
+               return false;
+
+       return s[0] == '1';
 }
 
 int prot_from_flags(int flags) {
@@ -219,7 +198,7 @@ int fork_agent(pid_t *pid, const int except[], unsigned n_except, const char *pa
         /* Spawns a temporary TTY agent, making sure it goes away when
          * we go away */
 
-        parent_pid = getpid();
+        parent_pid = getpid_cached();
 
         /* First we temporarily block all signals, so that the new
          * child has them blocked initially. This way, we can be sure
@@ -377,7 +356,7 @@ int on_ac_power(void) {
 
                 device = openat(dirfd(d), de->d_name, O_DIRECTORY|O_RDONLY|O_CLOEXEC|O_NOCTTY);
                 if (device < 0) {
-                        if (errno == ENOENT || errno == ENOTDIR)
+                        if (IN_SET(errno, ENOENT, ENOTDIR))
                                 continue;
 
                         return -errno;
@@ -718,4 +697,133 @@ int version(void) {
         puts(PACKAGE_STRING "\n"
              SYSTEMD_FEATURES);
         return 0;
+}
+
+int get_block_device(const char *path, dev_t *dev) {
+        struct stat st;
+        struct statfs sfs;
+
+        assert(path);
+        assert(dev);
+
+        /* Get's the block device directly backing a file system. If
+         * the block device is encrypted, returns the device mapper
+         * block device. */
+
+        if (lstat(path, &st))
+                return -errno;
+
+        if (major(st.st_dev) != 0) {
+                *dev = st.st_dev;
+                return 1;
+        }
+
+        if (statfs(path, &sfs) < 0)
+                return -errno;
+
+        if (F_TYPE_EQUAL(sfs.f_type, BTRFS_SUPER_MAGIC))
+                return btrfs_get_block_device(path, dev);
+
+        return 0;
+}
+
+int get_block_device_harder(const char *path, dev_t *dev) {
+        _cleanup_closedir_ DIR *d = NULL;
+        _cleanup_free_ char *t = NULL;
+        char p[SYS_BLOCK_PATH_MAX("/slaves")];
+        struct dirent *de, *found = NULL;
+        const char *q;
+        unsigned maj, min;
+        dev_t dt;
+        int r;
+
+        assert(path);
+        assert(dev);
+
+        /* Gets the backing block device for a file system, and
+         * handles LUKS encrypted file systems, looking for its
+         * immediate parent, if there is one. */
+
+        r = get_block_device(path, &dt);
+        if (r <= 0)
+                return r;
+
+        xsprintf_sys_block_path(p, "/slaves", dt);
+        d = opendir(p);
+        if (!d) {
+                if (errno == ENOENT)
+                        goto fallback;
+
+                return -errno;
+        }
+
+        FOREACH_DIRENT_ALL(de, d, return -errno) {
+
+                if (dot_or_dot_dot(de->d_name))
+                        continue;
+
+                if (!IN_SET(de->d_type, DT_LNK, DT_UNKNOWN))
+                        continue;
+
+                if (found) {
+                        _cleanup_free_ char *u = NULL, *v = NULL, *a = NULL, *b = NULL;
+
+                        /* We found a device backed by multiple other devices. We don't really support automatic
+                         * discovery on such setups, with the exception of dm-verity partitions. In this case there are
+                         * two backing devices: the data partition and the hash partition. We are fine with such
+                         * setups, however, only if both partitions are on the same physical device. Hence, let's
+                         * verify this. */
+
+                        u = strjoin(p, "/", de->d_name, "/../dev");
+                        if (!u)
+                                return -ENOMEM;
+
+                        v = strjoin(p, "/", found->d_name, "/../dev");
+                        if (!v)
+                                return -ENOMEM;
+
+                        r = read_one_line_file(u, &a);
+                        if (r < 0) {
+                                log_debug_errno(r, "Failed to read %s: %m", u);
+                                goto fallback;
+                        }
+
+                        r = read_one_line_file(v, &b);
+                        if (r < 0) {
+                                log_debug_errno(r, "Failed to read %s: %m", v);
+                                goto fallback;
+                        }
+
+                        /* Check if the parent device is the same. If not, then the two backing devices are on
+                         * different physical devices, and we don't support that. */
+                        if (!streq(a, b))
+                                goto fallback;
+                }
+
+                found = de;
+        }
+
+        if (!found)
+                goto fallback;
+
+        q = strjoina(p, "/", found->d_name, "/dev");
+
+        r = read_one_line_file(q, &t);
+        if (r == -ENOENT)
+                goto fallback;
+        if (r < 0)
+                return r;
+
+        if (sscanf(t, "%u:%u", &maj, &min) != 2)
+                return -EINVAL;
+
+        if (maj == 0)
+                goto fallback;
+
+        *dev = makedev(maj, min);
+        return 1;
+
+fallback:
+        *dev = dt;
+        return 1;
 }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -54,7 +55,7 @@ static int get_variable(const char *b, char **r) {
         return 1;
 }
 
-char *replace_var(const char *text, char *(*lookup)(const char *variable, void*userdata), void *userdata) {
+char *replace_var(const char *text, char *(*lookup)(const char *variable, void *userdata), void *userdata) {
         char *r, *t;
         const char *f;
         size_t l;

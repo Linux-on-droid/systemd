@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -51,7 +52,7 @@ static inline int dns_name_parent(const char **name) {
         return dns_label_unescape(name, NULL, DNS_LABEL_MAX);
 }
 
-#if defined(HAVE_LIBIDN)
+#if HAVE_LIBIDN
 int dns_label_apply_idna(const char *encoded, size_t encoded_size, char *decoded, size_t decoded_max);
 int dns_label_undo_idna(const char *encoded, size_t encoded_size, char *decoded, size_t decoded_max);
 #endif
@@ -95,6 +96,7 @@ bool dns_name_is_single_label(const char *name);
 int dns_name_to_wire_format(const char *domain, uint8_t *buffer, size_t len, bool canonical);
 
 bool dns_srv_type_is_valid(const char *name);
+bool dnssd_srv_type_is_valid(const char *name);
 bool dns_service_name_is_valid(const char *name);
 
 int dns_service_join(const char *name, const char *type, const char *domain, char **ret);

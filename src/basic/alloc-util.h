@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -36,6 +37,8 @@
 
 #define newdup(t, p, n) ((t*) memdup_multiply(p, sizeof(t), (n)))
 
+#define newdup_suffix0(t, p, n) ((t*) memdup_suffix0_multiply(p, sizeof(t), (n)))
+
 #define malloc0(n) (calloc(1, (n)))
 
 static inline void *mfree(void *memory) {
@@ -52,6 +55,7 @@ static inline void *mfree(void *memory) {
         })
 
 void* memdup(const void *p, size_t l) _alloc_(2);
+void* memdup_suffix0(const void *p, size_t l) _alloc_(2);
 
 static inline void freep(void *p) {
         free(*(void**) p);
@@ -82,6 +86,13 @@ _alloc_(2, 3) static inline void *memdup_multiply(const void *p, size_t size, si
                 return NULL;
 
         return memdup(p, size * need);
+}
+
+_alloc_(2, 3) static inline void *memdup_suffix0_multiply(const void *p, size_t size, size_t need) {
+        if (size_multiply_overflow(size, need))
+                return NULL;
+
+        return memdup_suffix0(p, size * need);
 }
 
 void* greedy_realloc(void **p, size_t *allocated, size_t need, size_t size);

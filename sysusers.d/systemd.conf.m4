@@ -9,11 +9,8 @@ g systemd-journal   - -
 m4_ifdef(`ENABLE_NETWORKD',
 u systemd-network   - "systemd Network Management"
 )m4_dnl
-m4_ifdef(`ENABLE_RESOLVED',
+m4_ifdef(`ENABLE_RESOLVE',
 u systemd-resolve   - "systemd Resolver"
-)m4_dnl
-m4_ifdef(`ENABLE_TIMESYNCD',
-u systemd-timesync  - "systemd Time Synchronization"
 )m4_dnl
 m4_ifdef(`ENABLE_COREDUMP',
 u systemd-coredump  - "systemd Core Dumper"

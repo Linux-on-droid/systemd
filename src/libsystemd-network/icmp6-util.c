@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -191,7 +192,7 @@ int icmp6_receive(int fd, void *buffer, size_t size, struct in6_addr *dst,
 
         len = recvmsg(fd, &msg, MSG_DONTWAIT);
         if (len < 0) {
-                if (errno == EAGAIN || errno == EINTR)
+                if (IN_SET(errno, EAGAIN, EINTR))
                         return 0;
 
                 return -errno;

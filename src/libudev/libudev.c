@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -94,11 +95,10 @@ _public_ void udev_set_userdata(struct udev *udev, void *userdata) {
  **/
 _public_ struct udev *udev_new(void) {
         struct udev *udev;
-        _cleanup_fclose_ FILE *f = NULL;
 
         udev = new0(struct udev, 1);
         if (!udev) {
-                errno = -ENOMEM;
+                errno = ENOMEM;
                 return NULL;
         }
         udev->refcount = 1;
@@ -136,8 +136,7 @@ _public_ struct udev *udev_unref(struct udev *udev) {
         udev->refcount--;
         if (udev->refcount > 0)
                 return udev;
-        free(udev);
-        return NULL;
+        return mfree(udev);
 }
 
 /**

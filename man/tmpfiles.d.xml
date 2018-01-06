@@ -1,6 +1,8 @@
 <?xml version='1.0'?> <!--*- Mode: nxml; nxml-child-indent: 2; indent-tabs-mode: nil -*-->
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 <!--
+  SPDX-License-Identifier: LGPL-2.1+
+
   This file is part of systemd.
 
   Copyright 2010 Brandon Philips
@@ -46,9 +48,17 @@
   </refnamediv>
 
   <refsynopsisdiv>
-    <para><filename>/etc/tmpfiles.d/*.conf</filename></para>
-    <para><filename>/run/tmpfiles.d/*.conf</filename></para>
-    <para><filename>/usr/lib/tmpfiles.d/*.conf</filename></para>
+    <para><literallayout><filename>/etc/tmpfiles.d/*.conf</filename>
+<filename>/run/tmpfiles.d/*.conf</filename>
+<filename>/usr/lib/tmpfiles.d/*.conf</filename>
+    </literallayout></para>
+
+    <para><literallayout><filename>~/.config/user-tmpfiles.d/*.conf</filename>
+<filename>$XDG_RUNTIME_DIR/user-tmpfiles.d/*.conf</filename>
+<filename>~/.local/share/user-tmpfiles.d/*.conf</filename>
+<filename>…</filename>
+<filename>/usr/share/user-tmpfiles.d/*.conf</filename>
+    </literallayout></para>
   </refsynopsisdiv>
 
   <refsect1>
@@ -76,7 +86,7 @@
   </refsect1>
 
   <refsect1>
-    <title>Configuration Format</title>
+    <title>Configuration Directories and Precedence</title>
 
     <para>Each configuration file shall be named in the style of
     <filename><replaceable>package</replaceable>.conf</filename> or
@@ -112,6 +122,10 @@
     to <filename>/dev/null</filename> in
     <filename>/etc/tmpfiles.d/</filename> bearing the same filename.
     </para>
+  </refsect1>
+
+  <refsect1>
+    <title>Configuration File Format</title>
 
     <para>The configuration format is one line per path containing
     type, path, mode, ownership, age, and argument fields:</para>
@@ -273,13 +287,14 @@ L     /tmp/foobar -    -    -    -   /dev/null</programlisting>
           <term><varname>L</varname></term>
           <term><varname>L+</varname></term>
           <listitem><para>Create a symlink if it does not exist
-          yet. If suffixed with <varname>+</varname> and a file
-          already exists where the symlink is to be created, it will
-          be removed and be replaced by the symlink. If the argument
-          is omitted, symlinks to files with the same name residing in
-          the directory <filename>/usr/share/factory/</filename> are
-          created. Note that permissions and ownership on symlinks
-          are ignored.</para></listitem>
+          yet. If suffixed with <varname>+</varname> and a file or
+          directory already exists where the symlink is to be created,
+          it will be removed and be replaced by the symlink. If the
+          argument is omitted, symlinks to files with the same name
+          residing in the directory
+          <filename>/usr/share/factory/</filename> are created. Note
+          that permissions and ownership on symlinks are ignored.
+          </para></listitem>
         </varlistentry>
 
         <varlistentry>
@@ -462,10 +477,10 @@ L     /tmp/foobar -    -    -    -   /dev/null</programlisting>
 
       <para>For example:
       <programlisting># Make sure these are created by default so that nobody else can
-      d /tmp/.X11-unix 1777 root root 10d
+d /tmp/.X11-unix 1777 root root 10d
 
-      # Unlink the X11 lock files
-      r! /tmp/.X[0-9]*-lock</programlisting>
+# Unlink the X11 lock files
+r! /tmp/.X[0-9]*-lock</programlisting>
       The second line in contrast to the first one would break a
       running system, and will only be executed with
       <option>--boot</option>.</para>
@@ -475,51 +490,8 @@ L     /tmp/foobar -    -    -    -   /dev/null</programlisting>
       <title>Path</title>
 
       <para>The file system path specification supports simple
-      specifier expansion. The following expansions are
-      understood:</para>
-
-      <table>
-        <title>Specifiers available</title>
-        <tgroup cols='3' align='left' colsep='1' rowsep='1'>
-          <colspec colname="spec" />
-          <colspec colname="mean" />
-          <colspec colname="detail" />
-          <thead>
-            <row>
-              <entry>Specifier</entry>
-              <entry>Meaning</entry>
-              <entry>Details</entry>
-            </row>
-          </thead>
-          <tbody>
-            <row>
-              <entry><literal>%m</literal></entry>
-              <entry>Machine ID</entry>
-              <entry>The machine ID of the running system, formatted as string. See <citerefentry><refentrytitle>machine-id</refentrytitle><manvolnum>5</manvolnum></citerefentry> for more information.</entry>
-            </row>
-            <row>
-              <entry><literal>%b</literal></entry>
-              <entry>Boot ID</entry>
-              <entry>The boot ID of the running system, formatted as string. See <citerefentry><refentrytitle>random</refentrytitle><manvolnum>4</manvolnum></citerefentry> for more information.</entry>
-            </row>
-            <row>
-              <entry><literal>%H</literal></entry>
-              <entry>Host name</entry>
-              <entry>The hostname of the running system.</entry>
-            </row>
-            <row>
-              <entry><literal>%v</literal></entry>
-              <entry>Kernel release</entry>
-              <entry>Identical to <command>uname -r</command> output.</entry>
-            </row>
-            <row>
-              <entry><literal>%%</literal></entry>
-              <entry>Escaped %</entry>
-              <entry>Single percent sign.</entry>
-            </row>
-          </tbody>
-        </tgroup>
-      </table>
+      specifier expansion, see below. The path (after expansion) must be
+      absolute.</para>
     </refsect2>
 
     <refsect2>
@@ -621,8 +593,94 @@ L     /tmp/foobar -    -    -    -   /dev/null</programlisting>
       attributes to be set. For <varname>h</varname> and
       <varname>H</varname>, determines the file attributes to
       set. Ignored for all other lines.</para>
-    </refsect2>
 
+      <para>This field can contain specifiers, see below.</para>
+    </refsect2>
+  </refsect1>
+
+  <refsect1>
+    <title>Specifiers</title>
+
+    <para>Specifiers can be used in the "path" and "argument" fields.
+    An unknown or unresolvable specifier is treated as invalid configuration.
+    The following expansions are understood:</para>
+      <table>
+        <title>Specifiers available</title>
+        <tgroup cols='3' align='left' colsep='1' rowsep='1'>
+          <colspec colname="spec" />
+          <colspec colname="mean" />
+          <colspec colname="detail" />
+          <thead>
+            <row>
+              <entry>Specifier</entry>
+              <entry>Meaning</entry>
+              <entry>Details</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry><literal>%m</literal></entry>
+              <entry>Machine ID</entry>
+              <entry>The machine ID of the running system, formatted as string. See <citerefentry><refentrytitle>machine-id</refentrytitle><manvolnum>5</manvolnum></citerefentry> for more information.</entry>
+            </row>
+            <row>
+              <entry><literal>%b</literal></entry>
+              <entry>Boot ID</entry>
+              <entry>The boot ID of the running system, formatted as string. See <citerefentry><refentrytitle>random</refentrytitle><manvolnum>4</manvolnum></citerefentry> for more information.</entry>
+            </row>
+            <row>
+              <entry><literal>%H</literal></entry>
+              <entry>Host name</entry>
+              <entry>The hostname of the running system.</entry>
+            </row>
+            <row>
+              <entry><literal>%v</literal></entry>
+              <entry>Kernel release</entry>
+              <entry>Identical to <command>uname -r</command> output.</entry>
+            </row>
+            <row>
+              <entry><literal>%U</literal></entry>
+              <entry>User UID</entry>
+              <entry>This is the numeric UID of the user running the service manager instance. In case of the system manager this resolves to <constant>0</constant>.</entry>
+            </row>
+            <row>
+              <entry><literal>%u</literal></entry>
+              <entry>User name</entry>
+              <entry>This is the name of the user running the service manager instance. In case of the system manager this resolves to <literal>root</literal>.</entry>
+            </row>
+            <row>
+              <entry><literal>%h</literal></entry>
+              <entry>User home directory</entry>
+              <entry>This is the home directory of the user running the service manager instance. In case of the system manager this resolves to <literal>/root</literal>.</entry>
+            </row>
+            <row>
+              <entry><literal>%t</literal></entry>
+              <entry>System or user runtime directory</entry>
+              <entry>In --user mode, this is the same <varname>$XDG_RUNTIME_DIR</varname>, and <filename>/run</filename> otherwise.</entry>
+            </row>
+            <row>
+              <entry><literal>%S</literal></entry>
+              <entry>System or user state directory</entry>
+              <entry>In <option>--user</option> mode, this is the same as <varname>$XDG_CONFIG_HOME</varname>, and <filename>/var/lib</filename> otherwise.</entry>
+            </row>
+            <row>
+              <entry><literal>%C</literal></entry>
+              <entry>System or user cache directory</entry>
+              <entry>In <option>--user</option> mode, this is the same as <varname>$XDG_CACHE_HOME</varname>, and <filename>/var/cache</filename> otherwise.</entry>
+            </row>
+            <row>
+              <entry><literal>%L</literal></entry>
+              <entry>System or user log directory</entry>
+              <entry>In <option>--user</option> mode, this is the same as <varname>$XDG_CONFIG_HOME</varname> with <filename noindex='true'>/log</filename> appended, and <filename>/var/log</filename> otherwise.</entry>
+            </row>
+            <row>
+              <entry><literal>%%</literal></entry>
+              <entry>Escaped <literal>%</literal></entry>
+              <entry>Single percent sign.</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
   </refsect1>
 
   <refsect1>
@@ -677,11 +735,11 @@ d /var/tmp/abrt 0755 abrt abrt -
 r! /var/cache/dnf/*/*/download_lock.pid
 r! /var/cache/dnf/*/*/metadata_lock.pid
 r! /var/lib/dnf/rpmdb_lock.pid
-e  /var/chache/dnf/ - - - 30d
+e  /var/cache/dnf/ - - - 30d
 </programlisting>
 
      <para>The lock files will be removed during boot. Any files and directories in
-     <filename>/var/chache/dnf/</filename> will be removed after they have not been
+     <filename>/var/cache/dnf/</filename> will be removed after they have not been
      accessed in 30 days.</para>
     </example>
 

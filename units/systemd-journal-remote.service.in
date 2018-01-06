@@ -1,3 +1,5 @@
+#  SPDX-License-Identifier: LGPL-2.1+
+#
 #  This file is part of systemd.
 #
 #  systemd is free software; you can redistribute it and/or modify it
@@ -13,7 +15,6 @@ Requires=systemd-journal-remote.socket
 [Service]
 ExecStart=@rootlibexecdir@/systemd-journal-remote --listen-https=-3 --output=/var/log/journal/remote/
 User=systemd-journal-remote
-Group=systemd-journal-remote
 WatchdogSec=3min
 PrivateTmp=yes
 PrivateDevices=yes
@@ -28,7 +29,8 @@ RestrictRealtime=yes
 RestrictNamespaces=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
-ReadWritePaths=/var/log/journal/remote
+LockPersonality=yes
+LogsDirectory=journal/remote
 
 [Install]
 Also=systemd-journal-remote.socket

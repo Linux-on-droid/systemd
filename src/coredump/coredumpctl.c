@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -799,7 +800,7 @@ static int save_core(sd_journal *j, FILE *file, char **path, bool *unlink_temp) 
         }
 
         if (filename) {
-#if defined(HAVE_XZ) || defined(HAVE_LZ4)
+#if HAVE_XZ || HAVE_LZ4
                 _cleanup_close_ int fdf;
 
                 fdf = open(filename, O_RDONLY | O_CLOEXEC);
@@ -902,9 +903,9 @@ static int run_gdb(sd_journal *j) {
         if (r < 0)
                 return log_error_errno(r, "Failed to retrieve COREDUMP_EXE field: %m");
 
-        assert(len > strlen("COREDUMP_EXE="));
-        data += strlen("COREDUMP_EXE=");
-        len -= strlen("COREDUMP_EXE=");
+        assert(len > STRLEN("COREDUMP_EXE="));
+        data += STRLEN("COREDUMP_EXE=");
+        len -= STRLEN("COREDUMP_EXE=");
 
         exe = strndup(data, len);
         if (!exe)

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -17,11 +18,12 @@
   along with systemd; If not, see <http://www.gnu.org/licenses/>.
 ***/
 
+#include <poll.h>
 #include <sched.h>
 #include <stdlib.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
-#include <sys/poll.h>
+#include <sys/personality.h>
 #include <sys/shm.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -46,7 +48,6 @@
 #else
 #  define SECCOMP_RESTRICT_ADDRESS_FAMILIES_BROKEN 0
 #endif
-
 
 static void test_seccomp_arch_to_string(void) {
         uint32_t a, b;
@@ -244,13 +245,17 @@ static void test_protect_sysctl(void) {
         assert_se(pid >= 0);
 
         if (pid == 0) {
+#if __NR__sysctl > 0
                 assert_se(syscall(__NR__sysctl, NULL) < 0);
                 assert_se(errno == EFAULT);
+#endif
 
                 assert_se(seccomp_protect_sysctl() >= 0);
 
+#if __NR__sysctl > 0
                 assert_se(syscall(__NR__sysctl, 0, 0, 0) < 0);
                 assert_se(errno == EPERM);
+#endif
 
                 _exit(EXIT_SUCCESS);
         }
@@ -515,7 +520,7 @@ static void test_load_syscall_filter_set_raw(void) {
         assert_se(pid >= 0);
 
         if (pid == 0) {
-                _cleanup_set_free_ Set *s = NULL;
+                _cleanup_hashmap_free_ Hashmap *s = NULL;
 
                 assert_se(access("/", F_OK) >= 0);
                 assert_se(poll(NULL, 0, 0) == 0);
@@ -524,8 +529,12 @@ static void test_load_syscall_filter_set_raw(void) {
                 assert_se(access("/", F_OK) >= 0);
                 assert_se(poll(NULL, 0, 0) == 0);
 
-                assert_se(s = set_new(NULL));
-                assert_se(set_put(s, UINT32_TO_PTR(__NR_access + 1)) >= 0);
+                assert_se(s = hashmap_new(NULL));
+#if SCMP_SYS(access) >= 0
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_access + 1), INT_TO_PTR(-1)) >= 0);
+#else
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_faccessat + 1), INT_TO_PTR(-1)) >= 0);
+#endif
 
                 assert_se(seccomp_load_syscall_filter_set_raw(SCMP_ACT_ALLOW, s, SCMP_ACT_ERRNO(EUCLEAN)) >= 0);
 
@@ -534,23 +543,137 @@ static void test_load_syscall_filter_set_raw(void) {
 
                 assert_se(poll(NULL, 0, 0) == 0);
 
-                s = set_free(s);
+                s = hashmap_free(s);
 
-                assert_se(s = set_new(NULL));
-                assert_se(set_put(s, UINT32_TO_PTR(__NR_poll + 1)) >= 0);
+                assert_se(s = hashmap_new(NULL));
+#if SCMP_SYS(access) >= 0
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_access + 1), INT_TO_PTR(EILSEQ)) >= 0);
+#else
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_faccessat + 1), INT_TO_PTR(EILSEQ)) >= 0);
+#endif
+
+                assert_se(seccomp_load_syscall_filter_set_raw(SCMP_ACT_ALLOW, s, SCMP_ACT_ERRNO(EUCLEAN)) >= 0);
+
+                assert_se(access("/", F_OK) < 0);
+                assert_se(errno == EILSEQ);
+
+                assert_se(poll(NULL, 0, 0) == 0);
+
+                s = hashmap_free(s);
+
+                assert_se(s = hashmap_new(NULL));
+#if SCMP_SYS(poll) >= 0
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_poll + 1), INT_TO_PTR(-1)) >= 0);
+#else
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_ppoll + 1), INT_TO_PTR(-1)) >= 0);
+#endif
 
                 assert_se(seccomp_load_syscall_filter_set_raw(SCMP_ACT_ALLOW, s, SCMP_ACT_ERRNO(EUNATCH)) >= 0);
 
                 assert_se(access("/", F_OK) < 0);
-                assert_se(errno == EUCLEAN);
+                assert_se(errno == EILSEQ);
 
                 assert_se(poll(NULL, 0, 0) < 0);
                 assert_se(errno == EUNATCH);
+
+                s = hashmap_free(s);
+
+                assert_se(s = hashmap_new(NULL));
+#if SCMP_SYS(poll) >= 0
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_poll + 1), INT_TO_PTR(EILSEQ)) >= 0);
+#else
+                assert_se(hashmap_put(s, UINT32_TO_PTR(__NR_ppoll + 1), INT_TO_PTR(EILSEQ)) >= 0);
+#endif
+
+                assert_se(seccomp_load_syscall_filter_set_raw(SCMP_ACT_ALLOW, s, SCMP_ACT_ERRNO(EUNATCH)) >= 0);
+
+                assert_se(access("/", F_OK) < 0);
+                assert_se(errno == EILSEQ);
+
+                assert_se(poll(NULL, 0, 0) < 0);
+                assert_se(errno == EILSEQ);
 
                 _exit(EXIT_SUCCESS);
         }
 
         assert_se(wait_for_terminate_and_warn("syscallrawseccomp", pid, true) == EXIT_SUCCESS);
+}
+
+static void test_lock_personality(void) {
+        unsigned long current;
+        pid_t pid;
+
+        if (!is_seccomp_available())
+                return;
+        if (geteuid() != 0)
+                return;
+
+        assert_se(opinionated_personality(&current) >= 0);
+
+        log_info("current personality=%lu", current);
+
+        pid = fork();
+        assert_se(pid >= 0);
+
+        if (pid == 0) {
+                assert_se(seccomp_lock_personality(current) >= 0);
+
+                assert_se((unsigned long) safe_personality(current) == current);
+
+                /* Note, we also test that safe_personality() works correctly, by checkig whether errno is properly
+                 * set, in addition to the return value */
+                errno = 0;
+                assert_se(safe_personality(PER_LINUX | ADDR_NO_RANDOMIZE) == -EPERM);
+                assert_se(errno == EPERM);
+
+                assert_se(safe_personality(PER_LINUX | MMAP_PAGE_ZERO) == -EPERM);
+                assert_se(safe_personality(PER_LINUX | ADDR_COMPAT_LAYOUT) == -EPERM);
+                assert_se(safe_personality(PER_LINUX | READ_IMPLIES_EXEC) == -EPERM);
+                assert_se(safe_personality(PER_LINUX_32BIT) == -EPERM);
+                assert_se(safe_personality(PER_SVR4) == -EPERM);
+                assert_se(safe_personality(PER_BSD) == -EPERM);
+                assert_se(safe_personality(current == PER_LINUX ? PER_LINUX32 : PER_LINUX) == -EPERM);
+                assert_se(safe_personality(PER_LINUX32_3GB) == -EPERM);
+                assert_se(safe_personality(PER_UW7) == -EPERM);
+                assert_se(safe_personality(0x42) == -EPERM);
+
+                assert_se(safe_personality(PERSONALITY_INVALID) == -EPERM); /* maybe remove this later */
+
+                assert_se((unsigned long) personality(current) == current);
+                _exit(EXIT_SUCCESS);
+        }
+
+        assert_se(wait_for_terminate_and_warn("lockpersonalityseccomp", pid, true) == EXIT_SUCCESS);
+}
+
+static void test_filter_sets_ordered(void) {
+        size_t i;
+
+        /* Ensure "@default" always remains at the beginning of the list */
+        assert_se(SYSCALL_FILTER_SET_DEFAULT == 0);
+        assert_se(streq(syscall_filter_sets[0].name, "@default"));
+
+        for (i = 0; i < _SYSCALL_FILTER_SET_MAX; i++) {
+                const char *k, *p = NULL;
+
+                /* Make sure each group has a description */
+                assert_se(!isempty(syscall_filter_sets[0].help));
+
+                /* Make sure the groups are ordered alphabetically, except for the first entry */
+                assert_se(i < 2 || strcmp(syscall_filter_sets[i-1].name, syscall_filter_sets[i].name) < 0);
+
+                NULSTR_FOREACH(k, syscall_filter_sets[i].value) {
+
+                        /* Ensure each syscall list is in itself ordered, but groups before names */
+                        assert_se(!p ||
+                                  (*p == '@' && *k != '@') ||
+                                  (((*p == '@' && *k == '@') ||
+                                    (*p != '@' && *k != '@')) &&
+                                   strcmp(p, k) < 0));
+
+                        p = k;
+                }
+        }
 }
 
 int main(int argc, char *argv[]) {
@@ -569,6 +692,8 @@ int main(int argc, char *argv[]) {
         test_memory_deny_write_execute_shmat();
         test_restrict_archs();
         test_load_syscall_filter_set_raw();
+        test_lock_personality();
+        test_filter_sets_ordered();
 
         return 0;
 }

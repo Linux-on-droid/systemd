@@ -1,3 +1,5 @@
+#  SPDX-License-Identifier: LGPL-2.1+
+#
 #  This file is part of systemd.
 #
 #  systemd is free software; you can redistribute it and/or modify it
@@ -11,6 +13,7 @@ Documentation=man:systemd.special(5) man:systemd.offline-updates(7)
 After=system-update.target
 DefaultDependencies=no
 Conflicts=shutdown.target
+Before=shutdown.target
 
 # system-update-generator uses laccess("/system-update"), while a plain
 # ConditionPathExists=/system-update uses access("/system-update"), so

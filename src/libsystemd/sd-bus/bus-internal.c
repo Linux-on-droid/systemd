@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -148,7 +149,7 @@ bool service_name_is_valid(const char *p) {
                                 (*q >= 'a' && *q <= 'z') ||
                                 (*q >= 'A' && *q <= 'Z') ||
                                 ((!dot || unique) && *q >= '0' && *q <= '9') ||
-                                *q == '_' || *q == '-';
+                                IN_SET(*q, '_', '-');
 
                         if (!good)
                                 return false;

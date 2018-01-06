@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -105,7 +106,7 @@ static char **arg_file = NULL;
 static bool arg_file_stdin = false;
 static int arg_priorities = 0xFF;
 static char *arg_verify_key = NULL;
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
 static usec_t arg_interval = DEFAULT_FSS_INTERVAL_USEC;
 static bool arg_force = false;
 #endif
@@ -123,6 +124,7 @@ static const char *arg_machine = NULL;
 static uint64_t arg_vacuum_size = 0;
 static uint64_t arg_vacuum_n_files = 0;
 static usec_t arg_vacuum_time = 0;
+static char **arg_output_fields = NULL;
 
 static enum {
         ACTION_SHOW,
@@ -248,7 +250,7 @@ static int parse_boot_descriptor(const char *x, sd_id128_t *boot_id, int *offset
                 if (r >= 0)
                         x += 32;
 
-                if (*x != '-' && *x != '+' && *x != 0)
+                if (!IN_SET(*x, 0, '-', '+'))
                         return -EINVAL;
 
                 if (*x != 0) {
@@ -302,6 +304,7 @@ static void help(void) {
                "                             short-iso, short-iso-precise, short-full,\n"
                "                             short-monotonic, short-unix, verbose, export,\n"
                "                             json, json-pretty, json-sse, cat)\n"
+               "     --output-fields=LIST  Select fields to print in verbose/export/json modes\n"
                "     --utc                 Express time in Coordinated Universal Time (UTC)\n"
                "  -x --catalog             Add message explanations where available\n"
                "     --no-full             Ellipsize fields\n"
@@ -313,7 +316,7 @@ static void help(void) {
                "  -D --directory=PATH      Show journal files from directory\n"
                "     --file=PATH           Show journal file\n"
                "     --root=ROOT           Operate on files below a root directory\n"
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
                "     --interval=TIME       Time interval for changing the FSS sealing key\n"
                "     --verify-key=KEY      Specify FSS verification key\n"
                "     --force               Override of the FSS key pair with --setup-keys\n"
@@ -336,7 +339,7 @@ static void help(void) {
                "     --dump-catalog        Show entries in the message catalog\n"
                "     --update-catalog      Update the message catalog database\n"
                "     --new-id128           Generate a new 128-bit ID\n"
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
                "     --setup-keys          Generate a new FSS key pair\n"
 #endif
                , program_invocation_short_name);
@@ -377,6 +380,7 @@ static int parse_argv(int argc, char *argv[]) {
                 ARG_VACUUM_FILES,
                 ARG_VACUUM_TIME,
                 ARG_NO_HOSTNAME,
+                ARG_OUTPUT_FIELDS,
         };
 
         static const struct option options[] = {
@@ -435,6 +439,7 @@ static int parse_argv(int argc, char *argv[]) {
                 { "vacuum-files",   required_argument, NULL, ARG_VACUUM_FILES   },
                 { "vacuum-time",    required_argument, NULL, ARG_VACUUM_TIME    },
                 { "no-hostname",    no_argument,       NULL, ARG_NO_HOSTNAME    },
+                { "output-fields",  required_argument, NULL, ARG_OUTPUT_FIELDS  },
                 {}
         };
 
@@ -477,11 +482,7 @@ static int parse_argv(int argc, char *argv[]) {
                                 return -EINVAL;
                         }
 
-                        if (arg_output == OUTPUT_EXPORT ||
-                            arg_output == OUTPUT_JSON ||
-                            arg_output == OUTPUT_JSON_PRETTY ||
-                            arg_output == OUTPUT_JSON_SSE ||
-                            arg_output == OUTPUT_CAT)
+                        if (IN_SET(arg_output, OUTPUT_EXPORT, OUTPUT_JSON, OUTPUT_JSON_PRETTY, OUTPUT_JSON_SSE, OUTPUT_CAT))
                                 arg_quiet = true;
 
                         break;
@@ -673,7 +674,7 @@ static int parse_argv(int argc, char *argv[]) {
                         arg_action = ACTION_VACUUM;
                         break;
 
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
                 case ARG_FORCE:
                         arg_force = true;
                         break;
@@ -845,6 +846,24 @@ static int parse_argv(int argc, char *argv[]) {
                 case ARG_SYNC:
                         arg_action = ACTION_SYNC;
                         break;
+
+                case ARG_OUTPUT_FIELDS: {
+                        _cleanup_strv_free_ char **v = NULL;
+
+                        v = strv_split(optarg, ",");
+                        if (!v)
+                                return log_oom();
+
+                        if (!arg_output_fields) {
+                                arg_output_fields = v;
+                                v = NULL;
+                        } else {
+                                r = strv_extend_strv(&arg_output_fields, v, true);
+                                if (r < 0)
+                                        return log_oom();
+                        }
+                        break;
+                }
 
                 case '?':
                         return -EINVAL;
@@ -1324,7 +1343,8 @@ static int add_dmesg(sd_journal *j) {
         if (!arg_dmesg)
                 return 0;
 
-        r = sd_journal_add_match(j, "_TRANSPORT=kernel", strlen("_TRANSPORT=kernel"));
+        r = sd_journal_add_match(j, "_TRANSPORT=kernel",
+                                 STRLEN("_TRANSPORT=kernel"));
         if (r < 0)
                 return log_error_errno(r, "Failed to add match: %m");
 
@@ -1565,7 +1585,7 @@ static int add_syslog_identifier(sd_journal *j) {
 }
 
 static int setup_keys(void) {
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
         size_t mpk_size, seed_size, state_size, i;
         uint8_t *mpk, *seed, *state;
         int fd = -1, r;
@@ -1576,7 +1596,7 @@ static int setup_keys(void) {
         struct stat st;
 
         r = stat("/var/log/journal", &st);
-        if (r < 0 && errno != ENOENT && errno != ENOTDIR)
+        if (r < 0 && !IN_SET(errno, ENOENT, ENOTDIR))
                 return log_error_errno(errno, "stat(\"%s\") failed: %m", "/var/log/journal");
 
         if (r < 0 || !S_ISDIR(st.st_mode)) {
@@ -1731,7 +1751,7 @@ static int setup_keys(void) {
                 } else
                         fprintf(stderr, "\nThe keys have been generated for host " SD_ID128_FORMAT_STR ".\n", SD_ID128_FORMAT_VAL(machine));
 
-#ifdef HAVE_QRENCODE
+#if HAVE_QRENCODE
                 /* If this is not an UTF-8 system don't print any QR codes */
                 if (is_locale_utf8()) {
                         fputs("\nTo transfer the verification key to your phone please scan the QR code below:\n\n", stderr);
@@ -1773,7 +1793,7 @@ static int verify(sd_journal *j) {
                 int k;
                 usec_t first = 0, validated = 0, last = 0;
 
-#ifdef HAVE_GCRYPT
+#if HAVE_GCRYPT
                 if (!arg_verify_key && JOURNAL_HEADER_SEALED(f->header))
                         log_notice("Journal file %s has sealing enabled but verification key has not been passed using --verify-key=.", f->path);
 #endif
@@ -2170,7 +2190,7 @@ int main(int argc, char *argv[]) {
                         if (d->is_root)
                                 continue;
 
-                        q = journal_directory_vacuum(d->path, arg_vacuum_size, arg_vacuum_n_files, arg_vacuum_time, NULL, true);
+                        q = journal_directory_vacuum(d->path, arg_vacuum_size, arg_vacuum_n_files, arg_vacuum_time, NULL, !arg_quiet);
                         if (q < 0) {
                                 log_error_errno(q, "Failed to vacuum %s: %m", d->path);
                                 r = q;
@@ -2456,7 +2476,7 @@ int main(int argc, char *argv[]) {
                                 arg_utc * OUTPUT_UTC |
                                 arg_no_hostname * OUTPUT_NO_HOSTNAME;
 
-                        r = output_journal(stdout, j, arg_output, 0, flags, &ellipsized);
+                        r = output_journal(stdout, j, arg_output, 0, flags, arg_output_fields, &ellipsized);
                         need_seek = true;
                         if (r == -EADDRNOTAVAIL)
                                 break;
@@ -2502,6 +2522,7 @@ finish:
         strv_free(arg_syslog_identifier);
         strv_free(arg_system_units);
         strv_free(arg_user_units);
+        strv_free(arg_output_fields);
 
         free(arg_root);
         free(arg_verify_key);

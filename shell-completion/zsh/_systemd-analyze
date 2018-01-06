@@ -1,9 +1,16 @@
 #compdef systemd-analyze
+# SPDX-License-Identifier: LGPL-2.1+
 
 _systemd_analyze_set-log-level() {
     local -a _levels
     _levels=(debug info notice warning err crit alert emerg)
     _describe -t level 'logging level' _levels || compadd "$@"
+}
+
+_systemd_analyze_set-log-target() {
+    local -a _targets
+    _targets=(console journal kmsg journal-or-kmsg null)
+    _describe -t target 'logging target' _targets || compadd "$@"
 }
 
 _systemd_analyze_verify() {
@@ -21,6 +28,9 @@ _systemd_analyze_command(){
         'dot:Dump dependency graph (in dot(1) format)'
         'dump:Dump server status'
         'set-log-level:Set systemd log threshold'
+        'set-log-target:Set systemd log target'
+        'get-log-level:Get systemd log threshold'
+        'get-log-target:Get systemd log target'
         'syscall-filter:List syscalls in seccomp filter'
         'verify:Check unit files for correctness'
     )

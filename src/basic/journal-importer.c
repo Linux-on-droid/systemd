@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -20,8 +21,9 @@
 #include <unistd.h>
 
 #include "alloc-util.h"
-#include "journal-importer.h"
 #include "fd-util.h"
+#include "io-util.h"
+#include "journal-importer.h"
 #include "parse-util.h"
 #include "string-util.h"
 #include "unaligned.h"
@@ -38,7 +40,7 @@ static int iovw_put(struct iovec_wrapper *iovw, void* data, size_t len) {
         if (!GREEDY_REALLOC(iovw->iovec, iovw->size_bytes, iovw->count + 1))
                 return log_oom();
 
-        iovw->iovec[iovw->count++] = (struct iovec) {data, len};
+        iovw->iovec[iovw->count++] = IOVEC_MAKE(data, len);
         return 0;
 }
 
@@ -94,7 +96,7 @@ static int get_line(JournalImporter *imp, char **line, size_t *size) {
         assert(imp->state == IMPORTER_STATE_LINE);
         assert(imp->offset <= imp->filled);
         assert(imp->filled <= imp->size);
-        assert(imp->buf == NULL || imp->size > 0);
+        assert(!imp->buf || imp->size > 0);
         assert(imp->fd >= 0);
 
         for (;;) {
@@ -153,14 +155,12 @@ static int get_line(JournalImporter *imp, char **line, size_t *size) {
 static int fill_fixed_size(JournalImporter *imp, void **data, size_t size) {
 
         assert(imp);
-        assert(imp->state == IMPORTER_STATE_DATA_START ||
-               imp->state == IMPORTER_STATE_DATA ||
-               imp->state == IMPORTER_STATE_DATA_FINISH);
+        assert(IN_SET(imp->state, IMPORTER_STATE_DATA_START, IMPORTER_STATE_DATA, IMPORTER_STATE_DATA_FINISH));
         assert(size <= DATA_SIZE_MAX);
         assert(imp->offset <= imp->filled);
         assert(imp->filled <= imp->size);
-        assert(imp->buf != NULL || imp->size == 0);
-        assert(imp->buf == NULL || imp->size > 0);
+        assert(imp->buf || imp->size == 0);
+        assert(!imp->buf || imp->size > 0);
         assert(imp->fd >= 0);
         assert(data);
 

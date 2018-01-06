@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -39,10 +40,13 @@
 #include "bus-label.h"
 #include "bus-message.h"
 #include "bus-util.h"
+#include "cap-list.h"
+#include "cgroup-util.h"
 #include "def.h"
 #include "escape.h"
 #include "fd-util.h"
 #include "missing.h"
+#include "mount-util.h"
 #include "nsflags.h"
 #include "parse-util.h"
 #include "proc-cmdline.h"
@@ -252,7 +256,7 @@ int bus_test_polkit(
                 return r;
         else if (r > 0)
                 return 1;
-#ifdef ENABLE_POLKIT
+#if ENABLE_POLKIT
         else {
                 _cleanup_(sd_bus_message_unrefp) sd_bus_message *request = NULL;
                 _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
@@ -331,7 +335,7 @@ int bus_test_polkit(
         return -EACCES;
 }
 
-#ifdef ENABLE_POLKIT
+#if ENABLE_POLKIT
 
 typedef struct AsyncPolkitQuery {
         sd_bus_message *request, *reply;
@@ -395,7 +399,7 @@ int bus_verify_polkit_async(
                 Hashmap **registry,
                 sd_bus_error *error) {
 
-#ifdef ENABLE_POLKIT
+#if ENABLE_POLKIT
         _cleanup_(sd_bus_message_unrefp) sd_bus_message *pk = NULL;
         AsyncPolkitQuery *q;
         const char *sender, **k, **v;
@@ -413,7 +417,7 @@ int bus_verify_polkit_async(
         if (r != 0)
                 return r;
 
-#ifdef ENABLE_POLKIT
+#if ENABLE_POLKIT
         q = hashmap_get(*registry, call);
         if (q) {
                 int authorized, challenge;
@@ -460,7 +464,7 @@ int bus_verify_polkit_async(
         else if (r > 0)
                 return 1;
 
-#ifdef ENABLE_POLKIT
+#if ENABLE_POLKIT
         if (sd_bus_get_current_message(call->bus) != call)
                 return -EINVAL;
 
@@ -549,13 +553,8 @@ int bus_verify_polkit_async(
 }
 
 void bus_verify_polkit_async_registry_free(Hashmap *registry) {
-#ifdef ENABLE_POLKIT
-        AsyncPolkitQuery *q;
-
-        while ((q = hashmap_steal_first(registry)))
-                async_polkit_query_free(q);
-
-        hashmap_free(registry);
+#if ENABLE_POLKIT
+        hashmap_free_with_destructor(registry, async_polkit_query_free);
 #endif
 }
 
@@ -592,28 +591,8 @@ int bus_connect_system_systemd(sd_bus **_bus) {
         if (geteuid() != 0)
                 return sd_bus_default_system(_bus);
 
-        /* If we are root and kdbus is not available, then let's talk
-         * directly to the system instance, instead of going via the
-         * bus */
-
-        r = sd_bus_new(&bus);
-        if (r < 0)
-                return r;
-
-        r = sd_bus_set_address(bus, KERNEL_SYSTEM_BUS_ADDRESS);
-        if (r < 0)
-                return r;
-
-        bus->bus_client = true;
-
-        r = sd_bus_start(bus);
-        if (r >= 0) {
-                *_bus = bus;
-                bus = NULL;
-                return 0;
-        }
-
-        bus = sd_bus_unref(bus);
+        /* If we are root then let's talk directly to the system
+         * instance, instead of going via the bus */
 
         r = sd_bus_new(&bus);
         if (r < 0)
@@ -643,27 +622,7 @@ int bus_connect_user_systemd(sd_bus **_bus) {
         const char *e;
         int r;
 
-        /* Try via kdbus first, and then directly */
-
         assert(_bus);
-
-        r = sd_bus_new(&bus);
-        if (r < 0)
-                return r;
-
-        if (asprintf(&bus->address, KERNEL_USER_BUS_ADDRESS_FMT, getuid()) < 0)
-                return -ENOMEM;
-
-        bus->bus_client = true;
-
-        r = sd_bus_start(bus);
-        if (r >= 0) {
-                *_bus = bus;
-                bus = NULL;
-                return 0;
-        }
-
-        bus = sd_bus_unref(bus);
 
         e = secure_getenv("XDG_RUNTIME_DIR");
         if (!e)
@@ -701,7 +660,7 @@ int bus_connect_user_systemd(sd_bus **_bus) {
                         printf(fmt "\n", __VA_ARGS__);                  \
                 else                                                    \
                         printf("%s=" fmt "\n", name, __VA_ARGS__);      \
-        } while(0)
+        } while (0)
 
 int bus_print_property(const char *name, sd_bus_message *property, bool value, bool all) {
         char type;
@@ -771,7 +730,7 @@ int bus_print_property(const char *name, sd_bus_message *property, bool value, b
                         print_property(name, "%s", format_timespan(timespan, sizeof(timespan), u, 0));
                 } else if (streq(name, "RestrictNamespaces")) {
                         _cleanup_free_ char *s = NULL;
-                        const char *result = NULL;
+                        const char *result;
 
                         if ((u & NAMESPACE_FLAGS_ALL) == 0)
                                 result = "yes";
@@ -786,7 +745,40 @@ int bus_print_property(const char *name, sd_bus_message *property, bool value, b
                         }
 
                         print_property(name, "%s", result);
-                } else
+
+                } else if (streq(name, "MountFlags")) {
+                        const char *result;
+
+                        result = mount_propagation_flags_to_string(u);
+                        if (!result)
+                                return -EINVAL;
+
+                        print_property(name, "%s", result);
+
+                } else if (STR_IN_SET(name, "CapabilityBoundingSet", "AmbientCapabilities")) {
+                        _cleanup_free_ char *s = NULL;
+
+                        r = capability_set_to_string_alloc(u, &s);
+                        if (r < 0)
+                                return r;
+
+                        print_property(name, "%s", s);
+
+                } else if ((STR_IN_SET(name, "CPUWeight", "StartupCPUWeight", "IOWeight", "StartupIOWeight") && u == CGROUP_WEIGHT_INVALID) ||
+                           (STR_IN_SET(name, "CPUShares", "StartupCPUShares") && u == CGROUP_CPU_SHARES_INVALID) ||
+                           (STR_IN_SET(name, "BlockIOWeight", "StartupBlockIOWeight") && u == CGROUP_BLKIO_WEIGHT_INVALID) ||
+                           (STR_IN_SET(name, "MemoryCurrent", "TasksCurrent") && u == (uint64_t) -1) ||
+                           (endswith(name, "NSec") && u == (uint64_t) -1))
+
+                        print_property(name, "%s", "[not set]");
+
+                else if ((STR_IN_SET(name, "MemoryLow", "MemoryHigh", "MemoryMax", "MemorySwapMax", "MemoryLimit") && u == CGROUP_LIMIT_MAX) ||
+                         (STR_IN_SET(name, "TasksMax", "DefaultTasksMax") && u == (uint64_t) -1) ||
+                         (startswith(name, "Limit") && u == (uint64_t) -1) ||
+                         (startswith(name, "DefaultLimit") && u == (uint64_t) -1))
+
+                        print_property(name, "%s", "infinity");
+                else
                         print_property(name, "%"PRIu64, u);
 
                 return 1;
@@ -813,7 +805,17 @@ int bus_print_property(const char *name, sd_bus_message *property, bool value, b
 
                 if (strstr(name, "UMask") || strstr(name, "Mode"))
                         print_property(name, "%04o", u);
-                else
+                else if (streq(name, "UID")) {
+                        if (u == UID_INVALID)
+                                print_property(name, "%s", "[not set]");
+                        else
+                                print_property(name, "%"PRIu32, u);
+                } else if (streq(name, "GID")) {
+                        if (u == GID_INVALID)
+                                print_property(name, "%s", "[not set]");
+                        else
+                                print_property(name, "%"PRIu32, u);
+                } else
                         print_property(name, "%"PRIu32, u);
 
                 return 1;
@@ -856,7 +858,7 @@ int bus_print_property(const char *name, sd_bus_message *property, bool value, b
                                 if (first && !value)
                                         printf("%s=", name);
 
-                                /* This property has multiple space-seperated values, so
+                                /* This property has multiple space-separated values, so
                                  * neither spaces not newlines can be allowed in a value. */
                                 good = str[strcspn(str, " \n")] == '\0';
 

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -34,8 +35,8 @@ int dhcp_message_init(DHCPMessage *message, uint8_t op, uint32_t xid,
         size_t offset = 0;
         int r;
 
-        assert(op == BOOTREQUEST || op == BOOTREPLY);
-        assert(arp_type == ARPHRD_ETHER || arp_type == ARPHRD_INFINIBAND);
+        assert(IN_SET(op, BOOTREQUEST, BOOTREPLY));
+        assert(IN_SET(arp_type, ARPHRD_ETHER, ARPHRD_INFINIBAND));
 
         message->op = op;
         message->htype = arp_type;

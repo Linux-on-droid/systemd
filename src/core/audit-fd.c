@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -22,7 +23,7 @@
 
 #include "audit-fd.h"
 
-#ifdef HAVE_AUDIT
+#if HAVE_AUDIT
 
 #include <libaudit.h>
 #include <stdbool.h>
@@ -48,7 +49,7 @@ int get_audit_fd(void) {
                 audit_fd = audit_open();
 
                 if (audit_fd < 0) {
-                        if (errno != EAFNOSUPPORT && errno != EPROTONOSUPPORT)
+                        if (!IN_SET(errno, EAFNOSUPPORT, EPROTONOSUPPORT))
                                 log_error_errno(errno, "Failed to connect to audit log: %m");
 
                         audit_fd = errno ? -errno : -EINVAL;

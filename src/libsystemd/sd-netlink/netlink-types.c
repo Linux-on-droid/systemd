@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -22,6 +23,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/can/netlink.h>
+#include <linux/fib_rules.h>
 #include <linux/in6.h>
 #include <linux/veth.h>
 #include <linux/if_bridge.h>
@@ -29,8 +31,15 @@
 #include <linux/if_addrlabel.h>
 #include <linux/if.h>
 #include <linux/ip.h>
+#include <linux/if_addr.h>
+#include <linux/if_bridge.h>
 #include <linux/if_link.h>
 #include <linux/if_tunnel.h>
+#include <linux/fib_rules.h>
+
+#if HAVE_VXCAN_INFO_PEER
+#include <linux/can/vxcan.h>
+#endif
 
 #include "macro.h"
 #include "missing.h"
@@ -85,6 +94,10 @@ static const NLTypeSystem empty_type_system = {
 
 static const NLType rtnl_link_info_data_veth_types[] = {
         [VETH_INFO_PEER]  = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_link_type_system, .size = sizeof(struct ifinfomsg) },
+};
+
+static const NLType rtnl_link_info_data_vxcan_types[] = {
+        [VXCAN_INFO_PEER]  = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_link_type_system, .size = sizeof(struct ifinfomsg) },
 };
 
 static const NLType rtnl_link_info_data_ipvlan_types[] = {
@@ -323,6 +336,8 @@ static const char* const nl_union_link_info_data_table[] = {
         [NL_UNION_LINK_INFO_DATA_VRF] = "vrf",
         [NL_UNION_LINK_INFO_DATA_VCAN] = "vcan",
         [NL_UNION_LINK_INFO_DATA_GENEVE] = "geneve",
+        [NL_UNION_LINK_INFO_DATA_VXCAN] = "vxcan",
+
 };
 
 DEFINE_STRING_TABLE_LOOKUP(nl_union_link_info_data, NLUnionLinkInfoData);
@@ -366,6 +381,8 @@ static const NLTypeSystem rtnl_link_info_data_type_systems[] = {
                                                        .types = rtnl_link_info_data_vrf_types },
         [NL_UNION_LINK_INFO_DATA_GENEVE] =           { .count = ELEMENTSOF(rtnl_link_info_data_geneve_types),
                                                        .types = rtnl_link_info_data_geneve_types },
+        [NL_UNION_LINK_INFO_DATA_VXCAN] =            { .count = ELEMENTSOF(rtnl_link_info_data_vxcan_types),
+                                                       .types = rtnl_link_info_data_vxcan_types },
 };
 
 static const NLTypeSystemUnion rtnl_link_info_data_type_system_union = {
@@ -597,6 +614,31 @@ static const NLTypeSystem rtnl_addrlabel_type_system = {
         .types = rtnl_addrlabel_types,
 };
 
+static const NLType rtnl_routing_policy_rule_types[] = {
+        [FRA_DST]                 = { .type = NETLINK_TYPE_IN_ADDR },
+        [FRA_SRC]                 = { .type = NETLINK_TYPE_IN_ADDR },
+        [FRA_IIFNAME]             = { .type = NETLINK_TYPE_STRING },
+        [RTA_OIF]                 = { .type = NETLINK_TYPE_U32 },
+        [RTA_GATEWAY]             = { .type = NETLINK_TYPE_IN_ADDR },
+        [FRA_PRIORITY]            = { .type = NETLINK_TYPE_U32 },
+        [FRA_FWMARK]              = { .type = NETLINK_TYPE_U32 },
+        [FRA_FLOW]                = { .type = NETLINK_TYPE_U32 },
+        [FRA_TUN_ID]              = { .type = NETLINK_TYPE_U32 },
+        [FRA_SUPPRESS_IFGROUP]    = { .type = NETLINK_TYPE_U32 },
+        [FRA_SUPPRESS_PREFIXLEN]  = { .type = NETLINK_TYPE_U32 },
+        [FRA_TABLE]               = { .type = NETLINK_TYPE_U32 },
+        [FRA_FWMASK]              = { .type = NETLINK_TYPE_U32 },
+        [FRA_OIFNAME]             = { .type = NETLINK_TYPE_STRING },
+        [FRA_PAD]                 = { .type = NETLINK_TYPE_U32 },
+        [FRA_L3MDEV]              = { .type = NETLINK_TYPE_U64 },
+        [FRA_UID_RANGE]           = { .size = sizeof(struct fib_rule_uid_range) },
+};
+
+static const NLTypeSystem rtnl_routing_policy_rule_type_system = {
+        .count = ELEMENTSOF(rtnl_routing_policy_rule_types),
+        .types = rtnl_routing_policy_rule_types,
+};
+
 static const NLType rtnl_types[] = {
         [NLMSG_DONE]       = { .type = NETLINK_TYPE_NESTED, .type_system = &empty_type_system, .size = 0 },
         [NLMSG_ERROR]      = { .type = NETLINK_TYPE_NESTED, .type_system = &empty_type_system, .size = sizeof(struct nlmsgerr) },
@@ -616,6 +658,9 @@ static const NLType rtnl_types[] = {
         [RTM_NEWADDRLABEL] = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_addrlabel_type_system, .size = sizeof(struct ifaddrlblmsg) },
         [RTM_DELADDRLABEL] = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_addrlabel_type_system, .size = sizeof(struct ifaddrlblmsg) },
         [RTM_GETADDRLABEL] = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_addrlabel_type_system, .size = sizeof(struct ifaddrlblmsg) },
+        [RTM_NEWRULE]      = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_routing_policy_rule_type_system, .size = sizeof(struct rtmsg) },
+        [RTM_DELRULE]      = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_routing_policy_rule_type_system, .size = sizeof(struct rtmsg) },
+        [RTM_GETRULE]      = { .type = NETLINK_TYPE_NESTED, .type_system = &rtnl_routing_policy_rule_type_system, .size = sizeof(struct rtmsg) },
 };
 
 const NLTypeSystem type_system_root = {

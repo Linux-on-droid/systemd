@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -59,9 +60,7 @@ int settings_load(FILE *f, const char *path, Settings **ret) {
                          "Network\0"
                          "Files\0",
                          config_item_perf_lookup, nspawn_gperf_lookup,
-                         false,
-                         false,
-                         true,
+                         CONFIG_PARSE_WARN,
                          s);
         if (r < 0)
                 return r;
@@ -93,6 +92,8 @@ Settings* settings_free(Settings *s) {
         free(s->pivot_root_new);
         free(s->pivot_root_old);
         free(s->working_directory);
+        strv_free(s->syscall_whitelist);
+        strv_free(s->syscall_blacklist);
 
         strv_free(s->network_interfaces);
         strv_free(s->network_macvlan);
@@ -200,7 +201,7 @@ int config_parse_capability(
                         continue;
                 }
 
-                u |= 1 << ((uint64_t) cap);
+                u |= UINT64_C(1) << cap;
         }
 
         if (u == 0)
@@ -402,9 +403,7 @@ int config_parse_network_zone(
                 return 0;
         }
 
-        free(settings->network_zone);
-        settings->network_zone = j;
-        j = NULL;
+        free_and_replace(settings->network_zone, j);
 
         return 0;
 }
@@ -564,6 +563,54 @@ int config_parse_private_users(
                 settings->userns_mode = USER_NAMESPACE_FIXED;
                 settings->uid_shift = sh;
                 settings->uid_range = rn;
+        }
+
+        return 0;
+}
+
+int config_parse_syscall_filter(
+                const char *unit,
+                const char *filename,
+                unsigned line,
+                const char *section,
+                unsigned section_line,
+                const char *lvalue,
+                int ltype,
+                const char *rvalue,
+                void *data,
+                void *userdata) {
+
+        Settings *settings = data;
+        bool negative;
+        const char *items;
+        int r;
+
+        assert(filename);
+        assert(lvalue);
+        assert(rvalue);
+
+        negative = rvalue[0] == '~';
+        items = negative ? rvalue + 1 : rvalue;
+
+        for (;;) {
+                _cleanup_free_ char *word = NULL;
+
+                r = extract_first_word(&items, &word, NULL, 0);
+                if (r == 0)
+                        break;
+                if (r == -ENOMEM)
+                        return log_oom();
+                if (r < 0) {
+                        log_syntax(unit, LOG_ERR, filename, line, r, "Failed to parse SystemCallFilter= parameter %s, ignoring: %m", rvalue);
+                        return 0;
+                }
+
+                if (negative)
+                        r = strv_extend(&settings->syscall_blacklist, word);
+                else
+                        r = strv_extend(&settings->syscall_whitelist, word);
+                if (r < 0)
+                        return log_oom();
         }
 
         return 0;

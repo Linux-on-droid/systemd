@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -58,7 +59,7 @@ static int load_and_print(void) {
         if (r < 0)
                 return r;
 
-        r = conf_files_list_strv(&files, ".conf", NULL, (const char **) dirs);
+        r = conf_files_list_strv(&files, ".conf", NULL, 0, (const char **) dirs);
         if (r < 0)
                 return r;
 

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -127,7 +128,11 @@ static int unit_file_find_dir(
         assert(path);
 
         r = chase_symlinks(path, original_root, 0, &chased);
-        if (r == -ENOENT) /* Ignore -ENOENT, after all most units won't have a drop-in dir */
+        /* Ignore -ENOENT, after all most units won't have a drop-in dir.
+         * Also ignore -ENAMETOOLONG, users are not even able to create
+         * the drop-in dir in such case. This mostly happens for device units with long /sys path.
+         * */
+        if (IN_SET(r, -ENOENT, -ENAMETOOLONG))
                 return 0;
         if (r < 0)
                 return log_full_errno(LOG_WARNING, r, "Failed to canonicalize path %s: %m", path);
@@ -187,7 +192,7 @@ int unit_file_find_dropin_paths(
                 Set *names,
                 char ***ret) {
 
-        _cleanup_strv_free_ char **dirs = NULL, **ans = NULL;
+        _cleanup_strv_free_ char **dirs = NULL;
         Iterator i;
         char *t, **p;
         int r;
@@ -203,12 +208,9 @@ int unit_file_find_dropin_paths(
                 return 0;
         }
 
-        r = conf_files_list_strv(&ans, file_suffix, NULL, (const char**) dirs);
+        r = conf_files_list_strv(ret, file_suffix, NULL, 0, (const char**) dirs);
         if (r < 0)
-                return log_warning_errno(r, "Failed to sort the list of configuration files: %m");
-
-        *ret = ans;
-        ans = NULL;
+                return log_warning_errno(r, "Failed to create the list of configuration files: %m");
 
         return 1;
 }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -56,7 +57,7 @@ int sd_dhcp_server_configure_pool(sd_dhcp_server *server, struct in_addr *addres
         assert_return(address->s_addr != INADDR_ANY, -EINVAL);
         assert_return(prefixlen <= 32, -ERANGE);
 
-        assert_se(in_addr_prefixlen_to_netmask(&netmask_addr, prefixlen));
+        assert_se(in4_addr_prefixlen_to_netmask(&netmask_addr, prefixlen));
         netmask = netmask_addr.s_addr;
 
         server_off = be32toh(address->s_addr & ~netmask);
@@ -86,7 +87,6 @@ int sd_dhcp_server_configure_pool(sd_dhcp_server *server, struct in_addr *addres
                 size = size_max;
 
         if (server->address != address->s_addr || server->netmask != netmask || server->pool_size != size || server->pool_offset != offset) {
-                DHCPLease *lease;
 
                 free(server->bound_leases);
                 server->bound_leases = new0(DHCPLease*, size);
@@ -104,8 +104,7 @@ int sd_dhcp_server_configure_pool(sd_dhcp_server *server, struct in_addr *addres
                         server->bound_leases[server_off - offset] = &server->invalid_lease;
 
                 /* Drop any leases associated with the old address range */
-                while ((lease = hashmap_steal_first(server->leases_by_client_id)))
-                        dhcp_lease_free(lease);
+                hashmap_clear_with_destructor(server->leases_by_client_id, dhcp_lease_free);
         }
 
         return 0;
@@ -993,7 +992,7 @@ static int server_receive_message(sd_event_source *s, int fd,
 
         len = recvmsg(fd, &msg, 0);
         if (len < 0) {
-                if (errno == EAGAIN || errno == EINTR)
+                if (IN_SET(errno, EAGAIN, EINTR))
                         return 0;
 
                 return -errno;

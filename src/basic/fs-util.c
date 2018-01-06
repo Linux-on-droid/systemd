@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -23,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <linux/magic.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -102,7 +104,6 @@ int rmdir_parents(const char *path, const char *stop) {
 
         return 0;
 }
-
 
 int rename_noreplace(int olddirfd, const char *oldpath, int newdirfd, const char *newpath) {
         struct stat buf;
@@ -307,7 +308,7 @@ int fd_warn_permissions(const char *path, int fd) {
         if (st.st_mode & 0002)
                 log_warning("Configuration file %s is marked world-writable. Please remove world writability permission bits. Proceeding anyway.", path);
 
-        if (getpid() == 1 && (st.st_mode & 0044) != 0044)
+        if (getpid_cached() == 1 && (st.st_mode & 0044) != 0044)
                 log_warning("Configuration file %s is marked world-inaccessible. This has no effect as configuration data is accessible via APIs without restrictions. Proceeding anyway.", path);
 
         return 0;
@@ -323,7 +324,7 @@ int touch_file(const char *path, bool parents, usec_t stamp, uid_t uid, gid_t gi
                 mkdir_parents(path, 0755);
 
         fd = open(path, O_WRONLY|O_CREAT|O_CLOEXEC|O_NOCTTY,
-                        (mode == 0 || mode == MODE_INVALID) ? 0644 : mode);
+                  IN_SET(mode, 0, MODE_INVALID) ? 0644 : mode);
         if (fd < 0)
                 return -errno;
 
@@ -358,22 +359,25 @@ int touch(const char *path) {
 }
 
 int symlink_idempotent(const char *from, const char *to) {
-        _cleanup_free_ char *p = NULL;
         int r;
 
         assert(from);
         assert(to);
 
         if (symlink(from, to) < 0) {
+                _cleanup_free_ char *p = NULL;
+
                 if (errno != EEXIST)
                         return -errno;
 
                 r = readlink_malloc(to, &p);
-                if (r < 0)
+                if (r == -EINVAL) /* Not a symlink? In that case return the original error we encountered: -EEXIST */
+                        return -EEXIST;
+                if (r < 0) /* Any other error? In that case propagate it as is */
                         return r;
 
-                if (!streq(p, from))
-                        return -EINVAL;
+                if (!streq(p, from)) /* Not the symlink we want it to be? In that case, propagate the original -EEXIST */
+                        return -EEXIST;
         }
 
         return 0;
@@ -505,7 +509,7 @@ static int getenv_tmp_dir(const char **ret_path) {
                         r = -ENOTDIR;
                         goto next;
                 }
-                if (!path_is_safe(e)) {
+                if (!path_is_normalized(e)) {
                         r = -EPERM;
                         goto next;
                 }
@@ -576,7 +580,7 @@ int tmp_dir(const char **ret) {
 }
 
 int inotify_add_watch_fd(int fd, int what, uint32_t mask) {
-        char path[strlen("/proc/self/fd/") + DECIMAL_STR_MAX(int) + 1];
+        char path[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int) + 1];
         int r;
 
         /* This is like inotify_add_watch(), except that the file to watch is not referenced by a path, but by an fd */
@@ -617,10 +621,7 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
          * Suggested usage: whenever you want to canonicalize a path, use this function. Pass the absolute path you got
          * as-is: fully qualified and relative to your host's root. Optionally, specify the root parameter to tell this
          * function what to do when encountering a symlink with an absolute path as directory: prefix it by the
-         * specified path.
-         *
-         * Note: there's also chase_symlinks_prefix() (see below), which as first step prefixes the passed path by the
-         * passed root. */
+         * specified path. */
 
         if (original_root) {
                 r = path_make_absolute_cwd(original_root, &root);
@@ -657,9 +658,18 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
 
                 todo += m;
 
-                /* Just a single slash? Then we reached the end. */
-                if (isempty(first) || path_equal(first, "/"))
+                /* Empty? Then we reached the end. */
+                if (isempty(first))
                         break;
+
+                /* Just a single slash? Then we reached the end. */
+                if (path_equal(first, "/")) {
+                        /* Preserve the trailing slash */
+                        if (!strextend(&done, "/", NULL))
+                                return -ENOMEM;
+
+                        break;
+                }
 
                 /* Just a dot? Then let's eat this up. */
                 if (path_equal(first, "/."))
@@ -703,11 +713,15 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
 
                         if (errno == ENOENT &&
                             (flags & CHASE_NONEXISTENT) &&
-                            (isempty(todo) || path_is_safe(todo))) {
+                            (isempty(todo) || path_is_normalized(todo))) {
 
                                 /* If CHASE_NONEXISTENT is set, and the path does not exist, then that's OK, return
                                  * what we got so far. But don't allow this if the remaining path contains "../ or "./"
                                  * or something else weird. */
+
+                                /* If done is "/", as first also contains slash at the head, then remove this redundant slash. */
+                                if (streq_ptr(done, "/"))
+                                        *done = '\0';
 
                                 if (!strextend(&done, first, todo, NULL))
                                         return -ENOMEM;
@@ -721,6 +735,9 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
 
                 if (fstat(child, &st) < 0)
                         return -errno;
+                if ((flags & CHASE_NO_AUTOFS) &&
+                    fd_is_fs_type(child, AUTOFS_SUPER_MAGIC) > 0)
+                        return -EREMOTE;
 
                 if (S_ISLNK(st.st_mode)) {
                         char *joined;
@@ -759,12 +776,11 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
                                                 return -ENOMEM;
                                 }
 
-                        }
-
-                        /* Prefix what's left to do with what we just read, and start the loop again,
-                         * but remain in the current directory. */
-
-                        joined = strjoin("/", destination, todo);
+                                /* Prefix what's left to do with what we just read, and start the loop again, but
+                                 * remain in the current directory. */
+                                joined = strjoin(destination, todo);
+                        } else
+                                joined = strjoin("/", destination, todo);
                         if (!joined)
                                 return -ENOMEM;
 
@@ -779,6 +795,10 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
                         done = first;
                         first = NULL;
                 } else {
+                        /* If done is "/", as first also contains slash at the head, then remove this redundant slash. */
+                        if (streq(done, "/"))
+                                *done = '\0';
+
                         if (!strextend(&done, first, NULL))
                                 return -ENOMEM;
                 }
@@ -802,4 +822,19 @@ int chase_symlinks(const char *path, const char *original_root, unsigned flags, 
         }
 
         return exists;
+}
+
+int access_fd(int fd, int mode) {
+        char p[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(fd) + 1];
+        int r;
+
+        /* Like access() but operates on an already open fd */
+
+        xsprintf(p, "/proc/self/fd/%i", fd);
+
+        r = access(p, mode);
+        if (r < 0)
+                r = -errno;
+
+        return r;
 }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -34,6 +35,7 @@
 #include "label.h"
 #include "machine-image.h"
 #include "machined.h"
+#include "process-util.h"
 #include "signal-util.h"
 
 Manager *manager_new(void) {
@@ -66,7 +68,6 @@ Manager *manager_new(void) {
 
 void manager_free(Manager *m) {
         Machine *machine;
-        Image *i;
 
         assert(m);
 
@@ -82,10 +83,7 @@ void manager_free(Manager *m) {
         hashmap_free(m->machine_units);
         hashmap_free(m->machine_leaders);
 
-        while ((i = hashmap_steal_first(m->image_cache)))
-                image_unref(i);
-
-        hashmap_free(m->image_cache);
+        hashmap_free_with_destructor(m->image_cache, image_unref);
 
         sd_event_source_unref(m->image_cache_defer_event);
 
@@ -398,7 +396,7 @@ int main(int argc, char *argv[]) {
                 goto finish;
         }
 
-        log_debug("systemd-machined running as pid "PID_FMT, getpid());
+        log_debug("systemd-machined running as pid "PID_FMT, getpid_cached());
 
         sd_notify(false,
                   "READY=1\n"
@@ -406,7 +404,7 @@ int main(int argc, char *argv[]) {
 
         r = manager_run(m);
 
-        log_debug("systemd-machined stopped as pid "PID_FMT, getpid());
+        log_debug("systemd-machined stopped as pid "PID_FMT, getpid_cached());
 
 finish:
         manager_free(m);

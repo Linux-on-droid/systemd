@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -57,11 +58,12 @@ void server_forward_console(
 
         struct iovec iovec[5];
         struct timespec ts;
-        char tbuf[sizeof("[] ")-1 + DECIMAL_STR_MAX(ts.tv_sec) + DECIMAL_STR_MAX(ts.tv_nsec)-3 + 1];
-        char header_pid[sizeof("[]: ")-1 + DECIMAL_STR_MAX(pid_t)];
-        int n = 0, fd;
+        char tbuf[STRLEN("[] ") + DECIMAL_STR_MAX(ts.tv_sec) + DECIMAL_STR_MAX(ts.tv_nsec)-3 + 1];
+        char header_pid[STRLEN("[]: ") + DECIMAL_STR_MAX(pid_t)];
         _cleanup_free_ char *ident_buf = NULL;
+        _cleanup_close_ int fd = -1;
         const char *tty;
+        int n = 0;
 
         assert(s);
         assert(message);
@@ -75,7 +77,8 @@ void server_forward_console(
                 xsprintf(tbuf, "[%5"PRI_TIME".%06"PRI_NSEC"] ",
                          ts.tv_sec,
                          (nsec_t)ts.tv_nsec / 1000);
-                IOVEC_SET_STRING(iovec[n++], tbuf);
+
+                iovec[n++] = IOVEC_MAKE_STRING(tbuf);
         }
 
         /* Second: identifier and PID */
@@ -88,19 +91,19 @@ void server_forward_console(
                 xsprintf(header_pid, "["PID_FMT"]: ", ucred->pid);
 
                 if (identifier)
-                        IOVEC_SET_STRING(iovec[n++], identifier);
+                        iovec[n++] = IOVEC_MAKE_STRING(identifier);
 
-                IOVEC_SET_STRING(iovec[n++], header_pid);
+                iovec[n++] = IOVEC_MAKE_STRING(header_pid);
         } else if (identifier) {
-                IOVEC_SET_STRING(iovec[n++], identifier);
-                IOVEC_SET_STRING(iovec[n++], ": ");
+                iovec[n++] = IOVEC_MAKE_STRING(identifier);
+                iovec[n++] = IOVEC_MAKE_STRING(": ");
         }
 
         /* Fourth: message */
-        IOVEC_SET_STRING(iovec[n++], message);
-        IOVEC_SET_STRING(iovec[n++], "\n");
+        iovec[n++] = IOVEC_MAKE_STRING(message);
+        iovec[n++] = IOVEC_MAKE_STRING("\n");
 
-        tty = s->tty_path ? s->tty_path : "/dev/console";
+        tty = s->tty_path ?: "/dev/console";
 
         /* Before you ask: yes, on purpose we open/close the console for each log line we write individually. This is a
          * good strategy to avoid journald getting killed by the kernel's SAK concept (it doesn't fix this entirely,
@@ -115,6 +118,4 @@ void server_forward_console(
 
         if (writev(fd, iovec, n) < 0)
                 log_debug_errno(errno, "Failed to write to %s for logging: %m", tty);
-
-        safe_close(fd);
 }

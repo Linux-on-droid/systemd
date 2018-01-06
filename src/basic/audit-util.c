@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -54,7 +55,7 @@ int audit_session_from_pid(pid_t pid, uint32_t *id) {
         if (r < 0)
                 return r;
 
-        if (u == AUDIT_SESSION_INVALID || u <= 0)
+        if (!audit_session_is_valid(u))
                 return -ENODATA;
 
         *id = u;
@@ -81,7 +82,7 @@ int audit_loginuid_from_pid(pid_t pid, uid_t *uid) {
         if (r < 0)
                 return r;
 
-        *uid = (uid_t) u;
+        *uid = u;
         return 0;
 }
 

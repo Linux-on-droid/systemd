@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -21,7 +22,7 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 
-#ifdef HAVE_LINUX_BTRFS_H
+#if HAVE_LINUX_BTRFS_H
 #include <linux/btrfs.h>
 #endif
 

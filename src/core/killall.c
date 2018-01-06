@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -129,9 +130,9 @@ static void wait_for_children(Set *pids, sigset_t *mask) {
                  * might not be our child. */
                 SET_FOREACH(p, pids, i) {
 
-                        /* We misuse getpgid as a check whether a
-                         * process still exists. */
-                        if (getpgid(PTR_TO_PID(p)) >= 0)
+                        /* kill(pid, 0) sends no signal, but it tells
+                         * us whether the process still exists. */
+                        if (kill(PTR_TO_PID(p), 0) == 0)
                                 continue;
 
                         if (errno != ESRCH)
@@ -174,8 +175,7 @@ static int killall(int sig, Set *pids, bool send_sighup) {
                 pid_t pid;
                 int r;
 
-                if (d->d_type != DT_DIR &&
-                    d->d_type != DT_UNKNOWN)
+                if (!IN_SET(d->d_type, DT_DIR, DT_UNKNOWN))
                         continue;
 
                 if (parse_pid(d->d_name, &pid) < 0)

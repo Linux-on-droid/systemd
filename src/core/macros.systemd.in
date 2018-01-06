@@ -1,4 +1,5 @@
 #  -*- Mode: rpm-spec; indent-tabs-mode: nil -*- */
+#  SPDX-License-Identifier: LGPL-2.1+
 #
 #  This file is part of systemd.
 #
@@ -22,6 +23,7 @@
 %_unitdir @systemunitdir@
 %_userunitdir @userunitdir@
 %_presetdir @systempresetdir@
+%_userpresetdir @userpresetdir@
 %_udevhwdbdir @udevhwdbdir@
 %_udevrulesdir @udevrulesdir@
 %_journalcatalogdir @catalogdir@

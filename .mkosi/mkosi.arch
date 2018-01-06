@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LGPL-2.1+
+#
 # This file is part of systemd.
 #
 # Copyright 2016 Zeal Jagannatha
@@ -48,7 +50,7 @@ BuildPackages=
         kmod
         libcap
         libgcrypt
-        libidn2
+        libidn
         libmicrohttpd
         libseccomp
         libtool
@@ -56,6 +58,7 @@ BuildPackages=
         libxkbcommon
         libxslt
         lz4
+        m4
         meson
         pam
         pkgconfig
@@ -63,6 +66,7 @@ BuildPackages=
         python-lxml
         qrencode
         xz
+# TODO use libidn2 once it's available in official repositories
 
 Packages=
-        libidn2
+        libidn

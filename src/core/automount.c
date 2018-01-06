@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -130,7 +131,20 @@ static void automount_done(Unit *u) {
         a->expire_event_source = sd_event_source_unref(a->expire_event_source);
 }
 
-static int automount_add_mount_links(Automount *a) {
+static int automount_add_trigger_dependencies(Automount *a) {
+        Unit *x;
+        int r;
+
+        assert(a);
+
+        r = unit_load_related_unit(UNIT(a), ".mount", &x);
+        if (r < 0)
+                return r;
+
+        return unit_add_two_dependencies(UNIT(a), UNIT_BEFORE, UNIT_TRIGGERS, x, true, UNIT_DEPENDENCY_IMPLICIT);
+}
+
+static int automount_add_mount_dependencies(Automount *a) {
         _cleanup_free_ char *parent = NULL;
 
         assert(a);
@@ -139,7 +153,7 @@ static int automount_add_mount_links(Automount *a) {
         if (!parent)
                 return -ENOMEM;
 
-        return unit_require_mounts_for(UNIT(a), parent);
+        return unit_require_mounts_for(UNIT(a), parent, UNIT_DEPENDENCY_IMPLICIT);
 }
 
 static int automount_add_default_dependencies(Automount *a) {
@@ -153,7 +167,7 @@ static int automount_add_default_dependencies(Automount *a) {
         if (!MANAGER_IS_SYSTEM(UNIT(a)->manager))
                 return 0;
 
-        r = unit_add_two_dependencies_by_name(UNIT(a), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true);
+        r = unit_add_two_dependencies_by_name(UNIT(a), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_UMOUNT_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
         if (r < 0)
                 return r;
 
@@ -210,26 +224,20 @@ static int automount_load(Unit *u) {
         assert(u->load_state == UNIT_STUB);
 
         /* Load a .automount file */
-        r = unit_load_fragment_and_dropin_optional(u);
+        r = unit_load_fragment_and_dropin(u);
         if (r < 0)
                 return r;
 
         if (u->load_state == UNIT_LOADED) {
-                Unit *x;
-
                 r = automount_set_where(a);
                 if (r < 0)
                         return r;
 
-                r = unit_load_related_unit(u, ".mount", &x);
+                r = automount_add_trigger_dependencies(a);
                 if (r < 0)
                         return r;
 
-                r = unit_add_two_dependencies(u, UNIT_BEFORE, UNIT_TRIGGERS, x, true);
-                if (r < 0)
-                        return r;
-
-                r = automount_add_mount_links(a);
+                r = automount_add_mount_dependencies(a);
                 if (r < 0)
                         return r;
 
@@ -251,8 +259,7 @@ static void automount_set_state(Automount *a, AutomountState state) {
         if (state != AUTOMOUNT_RUNNING)
                 automount_stop_expire(a);
 
-        if (state != AUTOMOUNT_WAITING &&
-            state != AUTOMOUNT_RUNNING)
+        if (!IN_SET(state, AUTOMOUNT_WAITING, AUTOMOUNT_RUNNING))
                 unmount_autofs(a);
 
         if (state != old_state)
@@ -324,6 +331,9 @@ static void automount_enter_dead(Automount *a, AutomountResult f) {
 
         if (a->result == AUTOMOUNT_SUCCESS)
                 a->result = f;
+
+        if (a->result != AUTOMOUNT_SUCCESS)
+                log_unit_warning(UNIT(a), "Failed with result '%s'.", automount_result_to_string(a->result));
 
         automount_set_state(a, a->result != AUTOMOUNT_SUCCESS ? AUTOMOUNT_FAILED : AUTOMOUNT_DEAD);
 }
@@ -529,7 +539,6 @@ static void automount_trigger_notify(Unit *u, Unit *other) {
         if (IN_SET(MOUNT(other)->state,
                    MOUNT_MOUNTING, MOUNT_MOUNTING_DONE,
                    MOUNT_MOUNTED, MOUNT_REMOUNTING,
-                   MOUNT_MOUNTING_SIGTERM, MOUNT_MOUNTING_SIGKILL,
                    MOUNT_REMOUNTING_SIGTERM, MOUNT_REMOUNTING_SIGKILL,
                    MOUNT_UNMOUNTING_SIGTERM, MOUNT_UNMOUNTING_SIGKILL,
                    MOUNT_FAILED)) {
@@ -543,7 +552,6 @@ static void automount_trigger_notify(Unit *u, Unit *other) {
         /* The mount is in some unhappy state now, let's unfreeze any waiting clients */
         if (IN_SET(MOUNT(other)->state,
                    MOUNT_DEAD, MOUNT_UNMOUNTING,
-                   MOUNT_MOUNTING_SIGTERM, MOUNT_MOUNTING_SIGKILL,
                    MOUNT_REMOUNTING_SIGTERM, MOUNT_REMOUNTING_SIGKILL,
                    MOUNT_UNMOUNTING_SIGTERM, MOUNT_UNMOUNTING_SIGKILL,
                    MOUNT_FAILED)) {
@@ -557,8 +565,8 @@ static void automount_trigger_notify(Unit *u, Unit *other) {
 static void automount_enter_waiting(Automount *a) {
         _cleanup_close_ int ioctl_fd = -1;
         int p[2] = { -1, -1 };
-        char name[sizeof("systemd-")-1 + DECIMAL_STR_MAX(pid_t) + 1];
-        char options[sizeof("fd=,pgrp=,minproto=5,maxproto=5,direct")-1
+        char name[STRLEN("systemd-") + DECIMAL_STR_MAX(pid_t) + 1];
+        char options[STRLEN("fd=,pgrp=,minproto=5,maxproto=5,direct")
                      + DECIMAL_STR_MAX(int) + DECIMAL_STR_MAX(gid_t) + 1];
         bool mounted = false;
         int r, dev_autofs_fd;
@@ -590,7 +598,7 @@ static void automount_enter_waiting(Automount *a) {
         }
 
         xsprintf(options, "fd=%i,pgrp="PID_FMT",minproto=5,maxproto=5,direct", p[1], getpgrp());
-        xsprintf(name, "systemd-"PID_FMT, getpid());
+        xsprintf(name, "systemd-"PID_FMT, getpid_cached());
         if (mount(name, a->where, "autofs", 0, options) < 0) {
                 r = -errno;
                 goto fail;
@@ -803,7 +811,7 @@ static int automount_start(Unit *u) {
         int r;
 
         assert(a);
-        assert(a->state == AUTOMOUNT_DEAD || a->state == AUTOMOUNT_FAILED);
+        assert(IN_SET(a->state, AUTOMOUNT_DEAD, AUTOMOUNT_FAILED));
 
         if (path_is_mount_point(a->where, NULL, 0) > 0) {
                 log_unit_error(u, "Path %s is already a mount point, refusing start.", a->where);
@@ -835,7 +843,7 @@ static int automount_stop(Unit *u) {
         Automount *a = AUTOMOUNT(u);
 
         assert(a);
-        assert(a->state == AUTOMOUNT_WAITING || a->state == AUTOMOUNT_RUNNING);
+        assert(IN_SET(a->state, AUTOMOUNT_WAITING, AUTOMOUNT_RUNNING));
 
         automount_enter_dead(a, AUTOMOUNT_SUCCESS);
         return 1;

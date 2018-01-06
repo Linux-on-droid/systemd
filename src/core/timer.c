@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 /***
   This file is part of systemd.
 
@@ -105,18 +106,18 @@ static int timer_add_default_dependencies(Timer *t) {
         if (!UNIT(t)->default_dependencies)
                 return 0;
 
-        r = unit_add_dependency_by_name(UNIT(t), UNIT_BEFORE, SPECIAL_TIMERS_TARGET, NULL, true);
+        r = unit_add_dependency_by_name(UNIT(t), UNIT_BEFORE, SPECIAL_TIMERS_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
         if (r < 0)
                 return r;
 
         if (MANAGER_IS_SYSTEM(UNIT(t)->manager)) {
-                r = unit_add_two_dependencies_by_name(UNIT(t), UNIT_AFTER, UNIT_REQUIRES, SPECIAL_SYSINIT_TARGET, NULL, true);
+                r = unit_add_two_dependencies_by_name(UNIT(t), UNIT_AFTER, UNIT_REQUIRES, SPECIAL_SYSINIT_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
                 if (r < 0)
                         return r;
 
                 LIST_FOREACH(value, v, t->values) {
                         if (v->base == TIMER_CALENDAR) {
-                                r = unit_add_dependency_by_name(UNIT(t), UNIT_AFTER, SPECIAL_TIME_SYNC_TARGET, NULL, true);
+                                r = unit_add_dependency_by_name(UNIT(t), UNIT_AFTER, SPECIAL_TIME_SYNC_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
                                 if (r < 0)
                                         return r;
                                 break;
@@ -124,7 +125,23 @@ static int timer_add_default_dependencies(Timer *t) {
                 }
         }
 
-        return unit_add_two_dependencies_by_name(UNIT(t), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_SHUTDOWN_TARGET, NULL, true);
+        return unit_add_two_dependencies_by_name(UNIT(t), UNIT_BEFORE, UNIT_CONFLICTS, SPECIAL_SHUTDOWN_TARGET, NULL, true, UNIT_DEPENDENCY_DEFAULT);
+}
+
+static int timer_add_trigger_dependencies(Timer *t) {
+        Unit *x;
+        int r;
+
+        assert(t);
+
+        if (!hashmap_isempty(UNIT(t)->dependencies[UNIT_TRIGGERS]))
+                return 0;
+
+        r = unit_load_related_unit(UNIT(t), ".service", &x);
+        if (r < 0)
+                return r;
+
+        return unit_add_two_dependencies(UNIT(t), UNIT_BEFORE, UNIT_TRIGGERS, x, true, UNIT_DEPENDENCY_IMPLICIT);
 }
 
 static int timer_setup_persistent(Timer *t) {
@@ -137,7 +154,7 @@ static int timer_setup_persistent(Timer *t) {
 
         if (MANAGER_IS_SYSTEM(UNIT(t)->manager)) {
 
-                r = unit_require_mounts_for(UNIT(t), "/var/lib/systemd/timers");
+                r = unit_require_mounts_for(UNIT(t), "/var/lib/systemd/timers", UNIT_DEPENDENCY_FILE);
                 if (r < 0)
                         return r;
 
@@ -179,17 +196,9 @@ static int timer_load(Unit *u) {
 
         if (u->load_state == UNIT_LOADED) {
 
-                if (set_isempty(u->dependencies[UNIT_TRIGGERS])) {
-                        Unit *x;
-
-                        r = unit_load_related_unit(u, ".service", &x);
-                        if (r < 0)
-                                return r;
-
-                        r = unit_add_two_dependencies(u, UNIT_BEFORE, UNIT_TRIGGERS, x, true);
-                        if (r < 0)
-                                return r;
-                }
+                r = timer_add_trigger_dependencies(t);
+                if (r < 0)
+                        return r;
 
                 r = timer_setup_persistent(t);
                 if (r < 0)
@@ -295,6 +304,9 @@ static void timer_enter_dead(Timer *t, TimerResult f) {
 
         if (t->result == TIMER_SUCCESS)
                 t->result = f;
+
+        if (t->result != TIMER_SUCCESS)
+                log_unit_warning(UNIT(t), "Failed with result '%s'.", timer_result_to_string(t->result));
 
         timer_set_state(t, t->result != TIMER_SUCCESS ? TIMER_FAILED : TIMER_DEAD);
 }
@@ -405,9 +417,9 @@ static void timer_enter_waiting(Timer *t, bool initial) {
                                 /* In a container we don't want to include the time the host
                                  * was already up when the container started, so count from
                                  * our own startup. */
-                                /* fall through */
+                                _fallthrough_;
                         case TIMER_STARTUP:
-                                base = UNIT(t)->manager->userspace_timestamp.monotonic;
+                                base = UNIT(t)->manager->timestamps[MANAGER_TIMESTAMP_USERSPACE].monotonic;
                                 break;
 
                         case TIMER_UNIT_ACTIVE:
@@ -586,7 +598,7 @@ static int timer_start(Unit *u) {
         int r;
 
         assert(t);
-        assert(t->state == TIMER_DEAD || t->state == TIMER_FAILED);
+        assert(IN_SET(t->state, TIMER_DEAD, TIMER_FAILED));
 
         trigger = UNIT_TRIGGER(u);
         if (!trigger || trigger->load_state != UNIT_LOADED) {
@@ -614,9 +626,23 @@ static int timer_start(Unit *u) {
         if (t->stamp_path) {
                 struct stat st;
 
-                if (stat(t->stamp_path, &st) >= 0)
-                        t->last_trigger.realtime = timespec_load(&st.st_atim);
-                else if (errno == ENOENT)
+                if (stat(t->stamp_path, &st) >= 0) {
+                        usec_t ft;
+
+                        /* Load the file timestamp, but only if it is actually in the past. If it is in the future,
+                         * something is wrong with the system clock. */
+
+                        ft = timespec_load(&st.st_mtim);
+                        if (ft < now(CLOCK_REALTIME))
+                                t->last_trigger.realtime = ft;
+                        else {
+                                char z[FORMAT_TIMESTAMP_MAX];
+
+                                log_unit_warning(u, "Not using persistent file timestamp %s as it is in the future.",
+                                                 format_timestamp(z, sizeof(z), ft));
+                        }
+
+                } else if (errno == ENOENT)
                         /* The timer has never run before,
                          * make sure a stamp file exists.
                          */
@@ -632,7 +658,7 @@ static int timer_stop(Unit *u) {
         Timer *t = TIMER(u);
 
         assert(t);
-        assert(t->state == TIMER_WAITING || t->state == TIMER_RUNNING || t->state == TIMER_ELAPSED);
+        assert(IN_SET(t->state, TIMER_WAITING, TIMER_RUNNING, TIMER_ELAPSED));
 
         timer_enter_dead(t, TIMER_SUCCESS);
         return 1;
@@ -737,8 +763,7 @@ static void timer_trigger_notify(Unit *u, Unit *other) {
 
         /* Reenable all timers that depend on unit state */
         LIST_FOREACH(value, v, t->values)
-                if (v->base == TIMER_UNIT_ACTIVE ||
-                    v->base == TIMER_UNIT_INACTIVE)
+                if (IN_SET(v->base, TIMER_UNIT_ACTIVE, TIMER_UNIT_INACTIVE))
                         v->disabled = false;
 
         switch (t->state) {

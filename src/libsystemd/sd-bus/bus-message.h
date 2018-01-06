@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
 /***
@@ -92,9 +93,7 @@ struct sd_bus_message {
         bool dont_send:1;
         bool allow_fds:1;
         bool free_header:1;
-        bool free_kdbus:1;
         bool free_fds:1;
-        bool release_kdbus:1;
         bool poisoned:1;
 
         /* The first and last bytes of the message */
@@ -127,8 +126,6 @@ struct sd_bus_message {
         struct iovec *iovec;
         struct iovec iovec_fixed[2];
         unsigned n_iovec;
-
-        struct kdbus_msg *kdbus;
 
         char *peeked_signature;
 
@@ -191,7 +188,6 @@ static inline bool BUS_MESSAGE_IS_GVARIANT(sd_bus_message *m) {
         return m->header->version == 2;
 }
 
-int bus_message_seal(sd_bus_message *m, uint64_t serial, usec_t timeout);
 int bus_message_get_blob(sd_bus_message *m, void **buffer, size_t *sz);
 int bus_message_read_strv_extend(sd_bus_message *m, char ***l);
 
