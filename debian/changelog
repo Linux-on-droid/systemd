@@ -1,3 +1,66 @@
+systemd (237-3) unstable; urgency=medium
+
+  [ Martin Pitt ]
+  * debian/tests/boot-smoke: More robust journal checking.
+    Also fail the test if calling journalctl fails, and avoid calling it
+    twice. See https://github.com/systemd/systemd/pull/8032
+  * Simplify PO template creation.
+    Use the existing upstream build system instead of a manual call to
+    `intltool-update` and `xgettext` to build systemd.pot. Remove the now
+    obsolete intltool build dependency, but still explicitly keep gettext.
+    (LP: #1707898)
+  * Make systemd-sysv-install robust against existing $ROOT.
+    Always initialize `$ROOT`, to avoid the script getting confused by an
+    existing outside env variable. Also fix the `--root` option to actually
+    work, the previous approach was conceptually broken due to how shell
+    quoting works. Make the work with `set -u`. (Closes: #890436)
+
+  [ Felipe Sateler ]
+  * Backport upstream patch fixing a wrong assert() call (Closes: #890423)
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 14 Feb 2018 23:07:17 +0100
+
+systemd (237-2) unstable; urgency=medium
+
+  * Drop debian/extra/rules/70-debian-uaccess.rules.
+    Up-to-date udev rules for U2F devices are shipped in libu2f-udev nowadays.
+    (Closes: #889665)
+  * service: relax PID file symlink chain checks a bit.
+    Let's read the PID file after all if there's a potentially unsafe symlink
+    chain in place. But if we do, then refuse taking the PID if its outside of
+    the cgroup. (Closes: #889144)
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 09 Feb 2018 23:35:31 +0100
+
+systemd (237-1) unstable; urgency=medium
+
+  * New upstream version 237
+  * Rebase patches
+  * Update symbols file for libsystemd0
+  * Update Vcs-* to point to https://salsa.debian.org
+  * Bump Standards-Version to 4.1.3
+  * Set Rules-Requires-Root to no
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 30 Jan 2018 01:55:24 +0100
+
+systemd (236-4) unstable; urgency=medium
+
+  [ Felipe Sateler ]
+  * Allow systemd-timesyncd to start when libnss-systemd is not installed.
+    Pick upstream patch requiring the existence of the systemd-timesync user
+    only when running as root, which is not the case for the system unit.
+    (Closes: #887343)
+
+  [ Nicolas Braud-Santoni ]
+  * debian/copyright: Refer to the CC0 license file (Closes: #882629)
+
+  [ Michael Biebl ]
+  * Add Build-Depends on python3-evdev <!nocheck>
+    This is used by hwdb/parse_hwdb.py to perform additional validation on
+    hwdb files.
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 28 Jan 2018 22:29:32 +0100
+
 systemd (236-3~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports.

@@ -6,9 +6,10 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Marco d'Itri <md@linux.it>,
            Sjoerd Simons <sjoerd@debian.org>,
            Martin Pitt <mpitt@debian.org>
-Standards-Version: 4.1.2
-Vcs-Git: https://anonscm.debian.org/git/pkg-systemd/systemd.git
-Vcs-Browser: https://anonscm.debian.org/git/pkg-systemd/systemd.git
+Standards-Version: 4.1.3
+Rules-Requires-Root: no
+Vcs-Git: https://salsa.debian.org/systemd-team/systemd.git
+Vcs-Browser: https://salsa.debian.org/systemd-team/systemd
 Homepage: https://www.freedesktop.org/wiki/Software/systemd
 Build-Depends: debhelper (>= 10.4~),
                pkg-config,
@@ -17,7 +18,7 @@ Build-Depends: debhelper (>= 10.4~),
                docbook-xml,
                m4,
                meson (>= 0.40.0),
-               intltool,
+               gettext,
                gperf,
                gnu-efi [amd64 i386 arm64],
                libcap-dev (>= 1:2.24-9~),
@@ -50,6 +51,7 @@ Build-Depends: debhelper (>= 10.4~),
                python3:native,
                python3-lxml:native,
                python3-pyparsing <!nocheck>,
+               python3-evdev <!nocheck>,
                tzdata <!nocheck>,
                libcap2-bin <!nocheck>,
                iproute2 <!nocheck>,
