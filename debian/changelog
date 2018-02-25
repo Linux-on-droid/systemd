@@ -1,3 +1,15 @@
+systemd (237-3~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports
+  * Rebase patches
+  * Revert "Add Build-Depends on python3-evdev <!nocheck>"
+    This package is not availabe in stretch or stretch-backports.
+  * Revert "Drop debian/extra/rules/70-debian-uaccess.rules"
+    There is no libu2f-udev package in stretch or stretch-backports shipping
+    the udev rules for U2F devices.
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 25 Feb 2018 18:22:14 +0100
+
 systemd (237-3) unstable; urgency=medium
 
   [ Martin Pitt ]
