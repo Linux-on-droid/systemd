@@ -1,3 +1,12 @@
+systemd (232-25+deb9u3) stretch; urgency=medium
+
+  [ Cyril Brulebois ]
+  * networkd-ndisc: Handle missing mtu gracefully.
+    The previous upload made networkd respect the MTU field in IPv6 RA but
+    unfortunately broke setups where there's no such field. (Closes: #892794)
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 23 Mar 2018 13:55:43 +0100
+
 systemd (232-25+deb9u2) stretch; urgency=medium
 
   * networkd: Handle MTU field in IPv6 RA (Closes: #878162)
