@@ -1,0 +1,22 @@
+From: Wim de With <register@wimdewith.com>
+Date: Sat, 10 Dec 2016 05:33:58 +0100
+Subject: nspawn: add missing -E to getopt_long (#4860)
+
+(cherry picked from commit 2e1f244efd2dfc1a60d032bef3d88b9ba6e0444b)
+---
+ src/nspawn/nspawn.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/nspawn/nspawn.c b/src/nspawn/nspawn.c
+index 9bafe9b..1fcd09e 100644
+--- a/src/nspawn/nspawn.c
++++ b/src/nspawn/nspawn.c
+@@ -472,7 +472,7 @@ static int parse_argv(int argc, char *argv[]) {
+         assert(argc >= 0);
+         assert(argv);
+ 
+-        while ((c = getopt_long(argc, argv, "+hD:u:abL:M:jS:Z:qi:xp:nU", options, NULL)) >= 0)
++        while ((c = getopt_long(argc, argv, "+hD:u:abL:M:jS:Z:qi:xp:nUE:", options, NULL)) >= 0)
+ 
+                 switch (c) {
+ 
