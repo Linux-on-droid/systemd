@@ -1,3 +1,17 @@
+systemd (232-25+deb9u4) stretch; urgency=medium
+
+  * core/load-fragment: Add RemoveIPC=
+    Allow RemoveIPC= to be set in the unit file not only via D-Bus.
+    (Closes: #892829)
+  * nspawn: Add missing -E to getopt_long.
+    The -E alias for --setenv in systemd-nspawn was not working as
+    documented. This commit fixes that by adding -E to getopt_long.
+    (Closes: #895798)
+  * login: Respect --no-wall when cancelling a shutdown request
+    (Closes: #897938)
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 13 Jun 2018 22:20:36 +0200
+
 systemd (232-25+deb9u3) stretch; urgency=medium
 
   [ Cyril Brulebois ]
