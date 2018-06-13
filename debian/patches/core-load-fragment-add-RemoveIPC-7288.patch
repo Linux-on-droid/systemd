@@ -1,0 +1,28 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Fri, 10 Nov 2017 18:15:55 +0900
+Subject: core/load-fragment: add RemoveIPC= (#7288)
+
+PR #3865 introduced RemoveIPC= but the option is not listed in
+load-fragment-gperf.gperf. So, the option could be used only via d-bus.
+This adds RemoveIPC= in load-fragment-gperf.gperf. Then, now we can
+set the option in unit files.
+
+Fixes #7281.
+
+(cherry picked from commit c54515b1e42384ad4c582f7fb13434f9224c148f)
+---
+ src/core/load-fragment-gperf.gperf.m4 | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/core/load-fragment-gperf.gperf.m4 b/src/core/load-fragment-gperf.gperf.m4
+index cb2f384..10a5682 100644
+--- a/src/core/load-fragment-gperf.gperf.m4
++++ b/src/core/load-fragment-gperf.gperf.m4
+@@ -35,6 +35,7 @@ $1.Environment,                  config_parse_environ,               0,
+ $1.EnvironmentFile,              config_parse_unit_env_file,         0,                             offsetof($1, exec_context.environment_files)
+ $1.PassEnvironment,              config_parse_pass_environ,          0,                             offsetof($1, exec_context.pass_environment)
+ $1.DynamicUser,                  config_parse_bool,                  0,                             offsetof($1, exec_context.dynamic_user)
++$1.RemoveIPC,                    config_parse_bool,                  0,                             offsetof($1, exec_context.remove_ipc)
+ $1.StandardInput,                config_parse_exec_input,            0,                             offsetof($1, exec_context)
+ $1.StandardOutput,               config_parse_exec_output,           0,                             offsetof($1, exec_context)
+ $1.StandardError,                config_parse_exec_output,           0,                             offsetof($1, exec_context)

@@ -79,6 +79,7 @@ shared-Add-a-linker-script-so-that-all-functions-are-tagg.patch
 resolved-fix-loop-on-packets-with-pseudo-dns-types.patch
 machinectl-don-t-output-No-machines.-with-no-legend-optio.patch
 networkd-ndisc-handle-missing-mtu-gracefully-4913.patch
+core-load-fragment-add-RemoveIPC-7288.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
