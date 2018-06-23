@@ -1,0 +1,38 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Wed, 23 Aug 2017 12:38:56 +0900
+Subject: network,resolve: remove comments related to kdbus
+
+(cherry picked from commit d7ea7bb8a8da9f94d8fbc5be2c5c4b2ebe40b7b3)
+---
+ src/network/networkd-manager.c | 3 +--
+ src/resolve/resolved-bus.c     | 3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/network/networkd-manager.c b/src/network/networkd-manager.c
+index 360677d..681fe0b 100644
+--- a/src/network/networkd-manager.c
++++ b/src/network/networkd-manager.c
+@@ -138,8 +138,7 @@ int manager_connect_bus(Manager *m) {
+         r = sd_bus_default_system(&m->bus);
+         if (r < 0) {
+                 /* We failed to connect? Yuck, we must be in early
+-                 * boot. Let's try in 5s again. As soon as we have
+-                 * kdbus we can stop doing this... */
++                 * boot. Let's try in 5s again. */
+ 
+                 log_debug_errno(r, "Failed to connect to bus, trying again in 5s: %m");
+ 
+diff --git a/src/resolve/resolved-bus.c b/src/resolve/resolved-bus.c
+index 2ca65e6..f53324a 100644
+--- a/src/resolve/resolved-bus.c
++++ b/src/resolve/resolved-bus.c
+@@ -1641,8 +1641,7 @@ int manager_connect_bus(Manager *m) {
+         r = sd_bus_default_system(&m->bus);
+         if (r < 0) {
+                 /* We failed to connect? Yuck, we must be in early
+-                 * boot. Let's try in 5s again. As soon as we have
+-                 * kdbus we can stop doing this... */
++                 * boot. Let's try in 5s again. */
+ 
+                 log_debug_errno(r, "Failed to connect to bus, trying again in 5s: %m");
+ 
