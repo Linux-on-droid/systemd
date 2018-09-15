@@ -1,3 +1,10 @@
+systemd (232-25+deb9u5) stretch; urgency=medium
+
+  * networkd: Do not fail manager_connect_bus() if dbus is not active yet
+    (Closes: #901834)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 15 Sep 2018 21:40:38 +0200
+
 systemd (232-25+deb9u4) stretch; urgency=medium
 
   * core/load-fragment: Add RemoveIPC=
