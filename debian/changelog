@@ -1,3 +1,14 @@
+systemd (239-7~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+  * Rebase patches
+  * Disable MemoryAccounting= by default.
+    The new upstream default is to turn memory accounting on. This is only
+    recommended for Linux kernels 4.14 or higher though as with older
+    kernels, like the one from Stretch, it introduces significant overhead.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 09 Oct 2018 08:11:11 +0200
+
 systemd (239-7) unstable; urgency=medium
 
   * autopkgtest: Add iputils-ping dependency to root-unittests.
