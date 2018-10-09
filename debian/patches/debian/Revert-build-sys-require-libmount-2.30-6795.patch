@@ -14,7 +14,7 @@ this commit.
  2 files changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/README b/README
-index 8807e5c..9c0badc 100644
+index 2cde08c..eb6f5df 100644
 --- a/README
 +++ b/README
 @@ -137,8 +137,9 @@ REQUIREMENTS:
@@ -30,15 +30,15 @@ index 8807e5c..9c0badc 100644
          libblkid >= 2.24 (from util-linux) (optional)
          libkmod >= 15 (optional)
 diff --git a/meson.build b/meson.build
-index b9e59ec..3fffae4 100644
+index 7d3fa6a..d8f4cdb 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -803,7 +803,7 @@ if not libcap.found()
+@@ -792,7 +792,7 @@ if not libcap.found()
  endif
  
  libmount = dependency('mount',
--                      version : '>= 2.30',
-+                      version : '>= 2.27',
-                       required : not fuzzer_build)
+-                      version : fuzzer_build ? '>= 0' : '>= 2.30')
++                      version : fuzzer_build ? '>= 0' : '>= 2.27')
  
  want_seccomp = get_option('seccomp')
+ if want_seccomp != 'false' and not fuzzer_build
