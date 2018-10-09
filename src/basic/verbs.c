@@ -1,22 +1,4 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
-/***
-  This file is part of systemd.
-
-  Copyright 2014 Lennart Poettering
-
-  systemd is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Lesser General Public License as published by
-  the Free Software Foundation; either version 2.1 of the License, or
-  (at your option) any later version.
-
-  systemd is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-  Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with systemd; If not, see <http://www.gnu.org/licenses/>.
-***/
 
 #include <errno.h>
 #include <getopt.h>
@@ -41,7 +23,7 @@ bool running_in_chroot_or_offline(void) {
         /* Added to support use cases like rpm-ostree, where from %post scripts we only want to execute "preset", but
          * not "start"/"restart" for example.
          *
-         * See ENVIRONMENT.md for docs.
+         * See doc/ENVIRONMENT.md for docs.
          */
         r = getenv_bool("SYSTEMD_OFFLINE");
         if (r < 0 && r != -ENXIO)
@@ -94,7 +76,7 @@ int dispatch_verb(int argc, char *argv[], const Verb verbs[], void *userdata) {
                 if (name)
                         found = streq(name, verbs[i].verb);
                 else
-                        found = !!(verbs[i].flags & VERB_DEFAULT);
+                        found = verbs[i].flags & VERB_DEFAULT;
 
                 if (found) {
                         verb = &verbs[i];

@@ -1,32 +1,17 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
-/***
-  This file is part of systemd.
-
-  Copyright 2010 Lennart Poettering
-
-  systemd is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Lesser General Public License as published by
-  the Free Software Foundation; either version 2.1 of the License, or
-  (at your option) any later version.
-
-  systemd is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-  Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with systemd; If not, see <http://www.gnu.org/licenses/>.
-***/
 
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/epoll.h>
 
+#include <libmount.h>
+
 #include "sd-messages.h"
 
 #include "alloc-util.h"
 #include "dbus-mount.h"
+#include "device.h"
 #include "escape.h"
 #include "exit-status.h"
 #include "format-util.h"
@@ -241,7 +226,7 @@ static void mount_done(Unit *u) {
         mount_parameters_done(&m->parameters_proc_self_mountinfo);
         mount_parameters_done(&m->parameters_fragment);
 
-        m->exec_runtime = exec_runtime_unref(m->exec_runtime);
+        m->exec_runtime = exec_runtime_unref(m->exec_runtime, false);
         exec_command_done_array(m->exec_command, _MOUNT_EXEC_COMMAND_MAX);
         m->control_command = NULL;
 
@@ -527,23 +512,23 @@ static int mount_verify(Mount *m) {
 
         if (!unit_has_name(UNIT(m), e)) {
                 log_unit_error(UNIT(m), "Where= setting doesn't match unit name. Refusing.");
-                return -EINVAL;
+                return -ENOEXEC;
         }
 
         if (mount_point_is_api(m->where) || mount_point_ignore(m->where)) {
                 log_unit_error(UNIT(m), "Cannot create mount unit for API file system %s. Refusing.", m->where);
-                return -EINVAL;
+                return -ENOEXEC;
         }
 
         p = get_mount_parameters_fragment(m);
         if (p && !p->what) {
                 log_unit_error(UNIT(m), "What= setting is missing. Refusing.");
-                return -EBADMSG;
+                return -ENOEXEC;
         }
 
         if (m->exec_context.pam_name && m->kill_context.kill_mode != KILL_CONTROL_GROUP) {
                 log_unit_error(UNIT(m), "Unit has PAM enabled. Kill mode must be set to control-group'. Refusing.");
-                return -EINVAL;
+                return -ENOEXEC;
         }
 
         return 0;
@@ -564,7 +549,7 @@ static int mount_add_extras(Mount *m) {
                         return r;
         }
 
-        path_kill_slashes(m->where);
+        path_simplify(m->where, false);
 
         if (!u->description) {
                 r = unit_set_description(u, m->where);
@@ -667,7 +652,8 @@ static void mount_set_state(Mount *m, MountState state) {
         if (state != old_state)
                 log_unit_debug(UNIT(m), "Changed %s -> %s", mount_state_to_string(old_state), mount_state_to_string(state));
 
-        unit_notify(UNIT(m), state_translation_table[old_state], state_translation_table[state], m->reload_result == MOUNT_SUCCESS);
+        unit_notify(UNIT(m), state_translation_table[old_state], state_translation_table[state],
+                    m->reload_result == MOUNT_SUCCESS ? 0 : UNIT_NOTIFY_RELOAD_FAILURE);
 }
 
 static int mount_coldplug(Unit *u) {
@@ -699,14 +685,17 @@ static int mount_coldplug(Unit *u) {
                         return r;
         }
 
-        if (!IN_SET(new_state, MOUNT_DEAD, MOUNT_FAILED))
+        if (!IN_SET(new_state, MOUNT_DEAD, MOUNT_FAILED)) {
                 (void) unit_setup_dynamic_creds(u);
+                (void) unit_setup_exec_runtime(u);
+        }
 
         mount_set_state(m, new_state);
         return 0;
 }
 
 static void mount_dump(Unit *u, FILE *f, const char *prefix) {
+        char buf[FORMAT_TIMESPAN_MAX];
         Mount *m = MOUNT(u);
         MountParameters *p;
 
@@ -728,7 +717,8 @@ static void mount_dump(Unit *u, FILE *f, const char *prefix) {
                 "%sDirectoryMode: %04o\n"
                 "%sSloppyOptions: %s\n"
                 "%sLazyUnmount: %s\n"
-                "%sForceUnmount: %s\n",
+                "%sForceUnmount: %s\n"
+                "%sTimoutSec: %s\n",
                 prefix, mount_state_to_string(m->state),
                 prefix, mount_result_to_string(m->result),
                 prefix, m->where,
@@ -741,7 +731,8 @@ static void mount_dump(Unit *u, FILE *f, const char *prefix) {
                 prefix, m->directory_mode,
                 prefix, yes_no(m->sloppy_options),
                 prefix, yes_no(m->lazy_unmount),
-                prefix, yes_no(m->force_unmount));
+                prefix, yes_no(m->force_unmount),
+                prefix, format_timespan(buf, sizeof(buf), m->timeout_usec, USEC_PER_SEC));
 
         if (m->control_pid > 0)
                 fprintf(f,
@@ -776,7 +767,6 @@ static int mount_spawn(Mount *m, ExecCommand *c, pid_t *_pid) {
         if (r < 0)
                 return r;
 
-        manager_set_exec_params(UNIT(m)->manager, &exec_params);
         unit_set_exec_params(UNIT(m), &exec_params);
 
         r = exec_spawn(UNIT(m),
@@ -810,8 +800,7 @@ static void mount_enter_dead(Mount *m, MountResult f) {
 
         mount_set_state(m, m->result != MOUNT_SUCCESS ? MOUNT_FAILED : MOUNT_DEAD);
 
-        exec_runtime_destroy(m->exec_runtime);
-        m->exec_runtime = exec_runtime_unref(m->exec_runtime);
+        m->exec_runtime = exec_runtime_unref(m->exec_runtime, true);
 
         exec_context_destroy_runtime_directory(&m->exec_context, UNIT(m)->manager->prefix[EXEC_DIRECTORY_RUNTIME]);
 
@@ -1230,12 +1219,15 @@ _pure_ static const char *mount_sub_state_to_string(Unit *u) {
         return mount_state_to_string(MOUNT(u)->state);
 }
 
-_pure_ static bool mount_check_gc(Unit *u) {
+_pure_ static bool mount_may_gc(Unit *u) {
         Mount *m = MOUNT(u);
 
         assert(m);
 
-        return m->from_proc_self_mountinfo;
+        if (m->from_proc_self_mountinfo)
+                return false;
+
+        return true;
 }
 
 static void mount_sigchld_event(Unit *u, pid_t pid, int code, int status) {
@@ -1602,11 +1594,8 @@ static int mount_load_proc_self_mountinfo(Manager *m, bool set_flags) {
         assert(m);
 
         t = mnt_new_table();
-        if (!t)
-                return log_oom();
-
         i = mnt_new_iter(MNT_ITER_FORWARD);
-        if (!i)
+        if (!t || !i)
                 return log_oom();
 
         r = mnt_table_parse_mtab(t, NULL);
@@ -1615,9 +1604,9 @@ static int mount_load_proc_self_mountinfo(Manager *m, bool set_flags) {
 
         r = 0;
         for (;;) {
+                struct libmnt_fs *fs;
                 const char *device, *path, *options, *fstype;
                 _cleanup_free_ char *d = NULL, *p = NULL;
-                struct libmnt_fs *fs;
                 int k;
 
                 k = mnt_table_next_fs(t, i, &fs);
@@ -1640,7 +1629,7 @@ static int mount_load_proc_self_mountinfo(Manager *m, bool set_flags) {
                 if (cunescape(path, UNESCAPE_RELAX, &p) < 0)
                         return log_oom();
 
-                (void) device_found_node(m, d, true, DEVICE_FOUND_MOUNT, set_flags);
+                device_found_node(m, d, DEVICE_FOUND_MOUNT, DEVICE_FOUND_MOUNT);
 
                 k = mount_setup_unit(m, d, p, options, fstype, set_flags);
                 if (r == 0 && k < 0)
@@ -1677,7 +1666,7 @@ static int mount_get_timeout(Unit *u, usec_t *timeout) {
         return 1;
 }
 
-static int synthesize_root_mount(Manager *m) {
+static void mount_enumerate_perpetual(Manager *m) {
         Unit *u;
         int r;
 
@@ -1689,8 +1678,10 @@ static int synthesize_root_mount(Manager *m) {
         u = manager_get_unit(m, SPECIAL_ROOT_MOUNT);
         if (!u) {
                 r = unit_new_for_name(m, sizeof(Mount), SPECIAL_ROOT_MOUNT, &u);
-                if (r < 0)
-                        return log_error_errno(r, "Failed to allocate the special " SPECIAL_ROOT_MOUNT " unit: %m");
+                if (r < 0) {
+                        log_error_errno(r, "Failed to allocate the special " SPECIAL_ROOT_MOUNT " unit: %m");
+                        return;
+                }
         }
 
         u->perpetual = true;
@@ -1698,8 +1689,6 @@ static int synthesize_root_mount(Manager *m) {
 
         unit_add_to_load_queue(u);
         unit_add_to_dbus_queue(u);
-
-        return 0;
 }
 
 static bool mount_is_mounted(Mount *m) {
@@ -1712,10 +1701,6 @@ static void mount_enumerate(Manager *m) {
         int r;
 
         assert(m);
-
-        r = synthesize_root_mount(m);
-        if (r < 0)
-                goto fail;
 
         mnt_init_debug(0);
 
@@ -1833,7 +1818,7 @@ static int mount_dispatch_io(sd_event_source *source, int fd, uint32_t revents, 
                             mount->parameters_proc_self_mountinfo.what) {
 
                                 /* Remember that this device might just have disappeared */
-                                if (set_ensure_allocated(&gone, &string_hash_ops) < 0 ||
+                                if (set_ensure_allocated(&gone, &path_hash_ops) < 0 ||
                                     set_put(gone, mount->parameters_proc_self_mountinfo.what) < 0)
                                         log_oom(); /* we don't care too much about OOM here... */
                         }
@@ -1888,7 +1873,7 @@ static int mount_dispatch_io(sd_event_source *source, int fd, uint32_t revents, 
                     mount->from_proc_self_mountinfo &&
                     mount->parameters_proc_self_mountinfo.what) {
 
-                        if (set_ensure_allocated(&around, &string_hash_ops) < 0 ||
+                        if (set_ensure_allocated(&around, &path_hash_ops) < 0 ||
                             set_put(around, mount->parameters_proc_self_mountinfo.what) < 0)
                                 log_oom();
                 }
@@ -1902,7 +1887,7 @@ static int mount_dispatch_io(sd_event_source *source, int fd, uint32_t revents, 
                         continue;
 
                 /* Let the device units know that the device is no longer mounted */
-                (void) device_found_node(m, what, false, DEVICE_FOUND_MOUNT, true);
+                device_found_node(m, what, 0, DEVICE_FOUND_MOUNT);
         }
 
         return 0;
@@ -1991,7 +1976,7 @@ const UnitVTable mount_vtable = {
         .active_state = mount_active_state,
         .sub_state_to_string = mount_sub_state_to_string,
 
-        .check_gc = mount_check_gc,
+        .may_gc = mount_may_gc,
 
         .sigchld_event = mount_sigchld_event,
 
@@ -2007,6 +1992,7 @@ const UnitVTable mount_vtable = {
 
         .can_transient = true,
 
+        .enumerate_perpetual = mount_enumerate_perpetual,
         .enumerate = mount_enumerate,
         .shutdown = mount_shutdown,
 

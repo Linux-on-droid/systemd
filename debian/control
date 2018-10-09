@@ -17,7 +17,7 @@ Build-Depends: debhelper (>= 10.4~),
                docbook-xsl,
                docbook-xml,
                m4,
-               meson (>= 0.40.0),
+               meson (>= 0.44),
                gettext,
                gperf,
                gnu-efi [amd64 i386 arm64],
@@ -25,7 +25,7 @@ Build-Depends: debhelper (>= 10.4~),
                libpam0g-dev,
                libapparmor-dev (>= 2.9.0-3+exp2) <!stage1>,
                libidn11-dev <!stage1>,
-               libiptc-dev <!stage1> | iptables-dev <!stage1>,
+               libiptc-dev <!stage1>,
                libaudit-dev <!stage1>,
                libdbus-1-dev (>= 1.3.2) <!nocheck>,
                libcryptsetup-dev (>= 2:1.6.0) <!stage1>,
@@ -74,10 +74,12 @@ Depends: ${shlibs:Depends},
          adduser,
          procps,
 Breaks: apparmor (<< 2.9.2-1),
-        systemd-shim (<< 10-3~),
+        systemd-shim (<< 10-4~),
         ifupdown (<< 0.8.5~),
         udev (<< 228-5),
         laptop-mode-tools (<< 1.68~),
+        python-dbusmock (<< 0.18),
+        python3-dbusmock (<< 0.18),
 Replaces: udev (<< 228-5),
 Description: system and service manager
  systemd is a system and service manager for Linux. It provides aggressive
@@ -135,7 +137,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
          dbus
-Recommends: btrfs-progs | btrfs-tools,
+Recommends: btrfs-progs,
             libnss-mymachines,
 Breaks: systemd (<< 224-2)
 Replaces: systemd (<< 224-2)
@@ -155,6 +157,8 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
          adduser
+Breaks: systemd (<< 239-6)
+Replaces: systemd (<< 239-6)
 Description: tools for sending and receiving remote journal logs
  This package provides tools for sending and receiving remote journal logs:
   * systemd-journal-remote
@@ -187,7 +191,7 @@ Priority: optional
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd (= ${binary:Version}),
-         python3-minimal,
+         python3,
 Description: tests for systemd
  This package contains the test binaries. Those binaries are primarily used
  for autopkgtest and not meant to be installed on regular user systems.
@@ -203,7 +207,7 @@ Depends: ${shlibs:Depends},
          systemd (= ${binary:Version}),
          libpam-runtime (>= 1.0.1-6),
          dbus,
-         systemd-shim (>= 10-3~) | systemd-sysv
+         systemd-shim (>= 10-4~) | systemd-sysv
 Description: system and service manager - PAM module
  This package contains the PAM module which registers user sessions in
  the systemd control group hierarchy for logind.

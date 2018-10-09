@@ -20,10 +20,10 @@ endif
 # fail on missing files and symbols changes on distro builds, but not if we
 # build/test upstream master
 ifeq ($(TEST_UPSTREAM),)
-    DH_INSTALL_MISSING = --fail-missing
+    DH_MISSING = --fail-missing
     GENSYMBOLS_LEVEL = 4
 else
-    DH_INSTALL_MISSING = --list-missing
+    DH_MISSING = --list-missing
     GENSYMBOLS_LEVEL = 1
 endif
 
@@ -37,7 +37,6 @@ CONFFLAGS = \
 	-Dsplit-usr=true \
 	-Dquotaon-path=/sbin/quotaon \
 	-Dquotacheck-path=/sbin/quotacheck \
-	-Dkill-path=/bin/kill \
 	-Dkmod-path=/bin/kmod \
 	-Dkexec-path=/sbin/kexec \
 	-Dsulogin-path=/sbin/sulogin \
@@ -54,10 +53,12 @@ CONFFLAGS = \
 	-Dsupport-url=$(SUPPORT_URL) \
 	-Ddefault-kill-user-processes=false \
 	-Dpamconfdir=no \
+	-Drpmmacrosdir=no \
 	-Dqrencode=false \
 	-Dvconsole=false \
 	-Dfirstboot=false \
 	-Dxkbcommon=false \
+	-Dportabled=false \
 	-Dwheel-group=false \
 	-Dntp-servers="$(DEFAULT_NTP_SERVERS)" \
 	-Dlink-udev-shared=false \
@@ -195,15 +196,10 @@ override_dh_install:
 	rm -f debian/install/*/usr/share/doc/systemd/LICENSE.*
 	rm -f debian/install/*/var/log/README
 	rm -f debian/install/*/etc/init.d/README
-	rm -rf debian/install/*/etc/rpm/
-	rm -rf debian/install/*/usr/lib/rpm/
 	rm -f debian/install/*/usr/lib/sysctl.d/50-default.conf
 	rm -f debian/install/*/etc/X11/xinit/xinitrc.d/50-systemd-user.sh
 	rmdir -p --ignore-fail-on-non-empty debian/install/*/etc/X11/xinit/xinitrc.d/
 	rm -f debian/install/*/lib/systemd/system/halt-local.service
-	find debian/install/ -name '*.la' -delete
-	rm -f debian/install/*/lib/systemd/libsystemd-shared.so
-	find debian/install/ -name '*.busname' -delete
 	# remove files related to factory-reset feature
 	find debian/install/ \( -name 'systemd-update-done*' -o \
 		-name systemd-journal-catalog-update.service -o \
@@ -215,14 +211,15 @@ override_dh_install:
 	rm -rf debian/install/*/etc/systemd/system/*.target.wants/
 	# remove aliases
 	find debian/install/*/etc/systemd/system/ -type l -delete
-	# FIXME: generate proper sysusers.d/basic.conf for Debian, and add autopkgtest
-	rm -rf debian/install/*/usr/lib/sysusers.d/*
-	rm -f debian/install/*/lib/systemd/system/*sysusers*.service debian/install/*/lib/systemd/system/*/*sysusers*.service
+	# replace upstream sysusers.d/basic.conf with proper users for Debian
+	debian/extra/make-sysusers-basic > debian/install/deb/usr/lib/sysusers.d/basic.conf
+	# remove resolvconf compat symlink
+	rm -f debian/install/*/sbin/resolvconf
 ifeq (, $(filter noudeb, $(DEB_BUILD_PROFILES)))
 	dh_install -pudev-udeb -plibudev1-udeb --sourcedir=debian/install/udeb
 endif
 
-	dh_install --remaining-packages --sourcedir=debian/install/deb $(DH_INSTALL_MISSING)
+	dh_install --remaining-packages --sourcedir=debian/install/deb
 
 	# we don't want /tmp to be a tmpfs by default
 	mv debian/systemd/lib/systemd/system/tmp.mount debian/systemd/usr/share/systemd/
@@ -257,37 +254,37 @@ ifeq ($(DEB_VENDOR),Ubuntu)
 	install --mode=755 debian/extra/set-cpufreq debian/systemd/lib/systemd/
 endif
 
+override_dh_missing:
+	dh_missing --sourcedir debian/install/deb $(DH_MISSING)
+
 override_dh_installinit:
 	dh_installinit --no-start
+
+PROJECT_VERSION ?= $(shell awk '/PACKAGE_VERSION/ {print $$3}' build-deb/config.h | tr -d \")
 
 # The SysV compat tools (which are symlinks to systemctl) are
 # quasi-essential, so add their dependencies to Pre-Depends
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=753589
 override_dh_shlibdeps:
-	dh_shlibdeps -psystemd -- -dPre-Depends -edebian/systemd/bin/systemctl -dDepends
+	dh_shlibdeps -psystemd -- -dPre-Depends \
+		-edebian/systemd/bin/systemctl \
+		-edebian/systemd/lib/systemd/libsystemd-shared-$(PROJECT_VERSION).so \
+		-dDepends
 	dh_shlibdeps --remaining-packages -Lsystemd
 
 override_dh_makeshlibs:
-	sed 's/SHARED_LIB_VERSION/$(shell awk '/PACKAGE_VERSION/ {print $$3}' build-deb/config.h | tr -d \")/' debian/shlibs.local.in > debian/shlibs.local
+	sed 's/SHARED_LIB_VERSION/$(PROJECT_VERSION)/' debian/shlibs.local.in > debian/shlibs.local
 	dh_makeshlibs -plibudev1 --add-udeb=libudev1-udeb -- -c$(GENSYMBOLS_LEVEL)
 	dh_makeshlibs -psystemd -Xlibsystemd-shared -- -c$(GENSYMBOLS_LEVEL)
 	dh_makeshlibs --remaining-packages -- -c$(GENSYMBOLS_LEVEL)
-
-override_dh_strip:
-	dh_strip --dbgsym-migration='systemd-dbg (<< 229-6~)'
 
 override_dh_auto_test:
 ifeq (, $(filter nocheck, $(DEB_BUILD_OPTIONS)))
 	echo "01234567890123456789012345678901" > build-deb/machine-id
 	# some tests hang under fakeroot, so disable fakeroot
-	# some tests are known to fail under ancient kernels
 	env -u LD_PRELOAD SYSTEMD_MACHINE_ID_PATH=$(CURDIR)/build-deb/machine-id ninja -C build-deb test || ( \
 		cat build-deb/meson-logs/testlog.txt; \
-		if linux-version compare "$$(uname -r)" ge 3.13; then \
-		    exit 1; \
-		else \
-		    echo "Ignoring test failure under too old kernel $$(uname -r)"; \
-		fi)
+		exit 1)
 endif
 
 %:

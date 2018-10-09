@@ -1,22 +1,4 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
-/***
-  This file is part of systemd.
-
-  Copyright 2010 Lennart Poettering
-
-  systemd is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Lesser General Public License as published by
-  the Free Software Foundation; either version 2.1 of the License, or
-  (at your option) any later version.
-
-  systemd is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-  Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with systemd; If not, see <http://www.gnu.org/licenses/>.
-***/
 
 #include <dirent.h>
 #include <errno.h>
@@ -62,12 +44,9 @@ static int do_spawn(const char *path, char *argv[], int stdout_fd, pid_t *pid) {
                 char *_argv[2];
 
                 if (stdout_fd >= 0) {
-                        /* If the fd happens to be in the right place, go along with that */
-                        if (stdout_fd != STDOUT_FILENO &&
-                            dup2(stdout_fd, STDOUT_FILENO) < 0)
-                                return -errno;
-
-                        (void) fd_cloexec(STDOUT_FILENO, false);
+                        r = rearrange_stdio(STDIN_FILENO, stdout_fd, STDERR_FILENO);
+                        if (r < 0)
+                                _exit(EXIT_FAILURE);
                 }
 
                 if (!argv) {
@@ -105,7 +84,7 @@ static int do_execute(
          * If callbacks is nonnull, execution is serial. Otherwise, we default to parallel.
          */
 
-        r = conf_files_list_strv(&paths, NULL, NULL, CONF_FILES_EXECUTABLE, (const char* const*) directories);
+        r = conf_files_list_strv(&paths, NULL, NULL, CONF_FILES_EXECUTABLE|CONF_FILES_REGULAR|CONF_FILES_FILTER_MASKED, (const char* const*) directories);
         if (r < 0)
                 return r;
 
@@ -119,7 +98,7 @@ static int do_execute(
          * default action terminating the process, and turn on alarm(). */
 
         if (timeout != USEC_INFINITY)
-                alarm((timeout + USEC_PER_SEC - 1) / USEC_PER_SEC);
+                alarm(DIV_ROUND_UP(timeout, USEC_PER_SEC));
 
         STRV_FOREACH(path, paths) {
                 _cleanup_free_ char *t = NULL;

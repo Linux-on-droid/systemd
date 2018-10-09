@@ -3,9 +3,6 @@
 #define foosdbushfoo
 
 /***
-  This file is part of systemd.
-
-  Copyright 2013 Lennart Poettering
 
   systemd is free software; you can redistribute it and/or modify it
   under the terms of the GNU Lesser General Public License as published by
@@ -111,6 +108,7 @@ typedef int (*sd_bus_property_set_t) (sd_bus *bus, const char *path, const char 
 typedef int (*sd_bus_object_find_t) (sd_bus *bus, const char *path, const char *interface, void *userdata, void **ret_found, sd_bus_error *ret_error);
 typedef int (*sd_bus_node_enumerator_t) (sd_bus *bus, const char *prefix, void *userdata, char ***ret_nodes, sd_bus_error *ret_error);
 typedef int (*sd_bus_track_handler_t) (sd_bus_track *track, void *userdata);
+typedef void (*sd_bus_destroy_t)(void *userdata);
 
 #include "sd-bus-protocol.h"
 #include "sd-bus-vtable.h"
@@ -122,8 +120,11 @@ int sd_bus_default_user(sd_bus **ret);
 int sd_bus_default_system(sd_bus **ret);
 
 int sd_bus_open(sd_bus **ret);
+int sd_bus_open_with_description(sd_bus **ret, const char *description);
 int sd_bus_open_user(sd_bus **ret);
+int sd_bus_open_user_with_description(sd_bus **ret, const char *description);
 int sd_bus_open_system(sd_bus **ret);
+int sd_bus_open_system_with_description(sd_bus **ret, const char *description);
 int sd_bus_open_system_remote(sd_bus **ret, const char *host);
 int sd_bus_open_system_machine(sd_bus **ret, const char *machine);
 
@@ -202,6 +203,9 @@ int sd_bus_attach_event(sd_bus *bus, sd_event *e, int priority);
 int sd_bus_detach_event(sd_bus *bus);
 sd_event *sd_bus_get_event(sd_bus *bus);
 
+int sd_bus_get_n_queued_read(sd_bus *bus, uint64_t *ret);
+int sd_bus_get_n_queued_write(sd_bus *bus, uint64_t *ret);
+
 int sd_bus_add_filter(sd_bus *bus, sd_bus_slot **slot, sd_bus_message_handler_t callback, void *userdata);
 int sd_bus_add_match(sd_bus *bus, sd_bus_slot **slot, const char *match, sd_bus_message_handler_t callback, void *userdata);
 int sd_bus_add_match_async(sd_bus *bus, sd_bus_slot **slot, const char *match, sd_bus_message_handler_t callback, sd_bus_message_handler_t install_callback, void *userdata);
@@ -222,6 +226,10 @@ void *sd_bus_slot_get_userdata(sd_bus_slot *slot);
 void *sd_bus_slot_set_userdata(sd_bus_slot *slot, void *userdata);
 int sd_bus_slot_set_description(sd_bus_slot *slot, const char *description);
 int sd_bus_slot_get_description(sd_bus_slot *slot, const char **description);
+int sd_bus_slot_get_floating(sd_bus_slot *slot);
+int sd_bus_slot_set_floating(sd_bus_slot *slot, int b);
+int sd_bus_slot_set_destroy_callback(sd_bus_slot *s, sd_bus_destroy_t callback);
+int sd_bus_slot_get_destroy_callback(sd_bus_slot *s, sd_bus_destroy_t *callback);
 
 sd_bus_message* sd_bus_slot_get_current_message(sd_bus_slot *slot);
 sd_bus_message_handler_t sd_bus_slot_get_current_handler(sd_bus_slot *bus);
@@ -473,6 +481,9 @@ int sd_bus_track_count_name(sd_bus_track *track, const char *name);
 const char* sd_bus_track_contains(sd_bus_track *track, const char *name);
 const char* sd_bus_track_first(sd_bus_track *track);
 const char* sd_bus_track_next(sd_bus_track *track);
+
+int sd_bus_track_set_destroy_callback(sd_bus_track *s, sd_bus_destroy_t callback);
+int sd_bus_track_get_destroy_callback(sd_bus_track *s, sd_bus_destroy_t *ret);
 
 /* Define helpers so that __attribute__((cleanup(sd_bus_unrefp))) and similar may be used. */
 _SD_DEFINE_POINTER_CLEANUP_FUNC(sd_bus, sd_bus_unref);

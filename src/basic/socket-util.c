@@ -1,22 +1,4 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
-/***
-  This file is part of systemd.
-
-  Copyright 2010 Lennart Poettering
-
-  systemd is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Lesser General Public License as published by
-  the Free Software Foundation; either version 2.1 of the License, or
-  (at your option) any later version.
-
-  systemd is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-  Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with systemd; If not, see <http://www.gnu.org/licenses/>.
-***/
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -51,7 +33,7 @@
 #include "util.h"
 
 #if ENABLE_IDN
-#  define IDN_FLAGS (NI_IDN|NI_IDN_USE_STD3_ASCII_RULES)
+#  define IDN_FLAGS NI_IDN
 #else
 #  define IDN_FLAGS 0
 #endif
@@ -677,7 +659,6 @@ int sockaddr_pretty(const struct sockaddr *_sa, socklen_t salen, bool translate_
                 return -EOPNOTSUPP;
         }
 
-
         *ret = p;
         return 0;
 }
@@ -758,19 +739,6 @@ int socknameinfo_pretty(union sockaddr_union *sa, socklen_t salen, char **_ret) 
         return 0;
 }
 
-int getnameinfo_pretty(int fd, char **ret) {
-        union sockaddr_union sa;
-        socklen_t salen = sizeof(sa);
-
-        assert(fd >= 0);
-        assert(ret);
-
-        if (getsockname(fd, &sa.sa, &salen) < 0)
-                return -errno;
-
-        return socknameinfo_pretty(&sa, salen, ret);
-}
-
 int socket_address_unlink(SocketAddress *a) {
         assert(a);
 
@@ -817,7 +785,7 @@ static const char* const socket_address_bind_ipv6_only_table[_SOCKET_ADDRESS_BIN
 
 DEFINE_STRING_TABLE_LOOKUP(socket_address_bind_ipv6_only, SocketAddressBindIPv6Only);
 
-SocketAddressBindIPv6Only parse_socket_address_bind_ipv6_only_or_bool(const char *n) {
+SocketAddressBindIPv6Only socket_address_bind_ipv6_only_or_bool_from_string(const char *n) {
         int r;
 
         r = parse_boolean(n);
@@ -998,8 +966,7 @@ int getpeersec(int fd, char **ret) {
         if (isempty(s))
                 return -EOPNOTSUPP;
 
-        *ret = s;
-        s = NULL;
+        *ret = TAKE_PTR(s);
 
         return 0;
 }
@@ -1008,7 +975,7 @@ int getpeergroups(int fd, gid_t **ret) {
         socklen_t n = sizeof(gid_t) * 64;
         _cleanup_free_ gid_t *d = NULL;
 
-        assert(fd);
+        assert(fd >= 0);
         assert(ret);
 
         for (;;) {
@@ -1031,8 +998,7 @@ int getpeergroups(int fd, gid_t **ret) {
         if ((socklen_t) (int) n != n)
                 return -E2BIG;
 
-        *ret = d;
-        d = NULL;
+        *ret = TAKE_PTR(d);
 
         return (int) n;
 }
@@ -1092,7 +1058,7 @@ int receive_one_fd(int transport_fd, int flags) {
          * combination with send_one_fd().
          */
 
-        if (recvmsg(transport_fd, &mh, MSG_NOSIGNAL | MSG_CMSG_CLOEXEC | flags) < 0)
+        if (recvmsg(transport_fd, &mh, MSG_CMSG_CLOEXEC | flags) < 0)
                 return -errno;
 
         CMSG_FOREACH(cmsg, &mh) {
@@ -1154,7 +1120,6 @@ int flush_accept(int fd) {
                 .events = POLLIN,
         };
         int r;
-
 
         /* Similar to flush_fd() but flushes all incoming connection by accepting them and immediately closing them. */
 

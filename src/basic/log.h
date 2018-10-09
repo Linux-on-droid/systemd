@@ -1,25 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
-/***
-  This file is part of systemd.
-
-  Copyright 2010 Lennart Poettering
-
-  systemd is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Lesser General Public License as published by
-  the Free Software Foundation; either version 2.1 of the License, or
-  (at your option) any later version.
-
-  systemd is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-  Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with systemd; If not, see <http://www.gnu.org/licenses/>.
-***/
-
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -144,19 +125,6 @@ int log_object_internal(
                 const char *extra,
                 const char *format, ...) _printf_(10,11);
 
-int log_object_internalv(
-                int level,
-                int error,
-                const char *file,
-                int line,
-                const char *func,
-                const char *object_field,
-                const char *object,
-                const char *extra_field,
-                const char *extra,
-                const char *format,
-                va_list ap) _printf_(10,0);
-
 int log_struct_internal(
                 int level,
                 int error,
@@ -199,7 +167,7 @@ int log_dump_internal(
                 char *buffer);
 
 /* Logging for various assertions */
-noreturn void log_assert_failed_realm(
+_noreturn_ void log_assert_failed_realm(
                 LogRealm realm,
                 const char *text,
                 const char *file,
@@ -208,7 +176,7 @@ noreturn void log_assert_failed_realm(
 #define log_assert_failed(text, ...) \
         log_assert_failed_realm(LOG_REALM, (text), __VA_ARGS__)
 
-noreturn void log_assert_failed_unreachable_realm(
+_noreturn_ void log_assert_failed_unreachable_realm(
                 LogRealm realm,
                 const char *text,
                 const char *file,
@@ -271,7 +239,7 @@ int log_emergency_level(void);
 /* Structured logging */
 #define log_struct_errno(level, error, ...) \
         log_struct_internal(LOG_REALM_PLUS_LEVEL(LOG_REALM, level), \
-                            error, __FILE__, __LINE__, __func__, __VA_ARGS__)
+                            error, __FILE__, __LINE__, __func__, __VA_ARGS__, NULL)
 #define log_struct(level, ...) log_struct_errno(level, 0, __VA_ARGS__)
 
 #define log_struct_iovec_errno(level, error, iovec, n_iovec)            \
@@ -309,6 +277,8 @@ void log_set_open_when_needed(bool b);
 /* If turned on, then we'll never use IPC-based logging, i.e. never log to syslog or the journal. We'll only log to
  * stderr, the console or kmsg */
 void log_set_prohibit_ipc(bool b);
+
+int log_dup_console(void);
 
 int log_syntax_internal(
                 const char *unit,

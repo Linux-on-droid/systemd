@@ -1,22 +1,4 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
-/***
-  This file is part of systemd.
-
-  Copyright 2014 Zbigniew Jędrzejewski-Szmek
-
-  systemd is free software; you can redistribute it and/or modify it
-  under the terms of the GNU Lesser General Public License as published by
-  the Free Software Foundation; either version 2.1 of the License, or
-  (at your option) any later version.
-
-  systemd is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-  Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with systemd; If not, see <http://www.gnu.org/licenses/>.
-***/
 
 #include <curl/curl.h>
 #include <fcntl.h>
@@ -165,7 +147,7 @@ static int load_cursor_state(Uploader *u) {
         if (!u->state_file)
                 return 0;
 
-        r = parse_env_file(u->state_file, NEWLINE,
+        r = parse_env_file(NULL, u->state_file, NEWLINE,
                            "LAST_CURSOR",  &u->last_cursor,
                            NULL);
 
@@ -179,8 +161,6 @@ static int load_cursor_state(Uploader *u) {
 
         return 0;
 }
-
-
 
 int start_upload(Uploader *u,
                  size_t (*input_callback)(void *ptr,
@@ -328,9 +308,7 @@ static size_t fd_input_callback(void *buf, size_t size, size_t nmemb, void *user
 static void close_fd_input(Uploader *u) {
         assert(u);
 
-        if (u->input >= 0)
-                close_nointr(u->input);
-        u->input = -1;
+        u->input = safe_close(u->input);
         u->timeout = 0;
 }
 
