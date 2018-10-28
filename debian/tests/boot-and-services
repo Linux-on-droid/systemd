@@ -61,12 +61,10 @@ class ServicesTest(unittest.TestCase):
                 subprocess.call(['journalctl', '-b', '-u', f])
             self.assertEqual(failed, [])
 
-    def test_lightdm(self):
-        out = subprocess.check_output(['ps', 'u', '-C', 'lightdm'])
-        self.assertIn(b'lightdm --session', out)
-        out = subprocess.check_output(['ps', 'u', '-C', 'Xorg'])
-        self.assertIn(b':0', out)
-        self.active_unit('lightdm')
+    @unittest.skipUnless(subprocess.call(['which', 'gdm3'], stdout=subprocess.DEVNULL) == 0, 'gdm3 not found')
+    def test_gdm3(self):
+        subprocess.check_call(['pgrep', '-af', 'gdm-.*-session'])
+        self.active_unit('gdm')
 
     def test_dbus(self):
         out = subprocess.check_output(
