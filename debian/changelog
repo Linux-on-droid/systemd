@@ -1,3 +1,9 @@
+systemd (239-11~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 28 Oct 2018 21:49:54 +0100
+
 systemd (239-11) unstable; urgency=high
 
   [ Michael Biebl ]
