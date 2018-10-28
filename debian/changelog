@@ -1,3 +1,12 @@
+systemd (232-25+deb9u6) stretch; urgency=medium
+
+  * dhcp6: Make sure we have enough space for the DHCP6 option header.
+    Fixes out-of-bounds heap write in systemd-networkd dhcpv6 option
+    handling.
+    (CVE-2018-15688, LP: #1795921, Closes: #912008)
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 28 Oct 2018 18:02:10 +0100
+
 systemd (232-25+deb9u5) stretch; urgency=medium
 
   * networkd: Do not fail manager_connect_bus() if dbus is not active yet
