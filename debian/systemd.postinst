@@ -155,4 +155,11 @@ if dpkg --compare-versions "$2" lt-nl "236-1~"; then
     rm -f /var/lib/systemd/clock
 fi
 
+if dpkg --compare-versions "$2" lt-nl "239-12~"; then
+    # clean up bogus "nobody" group from #912525; ensure that it's a system group
+    if getent group nobody >/dev/null; then
+        delgroup --system nobody || true
+    fi
+fi
+
 #DEBHELPER#
