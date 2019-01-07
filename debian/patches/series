@@ -86,6 +86,7 @@ login-do-not-wall-message-on-cancelling-shutdown-when-Man.patch
 networkd-do-not-fail-manager_connect_bus-if-dbus-is-not-a.patch
 network-resolve-remove-comments-related-to-kdbus.patch
 dhcp6-make-sure-we-have-enough-space-for-the-DHCP6-option.patch
+journald-do-not-store-the-iovec-entry-for-process-co.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
