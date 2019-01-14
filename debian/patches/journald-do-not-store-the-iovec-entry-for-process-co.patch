@@ -14,6 +14,9 @@ CVE-2018-16864
 
 The message actually doesn't get written to disk, because
 journal_file_append_entry() returns -E2BIG.
+
+v2: free memory allocated by set_iovec_string_field(). Use cmdline1, cmdline2
+    which will be free()d when dispatch_message_real() returns.
 ---
 
 --- a/src/journal/journald-server.c
@@ -27,7 +30,15 @@ journal_file_append_entry() returns -E2BIG.
                  const struct ucred *ucred,
                  const struct timeval *tv,
                  const char *label, size_t label_len,
-@@ -820,9 +820,9 @@ static void dispatch_message_real(
+@@ -770,6 +770,7 @@ static void dispatch_message_real(
+                 o_uid[sizeof("OBJECT_UID=") + DECIMAL_STR_MAX(uid_t)],
+                 o_gid[sizeof("OBJECT_GID=") + DECIMAL_STR_MAX(gid_t)],
+                 o_owner_uid[sizeof("OBJECT_SYSTEMD_OWNER_UID=") + DECIMAL_STR_MAX(uid_t)];
++        _cleanup_free_ char *cmdline1 = NULL, *cmdline2 = NULL;
+         uid_t object_uid;
+         gid_t object_gid;
+         char *x;
+@@ -820,9 +821,9 @@ static void dispatch_message_real(
  
                  r = get_process_cmdline(ucred->pid, 0, false, &t);
                  if (r >= 0) {
@@ -36,11 +47,11 @@ journal_file_append_entry() returns -E2BIG.
 -                        IOVEC_SET_STRING(iovec[n++], x);
 +                        /* At most _SC_ARG_MAX (2MB usually), which is too much to put on stack.
 +                         * Let's use a heap allocation for this one. */
-+                        set_iovec_field_free(iovec, &n, "_CMDLINE=", t);
++                        cmdline1 = set_iovec_field_free(iovec, &n, "_CMDLINE=", t);
                  }
  
                  r = get_process_capeff(ucred->pid, &t);
-@@ -960,11 +960,8 @@ static void dispatch_message_real(
+@@ -960,11 +961,8 @@ static void dispatch_message_real(
                  }
  
                  r = get_process_cmdline(object_pid, 0, false, &t);
@@ -50,7 +61,7 @@ journal_file_append_entry() returns -E2BIG.
 -                        IOVEC_SET_STRING(iovec[n++], x);
 -                }
 +                if (r >= 0)
-+                        set_iovec_field_free(iovec, &n, "OBJECT_CMDLINE=", t);
++                        cmdline2 = set_iovec_field_free(iovec, &n, "OBJECT_CMDLINE=", t);
  
  #ifdef HAVE_AUDIT
                  r = audit_session_from_pid(object_pid, &audit);
