@@ -1,3 +1,16 @@
+systemd (232-25+deb9u8) stretch-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Address memory leak in dispatch_message_real()
+    In dispatch_message_real() memory allocated by set_iovec_field_free()
+    is not free()d.
+    Follow upstream and introduce specific variables cmdline1 and cmdline2
+    and free() those automatically when dispatch_message_real() returns.
+  * Correctly allocate core_timestamp on the heap and avoid invalid free()
+  * Remove unused core* variables in process_kernel()
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Tue, 15 Jan 2019 10:59:43 +0100
+
 systemd (232-25+deb9u7) stretch-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
