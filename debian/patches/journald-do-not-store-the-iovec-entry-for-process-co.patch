@@ -19,6 +19,8 @@ v2: free memory allocated by set_iovec_string_field(). Use cmdline1, cmdline2
     which will be free()d when dispatch_message_real() returns.
 
 v3: Correctly allocate core_timestamp on the heap and avoid invalid free().
+
+v4: Remove unused core* variables in process_kernel().
 ---
 
 --- a/src/journal/journald-server.c
@@ -114,7 +116,7 @@ v3: Correctly allocate core_timestamp on the heap and avoid invalid free().
 +char* set_iovec_field_free(struct iovec *iovec, size_t *n_iovec, const char *field, char *value);
 --- a/src/coredump/coredump.c
 +++ b/src/coredump/coredump.c
-@@ -1022,17 +1022,9 @@ static int process_special_crash(const c
+@@ -1022,19 +1022,9 @@ static int process_special_crash(const c
  }
  
  static int process_kernel(int argc, char* argv[]) {
@@ -129,11 +131,13 @@ v3: Correctly allocate core_timestamp on the heap and avoid invalid free().
          /* The larger ones we allocate on the heap */
          _cleanup_free_ char
 -                *core_owner_uid = NULL, *core_open_fds = NULL, *core_proc_status = NULL,
-+                *core_timestamp = NULL, *core_owner_uid = NULL, *core_open_fds = NULL, *core_proc_status = NULL,
-                 *core_proc_maps = NULL, *core_proc_limits = NULL, *core_proc_cgroup = NULL, *core_environ = NULL,
-                 *core_proc_mountinfo = NULL, *core_container_cmdline = NULL;
+-                *core_proc_maps = NULL, *core_proc_limits = NULL, *core_proc_cgroup = NULL, *core_environ = NULL,
+-                *core_proc_mountinfo = NULL, *core_container_cmdline = NULL;
++                *core_timestamp = NULL, *core_owner_uid = NULL;
  
-@@ -1092,10 +1084,8 @@ static int process_kernel(int argc, char
+         _cleanup_free_ char *exe = NULL, *comm = NULL;
+         const char *context[_CONTEXT_MAX];
+@@ -1092,10 +1082,8 @@ static int process_kernel(int argc, char
                          return process_special_crash(context, STDIN_FILENO);
                  }
  
@@ -146,7 +150,7 @@ v3: Correctly allocate core_timestamp on the heap and avoid invalid free().
          }
  
          /* OK, now we know it's not the journal, hence we can make use of it now. */
-@@ -1103,33 +1093,27 @@ static int process_kernel(int argc, char
+@@ -1103,33 +1091,27 @@ static int process_kernel(int argc, char
          log_open();
  
          if (cg_pid_get_user_unit(pid, &t) >= 0) {
@@ -194,7 +198,7 @@ v3: Correctly allocate core_timestamp on the heap and avoid invalid free().
  
          if (sd_pid_get_owner_uid(pid, &owner_uid) >= 0) {
                  r = asprintf(&core_owner_uid, "COREDUMP_OWNER_UID=" UID_FMT, owner_uid);
-@@ -1137,124 +1121,62 @@ static int process_kernel(int argc, char
+@@ -1137,124 +1119,62 @@ static int process_kernel(int argc, char
                          IOVEC_SET_STRING(iovec[n_iovec++], core_owner_uid);
          }
  
