@@ -17,6 +17,8 @@ journal_file_append_entry() returns -E2BIG.
 
 v2: free memory allocated by set_iovec_string_field(). Use cmdline1, cmdline2
     which will be free()d when dispatch_message_real() returns.
+
+v3: Correctly allocate core_timestamp on the heap and avoid invalid free().
 ---
 
 --- a/src/journal/journald-server.c
@@ -192,7 +194,7 @@ v2: free memory allocated by set_iovec_string_field(). Use cmdline1, cmdline2
  
          if (sd_pid_get_owner_uid(pid, &owner_uid) >= 0) {
                  r = asprintf(&core_owner_uid, "COREDUMP_OWNER_UID=" UID_FMT, owner_uid);
-@@ -1137,122 +1121,60 @@ static int process_kernel(int argc, char
+@@ -1137,124 +1121,62 @@ static int process_kernel(int argc, char
                          IOVEC_SET_STRING(iovec[n_iovec++], core_owner_uid);
          }
  
@@ -343,5 +345,8 @@ v2: free memory allocated by set_iovec_string_field(). Use cmdline1, cmdline2
 +        if (get_process_environ(pid, &t) >= 0)
 +                set_iovec_field_free(iovec, &n_iovec, "COREDUMP_ENVIRON=", t);
  
-         core_timestamp = strjoina("COREDUMP_TIMESTAMP=", context[CONTEXT_TIMESTAMP], "000000");
+-        core_timestamp = strjoina("COREDUMP_TIMESTAMP=", context[CONTEXT_TIMESTAMP], "000000");
++        core_timestamp = strjoin("COREDUMP_TIMESTAMP=", context[CONTEXT_TIMESTAMP], "000000");
          IOVEC_SET_STRING(iovec[n_iovec++], core_timestamp);
+ 
+         IOVEC_SET_STRING(iovec[n_iovec++], "MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1");
