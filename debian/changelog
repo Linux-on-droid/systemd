@@ -1,3 +1,14 @@
+systemd (232-25+deb9u9) stretch-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Refuse dbus message paths longer than BUS_PATH_SIZE_MAX limit
+    (CVE-2019-6454)
+  * Allocate temporary strings to hold dbus paths on the heap (CVE-2019-6454)
+  * sd-bus: if we receive an invalid dbus message, ignore and proceeed
+    (CVE-2019-6454)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sun, 17 Feb 2019 09:22:58 +0100
+
 systemd (232-25+deb9u8) stretch-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
