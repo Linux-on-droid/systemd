@@ -91,6 +91,7 @@ journald-set-a-limit-on-the-number-of-fields-1k.patch
 journal-remote-set-a-limit-on-the-number-of-fields-i.patch
 journal-fix-syslog_parse_identifier.patch
 journal-do-not-remove-multiple-spaces-after-identifi.patch
+Refuse-dbus-message-paths-longer-than-BUS_PATH_SIZE_.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
