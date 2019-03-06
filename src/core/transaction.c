@@ -300,7 +300,7 @@ rescan:
                                 goto next_unit;
                 }
 
-                /* log_debug("Found redundant job %s/%s, dropping.", j->unit->id, job_type_to_string(j->type)); */
+                log_trace("Found redundant job %s/%s, dropping from transaction.", j->unit->id, job_type_to_string(j->type));
                 transaction_delete_job(tr, j, false);
                 goto rescan;
         next_unit:;
@@ -494,15 +494,17 @@ static void transaction_collect_garbage(Transaction *tr) {
 
 rescan:
         HASHMAP_FOREACH(j, tr->jobs, i) {
-                if (tr->anchor_job == j || j->object_list) {
-                        /* log_debug("Keeping job %s/%s because of %s/%s", */
-                        /*           j->unit->id, job_type_to_string(j->type), */
-                        /*           j->object_list->subject ? j->object_list->subject->unit->id : "root", */
-                        /*           j->object_list->subject ? job_type_to_string(j->object_list->subject->type) : "root"); */
+                if (tr->anchor_job == j)
+                        continue;
+                if (j->object_list) {
+                        log_trace("Keeping job %s/%s because of %s/%s",
+                                  j->unit->id, job_type_to_string(j->type),
+                                  j->object_list->subject ? j->object_list->subject->unit->id : "root",
+                                  j->object_list->subject ? job_type_to_string(j->object_list->subject->type) : "root");
                         continue;
                 }
 
-                /* log_debug("Garbage collecting job %s/%s", j->unit->id, job_type_to_string(j->type)); */
+                log_trace("Garbage collecting job %s/%s", j->unit->id, job_type_to_string(j->type));
                 transaction_delete_job(tr, j, true);
                 goto rescan;
         }
@@ -526,7 +528,9 @@ static int transaction_is_destructive(Transaction *tr, JobMode mode, sd_bus_erro
                 if (j->unit->job && (mode == JOB_FAIL || j->unit->job->irreversible) &&
                     job_type_is_conflicting(j->unit->job->type, j->type))
                         return sd_bus_error_setf(e, BUS_ERROR_TRANSACTION_IS_DESTRUCTIVE,
-                                                 "Transaction is destructive.");
+                                                 "Transaction for %s/%s is destructive (%s has '%s' job queued, but '%s' is included in transaction).",
+                                                 tr->anchor_job->unit->id, job_type_to_string(tr->anchor_job->type),
+                                                 j->unit->id, job_type_to_string(j->unit->job->type), job_type_to_string(j->type));
         }
 
         return 0;
@@ -695,10 +699,8 @@ int transaction_activate(Transaction *tr, Manager *m, JobMode mode, sd_bus_error
                 if (r >= 0)
                         break;
 
-                if (r != -EAGAIN) {
-                        log_warning("Requested transaction contains an unfixable cyclic ordering dependency: %s", bus_error_message(e, r));
-                        return r;
-                }
+                if (r != -EAGAIN)
+                        return log_warning_errno(r, "Requested transaction contains an unfixable cyclic ordering dependency: %s", bus_error_message(e, r));
 
                 /* Let's see if the resulting transaction ordering
                  * graph is still cyclic... */
@@ -712,10 +714,8 @@ int transaction_activate(Transaction *tr, Manager *m, JobMode mode, sd_bus_error
                 if (r >= 0)
                         break;
 
-                if (r != -EAGAIN) {
-                        log_warning("Requested transaction contains unmergeable jobs: %s", bus_error_message(e, r));
-                        return r;
-                }
+                if (r != -EAGAIN)
+                        return log_warning_errno(r, "Requested transaction contains unmergeable jobs: %s", bus_error_message(e, r));
 
                 /* Seventh step: an entry got dropped, let's garbage
                  * collect its dependencies. */
@@ -731,10 +731,8 @@ int transaction_activate(Transaction *tr, Manager *m, JobMode mode, sd_bus_error
 
         /* Ninth step: check whether we can actually apply this */
         r = transaction_is_destructive(tr, mode, e);
-        if (r < 0) {
-                log_notice("Requested transaction contradicts existing jobs: %s", bus_error_message(e, r));
-                return r;
-        }
+        if (r < 0)
+                return log_notice_errno(r, "Requested transaction contradicts existing jobs: %s", bus_error_message(e, r));
 
         /* Tenth step: apply changes */
         r = transaction_apply(tr, m, mode);
@@ -802,7 +800,7 @@ static Job* transaction_add_one_job(Transaction *tr, JobType type, Unit *unit, b
         if (is_new)
                 *is_new = true;
 
-        /* log_debug("Added job %s/%s to transaction.", unit->id, job_type_to_string(type)); */
+        log_trace("Added job %s/%s to transaction.", unit->id, job_type_to_string(type));
 
         return j;
 }
@@ -896,10 +894,8 @@ int transaction_add_job_and_dependencies(
         if (MANAGER_IS_RELOADING(unit->manager))
                 unit_coldplug(unit);
 
-        /* log_debug("Pulling in %s/%s from %s/%s", */
-        /*           unit->id, job_type_to_string(type), */
-        /*           by ? by->unit->id : "NA", */
-        /*           by ? job_type_to_string(by->type) : "NA"); */
+        if (by)
+                log_trace("Pulling in %s/%s from %s/%s", unit->id, job_type_to_string(type), by->unit->id, job_type_to_string(by->type));
 
         /* Safety check that the unit is a valid state, i.e. not in UNIT_STUB or UNIT_MERGED which should only be set
          * temporarily. */
@@ -1057,7 +1053,7 @@ int transaction_add_job_and_dependencies(
                 if (type == JOB_RELOAD)
                         transaction_add_propagate_reload_jobs(tr, ret->unit, ret, ignore_order, e);
 
-                /* JOB_VERIFY_STARTED require no dependency handling */
+                /* JOB_VERIFY_ACTIVE requires no dependency handling */
         }
 
         return 0;

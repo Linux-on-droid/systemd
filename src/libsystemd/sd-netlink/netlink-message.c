@@ -96,13 +96,7 @@ int sd_netlink_message_request_dump(sd_netlink_message *m, int dump) {
         return 0;
 }
 
-sd_netlink_message *sd_netlink_message_ref(sd_netlink_message *m) {
-        if (!m)
-                return NULL;
-
-        assert_se(REFCNT_INC(m->n_ref) >= 2);
-        return m;
-}
+DEFINE_ATOMIC_REF_FUNC(sd_netlink_message, sd_netlink_message);
 
 sd_netlink_message *sd_netlink_message_unref(sd_netlink_message *m) {
         sd_netlink_message *t;
@@ -376,6 +370,42 @@ int sd_netlink_message_append_in6_addr(sd_netlink_message *m, unsigned short typ
         return 0;
 }
 
+int sd_netlink_message_append_sockaddr_in(sd_netlink_message *m, unsigned short type, const struct sockaddr_in *data) {
+        int r;
+
+        assert_return(m, -EINVAL);
+        assert_return(!m->sealed, -EPERM);
+        assert_return(data, -EINVAL);
+
+        r = message_attribute_has_type(m, NULL, type, NETLINK_TYPE_SOCKADDR);
+        if (r < 0)
+                return r;
+
+        r = add_rtattr(m, type, data, sizeof(struct sockaddr_in));
+        if (r < 0)
+                return r;
+
+        return 0;
+}
+
+int sd_netlink_message_append_sockaddr_in6(sd_netlink_message *m, unsigned short type, const struct sockaddr_in6 *data) {
+        int r;
+
+        assert_return(m, -EINVAL);
+        assert_return(!m->sealed, -EPERM);
+        assert_return(data, -EINVAL);
+
+        r = message_attribute_has_type(m, NULL, type, NETLINK_TYPE_SOCKADDR);
+        if (r < 0)
+                return r;
+
+        r = add_rtattr(m, type, data, sizeof(struct sockaddr_in6));
+        if (r < 0)
+                return r;
+
+        return 0;
+}
+
 int sd_netlink_message_append_ether_addr(sd_netlink_message *m, unsigned short type, const struct ether_addr *data) {
         int r;
 
@@ -568,6 +598,25 @@ static int netlink_message_read_internal(sd_netlink_message *m, unsigned short t
         return RTA_PAYLOAD(rta);
 }
 
+int sd_netlink_message_read(sd_netlink_message *m, unsigned short type, size_t size, void *data) {
+        void *attr_data;
+        int r;
+
+        assert_return(m, -EINVAL);
+
+        r = netlink_message_read_internal(m, type, &attr_data, NULL);
+        if (r < 0)
+                return r;
+
+        if ((size_t) r < size)
+                return -EIO;
+
+        if (data)
+                memcpy(data, attr_data, size);
+
+        return 0;
+}
+
 int sd_netlink_message_read_string(sd_netlink_message *m, unsigned short type, const char **data) {
         int r;
         void *attr_data;
@@ -758,7 +807,7 @@ static int netlink_container_parse(sd_netlink_message *m,
                                    struct netlink_container *container,
                                    int count,
                                    struct rtattr *rta,
-                                   unsigned int rt_len) {
+                                   unsigned rt_len) {
         _cleanup_free_ struct netlink_attribute *attributes = NULL;
 
         attributes = new0(struct netlink_attribute, count);

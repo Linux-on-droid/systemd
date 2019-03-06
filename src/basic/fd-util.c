@@ -23,6 +23,7 @@
 #include "socket-util.h"
 #include "stdio-util.h"
 #include "util.h"
+#include "tmpfile-util.h"
 
 int close_nointr(int fd) {
         assert(fd >= 0);
@@ -69,7 +70,7 @@ int safe_close(int fd) {
         return -1;
 }
 
-void safe_close_pair(int p[]) {
+void safe_close_pair(int p[static 2]) {
         assert(p);
 
         if (p[0] == p[1]) {
@@ -113,7 +114,7 @@ FILE* safe_fclose(FILE *f) {
         if (f) {
                 PROTECT_ERRNO;
 
-                assert_se(fclose_nointr(f) != EBADF);
+                assert_se(fclose_nointr(f) != -EBADF);
         }
 
         return NULL;
@@ -188,6 +189,27 @@ _pure_ static bool fd_in_set(int fd, const int fdset[], size_t n_fdset) {
         return false;
 }
 
+static int get_max_fd(void) {
+        struct rlimit rl;
+        rlim_t m;
+
+        /* Return the highest possible fd, based RLIMIT_NOFILE, but enforcing FD_SETSIZE-1 as lower boundary
+         * and INT_MAX as upper boundary. */
+
+        if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
+                return -errno;
+
+        m = MAX(rl.rlim_cur, rl.rlim_max);
+        if (m < FD_SETSIZE) /* Let's always cover at least 1024 fds */
+                return FD_SETSIZE-1;
+
+        if (m == RLIM_INFINITY || m > INT_MAX) /* Saturate on overflow. After all fds are "int", hence can
+                                                * never be above INT_MAX */
+                return INT_MAX;
+
+        return (int) (m - 1);
+}
+
 int close_all_fds(const int except[], size_t n_except) {
         _cleanup_closedir_ DIR *d = NULL;
         struct dirent *de;
@@ -197,20 +219,14 @@ int close_all_fds(const int except[], size_t n_except) {
 
         d = opendir("/proc/self/fd");
         if (!d) {
-                struct rlimit rl;
                 int fd, max_fd;
 
-                /* When /proc isn't available (for example in chroots) the fallback is brute forcing through the fd
-                 * table */
+                /* When /proc isn't available (for example in chroots) the fallback is brute forcing through
+                 * the fd table */
 
-                assert_se(getrlimit(RLIMIT_NOFILE, &rl) >= 0);
-
-                if (rl.rlim_max == 0)
-                        return -EINVAL;
-
-                /* Let's take special care if the resource limit is set to unlimited, or actually larger than the range
-                 * of 'int'. Let's avoid implicit overflows. */
-                max_fd = (rl.rlim_max == RLIM_INFINITY || rl.rlim_max > INT_MAX) ? INT_MAX : (int) (rl.rlim_max - 1);
+                max_fd = get_max_fd();
+                if (max_fd < 0)
+                        return max_fd;
 
                 for (fd = 3; fd >= 0; fd = fd < max_fd ? fd + 1 : -1) {
                         int q;
@@ -277,7 +293,7 @@ int same_fd(int a, int b) {
                 return true;
         if (r > 0)
                 return false;
-        if (errno != ENOSYS)
+        if (!IN_SET(errno, ENOSYS, EACCES, EPERM))
                 return -errno;
 
         /* We don't have kcmp(), use fstat() instead. */
@@ -353,22 +369,22 @@ bool fdname_is_valid(const char *s) {
 }
 
 int fd_get_path(int fd, char **ret) {
-        _cleanup_close_ int dir = -1;
-        char fdname[DECIMAL_STR_MAX(int)];
+        char procfs_path[STRLEN("/proc/self/fd/") + DECIMAL_STR_MAX(int)];
         int r;
 
-        dir = open("/proc/self/fd/", O_CLOEXEC | O_DIRECTORY | O_PATH);
-        if (dir < 0)
-                /* /proc is not available or not set up properly, we're most likely
-                 * in some chroot environment. */
-                return errno == ENOENT ? -EOPNOTSUPP : -errno;
+        xsprintf(procfs_path, "/proc/self/fd/%i", fd);
+        r = readlink_malloc(procfs_path, ret);
+        if (r == -ENOENT) {
+                /* ENOENT can mean two things: that the fd does not exist or that /proc is not mounted. Let's make
+                 * things debuggable and distuingish the two. */
 
-        xsprintf(fdname, "%i", fd);
+                if (access("/proc/self/fd/", F_OK) < 0)
+                        /* /proc is not available or not set up properly, we're most likely in some chroot
+                         * environment. */
+                        return errno == ENOENT ? -EOPNOTSUPP : -errno;
 
-        r = readlinkat_malloc(dir, fdname, ret);
-        if (r == -ENOENT)
-                /* If the file doesn't exist the fd is invalid */
-                return -EBADF;
+                return -EBADF; /* The directory exists, hence it's the fd that doesn't. */
+        }
 
         return r;
 }
@@ -648,7 +664,7 @@ int fd_duplicate_data_fd(int fd) {
 
                         if ((size_t) isz >= DATA_FD_MEMORY_LIMIT) {
 
-                                r = copy_bytes_full(fd, pipefds[1], DATA_FD_MEMORY_LIMIT, 0, &remains, &remains_size);
+                                r = copy_bytes_full(fd, pipefds[1], DATA_FD_MEMORY_LIMIT, 0, &remains, &remains_size, NULL, NULL);
                                 if (r < 0 && r != -EAGAIN)
                                         return r; /* If we get EAGAIN it could be because of the source or because of
                                                    * the destination fd, we can't know, as sendfile() and friends won't

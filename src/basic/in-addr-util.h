@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <sys/socket.h>
 
+#include "hash-funcs.h"
 #include "macro.h"
 #include "util.h"
 
@@ -45,11 +46,25 @@ int in_addr_mask(int family, union in_addr_union *addr, unsigned char prefixlen)
 int in_addr_prefix_covers(int family, const union in_addr_union *prefix, unsigned char prefixlen, const union in_addr_union *address);
 int in_addr_parse_prefixlen(int family, const char *p, unsigned char *ret);
 int in_addr_prefix_from_string(const char *p, int family, union in_addr_union *ret_prefix, unsigned char *ret_prefixlen);
-int in_addr_prefix_from_string_auto(const char *p, int *ret_family, union in_addr_union *ret_prefix, unsigned char *ret_prefixlen);
+
+typedef enum InAddrPrefixLenMode {
+        PREFIXLEN_FULL,   /* Default to prefixlen of address size, 32 for IPv4 or 128 for IPv6, if not specified. */
+        PREFIXLEN_REFUSE, /* Fail with -ENOANO if prefixlen is not specified. */
+        PREFIXLEN_LEGACY, /* Default to legacy default prefixlen calculation from address if not specified. */
+} InAddrPrefixLenMode;
+
+int in_addr_prefix_from_string_auto_internal(const char *p, InAddrPrefixLenMode mode, int *ret_family, union in_addr_union *ret_prefix, unsigned char *ret_prefixlen);
+static inline int in_addr_prefix_from_string_auto(const char *p, int *ret_family, union in_addr_union *ret_prefix, unsigned char *ret_prefixlen) {
+        return in_addr_prefix_from_string_auto_internal(p, PREFIXLEN_FULL, ret_family, ret_prefix, ret_prefixlen);
+}
 
 static inline size_t FAMILY_ADDRESS_SIZE(int family) {
         assert(IN_SET(family, AF_INET, AF_INET6));
         return family == AF_INET6 ? 16 : 4;
 }
 
-#define IN_ADDR_NULL ((union in_addr_union) {})
+/* Workaround for clang, explicitly specify the maximum-size element here.
+ * See also oss-fuzz#11344. */
+#define IN_ADDR_NULL ((union in_addr_union) { .in6 = {} })
+
+extern const struct hash_ops in_addr_data_hash_ops;

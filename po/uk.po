@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1+
 # Ukrainian translation for systemd.
-# This file is distributed under the same license as the systemd package.
 # Eugene Melnik <jeka7js@gmail.com>, 2014.
 # Daniel Korostil <ted.korostiled@gmail.com>, 2014, 2016, 2018.
 msgid ""
@@ -598,7 +597,7 @@ msgstr "Вкажіть RTC для локального часового пояс
 msgid ""
 "Authentication is required to control whether the RTC stores the local or "
 "UTC time."
-msgstr "Потрібна автентифікація, щоб контролювати, чи RTC зберігає час, чи UTC."
+msgstr "Потрібна автентифікація, щоб контролювати, чи зберігає RTC локальний час або UTC."
 
 #: src/timedate/org.freedesktop.timedate1.policy:54
 msgid "Turn network time synchronization on or off"

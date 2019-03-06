@@ -15,11 +15,11 @@ typedef struct DnsAnswerItem DnsAnswerItem;
  * Note that we usually encode the empty DnsAnswer object as a simple NULL. */
 
 typedef enum DnsAnswerFlags {
-        DNS_ANSWER_AUTHENTICATED = 1,  /* Item has been authenticated */
-        DNS_ANSWER_CACHEABLE     = 2,  /* Item is subject to caching */
-        DNS_ANSWER_SHARED_OWNER  = 4,  /* For mDNS: RRset may be owner by multiple peers */
-        DNS_ANSWER_CACHE_FLUSH   = 8,  /* For mDNS: sets cache-flush bit in the rrclass of response records */
-        DNS_ANSWER_GOODBYE       = 16, /* For mDNS: item is subject to disappear */
+        DNS_ANSWER_AUTHENTICATED = 1 << 0, /* Item has been authenticated */
+        DNS_ANSWER_CACHEABLE     = 1 << 1, /* Item is subject to caching */
+        DNS_ANSWER_SHARED_OWNER  = 1 << 2, /* For mDNS: RRset may be owner by multiple peers */
+        DNS_ANSWER_CACHE_FLUSH   = 1 << 3, /* For mDNS: sets cache-flush bit in the rrclass of response records */
+        DNS_ANSWER_GOODBYE       = 1 << 4, /* For mDNS: item is subject to disappear */
 } DnsAnswerFlags;
 
 struct DnsAnswerItem {
@@ -43,8 +43,6 @@ int dns_answer_add_extend(DnsAnswer **a, DnsResourceRecord *rr, int ifindex, Dns
 int dns_answer_add_soa(DnsAnswer *a, const char *name, uint32_t ttl, int ifindex);
 
 int dns_answer_match_key(DnsAnswer *a, const DnsResourceKey *key, DnsAnswerFlags *combined_flags);
-int dns_answer_contains_rr(DnsAnswer *a, DnsResourceRecord *rr, DnsAnswerFlags *combined_flags);
-int dns_answer_contains_key(DnsAnswer *a, const DnsResourceKey *key, DnsAnswerFlags *combined_flags);
 int dns_answer_contains_nsec_or_nsec3(DnsAnswer *a);
 int dns_answer_contains_zone_nsec3(DnsAnswer *answer, const char *zone);
 
@@ -65,7 +63,7 @@ int dns_answer_remove_by_rr(DnsAnswer **a, DnsResourceRecord *rr);
 int dns_answer_copy_by_key(DnsAnswer **a, DnsAnswer *source, const DnsResourceKey *key, DnsAnswerFlags or_flags);
 int dns_answer_move_by_key(DnsAnswer **to, DnsAnswer **from, const DnsResourceKey *key, DnsAnswerFlags or_flags);
 
-bool dns_answer_has_dname_for_cname(DnsAnswer *a, DnsResourceRecord *cname);
+int dns_answer_has_dname_for_cname(DnsAnswer *a, DnsResourceRecord *cname);
 
 static inline size_t dns_answer_size(DnsAnswer *a) {
         return a ? a->n_rrs : 0;

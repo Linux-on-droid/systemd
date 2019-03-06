@@ -37,6 +37,7 @@ endif
 
 CONFFLAGS = \
 	-Db_lto=true \
+	-Db_pie=true \
 	-Drootlibdir=/lib/$(DEB_HOST_MULTIARCH) \
 	-Dsplit-usr=true \
 	-Dquotaon-path=/sbin/quotaon \
@@ -71,6 +72,7 @@ CONFFLAGS = \
 	-Dsystem-gid-max=999 \
 	-Dnobody-user=nobody \
 	-Dnobody-group=nogroup \
+	-Dbump-proc-sys-fs-nr-open=false \
 	-Ddev-kvm-mode=0660
 
 # resolved's DNSSEC support is still not mature enough, don't enable it by
@@ -83,6 +85,9 @@ CONFFLAGS_deb = \
 	-Dsysusers=true \
 	-Dinstall-tests=true \
 	-Defi=true \
+	-Dnss-myhostname=true \
+	-Dnss-mymachines=true \
+	-Dnss-resolve=true \
 	-Dnss-systemd=true \
 	-Dresolve=true \
 	-Dlink-systemctl-shared=false
@@ -143,7 +148,9 @@ CONFFLAGS_udeb = \
 	-Dnetworkd=false \
 	-Dtimesyncd=false \
 	-Dlocaled=false \
-	-Dmyhostname=false \
+	-Dnss-myhostname=false \
+	-Dnss-mymachines=false \
+	-Dnss-resolve=false \
 	-Dnss-systemd=false \
 	-Dresolve=false \
 	-Dpolkit=false \
@@ -266,7 +273,7 @@ override_dh_missing:
 override_dh_installinit:
 	dh_installinit --no-start
 
-PROJECT_VERSION ?= $(shell awk '/PACKAGE_VERSION/ {print $$3}' build-deb/config.h | tr -d \")
+PROJECT_VERSION ?= $(shell awk '/(PROJECT|PACKAGE)_VERSION/ {print $$3}' build-deb/config.h | tr -d \")
 
 # The SysV compat tools (which are symlinks to systemctl) are
 # quasi-essential, so add their dependencies to Pre-Depends

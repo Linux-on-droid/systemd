@@ -14,7 +14,7 @@
 
 int close_nointr(int fd);
 int safe_close(int fd);
-void safe_close_pair(int p[]);
+void safe_close_pair(int p[static 2]);
 
 static inline int safe_close_above_stdio(int fd) {
         if (fd < 3) /* Don't close stdin/stdout/stderr, but still invalidate the fd by returning -1 */
@@ -78,8 +78,12 @@ int acquire_data_fd(const void *data, size_t size, unsigned flags);
 int fd_duplicate_data_fd(int fd);
 
 /* Hint: ENETUNREACH happens if we try to connect to "non-existing" special IP addresses, such as ::5 */
-#define ERRNO_IS_DISCONNECT(r) \
-        IN_SET(r, ENOTCONN, ECONNRESET, ECONNREFUSED, ECONNABORTED, EPIPE, ENETUNREACH)
+/* The kernel sends e.g., EHOSTUNREACH or ENONET to userspace in some ICMP error cases.
+ * See the icmp_err_convert[] in net/ipv4/icmp.c in the kernel sources */
+#define ERRNO_IS_DISCONNECT(r)                                          \
+        IN_SET(r,                                                       \
+               ENOTCONN, ECONNRESET, ECONNREFUSED, ECONNABORTED, EPIPE, \
+               ENETUNREACH, EHOSTUNREACH, ENOPROTOOPT, EHOSTDOWN, ENONET)
 
 /* Resource exhaustion, could be our fault or general system trouble */
 #define ERRNO_IS_RESOURCE(r) \

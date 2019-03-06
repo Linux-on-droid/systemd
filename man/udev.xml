@@ -1,4 +1,4 @@
-<?xml version='1.0'?> <!--*- Mode: nxml; nxml-child-indent: 2; indent-tabs-mode: nil -*-->
+<?xml version='1.0'?>
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
   "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 
@@ -184,6 +184,8 @@
             value itself contains trailing whitespace.
             </para>
           </listitem>
+        </varlistentry>
+        <varlistentry>
           <term><varname>SYSCTL{<replaceable>kernel parameter</replaceable>}</varname></term>
           <listitem>
             <para>Match a kernel parameter value.
@@ -562,6 +564,18 @@
                 <term><option>nowatch</option></term>
                 <listitem>
                   <para>Disable the watching of a device node with inotify.</para>
+                </listitem>
+              </varlistentry>
+              <varlistentry>
+                <term><option>db_persist</option></term>
+                <listitem>
+                  <para>Set the flag (sticky bit) on the udev database entry
+                  of the event device. Device properties are then kept in the
+                  database even when
+                  <command>udevadm info --cleanup-db</command> is called.
+                  This option can be useful in certain cases
+                  (e.g. Device Mapper devices) for persisting device state
+                  on the transition from initramfs.</para>
                 </listitem>
               </varlistentry>
             </variablelist>

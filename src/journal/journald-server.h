@@ -137,8 +137,6 @@ struct Server {
 
         Set *deferred_closes;
 
-        struct udev *udev;
-
         uint64_t *kernel_seqnum;
         bool dev_kmsg_readable:1;
 
@@ -162,6 +160,8 @@ struct Server {
         /* Caching of client metadata */
         Hashmap *client_contexts;
         Prioq *client_contexts_lru;
+
+        usec_t last_cache_pid_flush;
 
         ClientContext *my_context; /* the context of journald itself */
         ClientContext *pid1_context; /* the context of PID 1 */

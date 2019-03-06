@@ -1,3 +1,247 @@
+systemd (241-1) unstable; urgency=medium
+
+  [ Adam Borowski ]
+  * Make libpam-systemd Provide: logind, default-logind.
+    This allows alternate logind implementations such as elogind, without
+    having to recompile every dependant package -- as long as the client API
+    remains compatible.
+    These new virtual packages got policy-approved in #917431. (Closes: #915407)
+
+  [ Felipe Sateler ]
+  * New upstream version 241
+    - Refresh patches
+    - Backport upstream fix for Driver= matches in .network files
+
+  [ Martin Pitt ]
+  * debian/libsystemd0.symbols: Add new symbol from release 241
+  * Fix various bugs and races in networkd tests.
+    This should get the autopkgtest back to green, which regressed with
+    dnsmasq 2.80.
+
+ -- Felipe Sateler <fsateler@debian.org>  Thu, 21 Feb 2019 20:10:15 -0300
+
+systemd (240-6) unstable; urgency=high
+
+  * High urgency as this fixes a vulnerability.
+
+  [ Felipe Sateler ]
+  * Reenable pristine-tar in gbp.conf.
+    The pristine-tar bug has been fixed, so we can use it again.
+    This reverts commit 9fcfbbf6fea15eacfa3fad74240431c5f2c3300e.
+  * d/watch: add version mangle to transform -rc to ~rc.
+    Upstream has started releasing rcs, so let's account for that
+  * Fix comment about why we disable hwclock.service.
+    Systemd nowadays doesn't do it itself because the kernel does it on its
+    own when necessary, and when not, it is not safe to save the hwclock (eg,
+    there is no certainty the system clock
+    is correct)
+  * udev: Backport upstream preventing mass killings when not running under
+    systemd (Closes: #918764)
+
+  [ Dimitri John Ledkov ]
+  * debian/tests/storage: improve cleanups.
+    On fast ppc64el machines, cryptsetup start job may not complete by the
+    time tearDown is executed. In that case stop, causes to simply cancel the
+    start job without actually cleaning up the dmsetup node. This leads to
+    failing subsequent test as it no longer starts with a clean device. Thus
+    ensure the systemd-cryptsetup unit is started, before stopping it.
+    Also rmmod scsi_debug module at the end, to allow re-running the test in a
+    loop.
+  * debian/tests/upstream: Mark TEST-13-NSPAWN-SMOKE as flakey.
+  * debian/tests/control: add socat to upstream tests for pull #11591
+  * Blacklist TEST-10-ISSUE-2467 #11706
+  * debian/tests/storage: fix for LUKS2 and avoid interactive password
+    prompts.
+
+  [ Martin Pitt ]
+  * udevadm: Fix segfault with subsystem-match containing '/'
+    (Closes: #919206)
+  * sd-bus: if we receive an invalid dbus message, ignore and proceed
+  * sd-bus: enforce a size limit on D-Bus object paths.
+    This avoids accessing/modifying memory outside of the allocated stack
+    region by sending specially crafted D-Bus messages with very large object
+    paths.
+    Vulnerability discovered by Chris Coulson <chris.coulson@canonical.com>,
+    patch provided by Riccardo Schirone <rschiron@redhat.com>.
+    (CVE-2019-6454)
+
+ -- Martin Pitt <mpitt@debian.org>  Mon, 18 Feb 2019 13:54:04 +0000
+
+systemd (240-5) unstable; urgency=medium
+
+  [ Felipe Sateler ]
+  * Revert interface renaming changes. (Closes: #919390)
+
+  [ Martin Pitt ]
+  * process-util: Fix memory leak (Closes: #920018)
+
+ -- Martin Pitt <mpitt@debian.org>  Sun, 27 Jan 2019 21:33:07 +0000
+
+systemd (240-4) unstable; urgency=medium
+
+  [ Benjamin Drung ]
+  * Fix shellcheck issues in initramfs-tools scripts
+
+  [ Michael Biebl ]
+  * Import patches from v240-stable branch (up to f02b5472c6)
+    - Fixes a problem in logind closing the controlling terminal when using
+      startx. (Closes: #918927)
+    - Fixes various journald vulnerabilities via attacker controlled alloca.
+      (CVE-2018-16864, CVE-2018-16865, Closes: #918841, Closes: #918848)
+  * sd-device-monitor: Fix ordering of setting buffer size.
+    Fixes an issue with uevents not being processed properly during coldplug
+    stage and some kernel modules not being loaded via "udevadm trigger".
+    (Closes: #917607)
+  * meson: Stop setting -fPIE globally.
+    Setting -fPIE globally can lead to miscompilations on certain
+    architectures. Instead use the b_pie=true build option, which was
+    introduced in meson 0.49. Bump the Build-Depends accordingly.
+    (Closes: #909396)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 12 Jan 2019 21:49:44 +0100
+
+systemd (240-3) unstable; urgency=medium
+
+  * udev.init: Trigger add events for subsystems.
+    Update the SysV init script and mimic the behaviour of the initramfs and
+    systemd-udev-trigger.service which first trigger subsystems and then
+    devices during the coldplug stage.
+  * udevadm: Refuse to run trigger, control, settle and monitor commands in
+    chroot (Closes: #917633)
+  * network: Set link state configuring before setting addresses.
+    Fixes a crash in systemd-networkd caused by an assertion failure.
+    (Closes: #918658)
+  * libudev-util: Make util_replace_whitespace() read only len characters.
+    Fixes a regression where /dev/disk/by-id/ names had additional
+    underscores.
+  * man: Update color of journal logs in DEBUG level (Closes: #917948)
+  * Remove old state directory of systemd-timesyncd on upgrades.
+    Otherwise timesyncd will fail to update the clock file if it was created
+    as /var/lib/private/systemd/timesync/clock.
+    This was the case when the service was using DynamicUser=yes which it no
+    longer does in v240. (Closes: #918190)
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 09 Jan 2019 18:40:57 +0100
+
+systemd (240-2) unstable; urgency=medium
+
+  * Pass separate dev_t var to device_path_parse_major_minor.
+    Fixes FTBFS on mips/mipsel (MIPS/O32). (Closes: #917195)
+  * test-json: Check absolute and relative difference in floating point test.
+    Fixes FTBFS due to test-suite failures on armel, armhf and hppa.
+    (Closes: #917215)
+  * sd-device: Fix segfault when error occurs in device_new_from_{nulstr,strv}()
+    Fixes a segfault in systemd-udevd when debug logging is enabled.
+  * udev-event: Do not read stdout or stderr if the pipefd is not created.
+    This fixes problems with device-mapper symlinks no longer being created
+    or certain devices not being marked as ready. (Closes: #917124)
+  * Don't bump fs.nr_open in PID 1.
+    In v240, systemd bumped fs.nr_open in PID 1 to the highest possible
+    value. Processes that are spawned directly by systemd, will have
+    RLIMIT_NOFILE be set to 512K (hard).
+    pam_limits in Debian defaults to "set_all", i.e. for limits which are
+    not explicitly configured in /etc/security/limits.conf, the value from
+    PID 1 is taken, which means for login sessions, RLIMIT_NOFILE is set to
+    the highest possible value instead of 512K. Not every software is able
+    to deal with such an RLIMIT_NOFILE properly.
+    While this is arguably a questionable default in Debian's pam_limit,
+    work around this problem by not bumping fs.nr_open in PID 1.
+    (Closes: #917167)
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 27 Dec 2018 14:03:57 +0100
+
+systemd (240-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 240
+    - core: Skip cgroup_subtree_mask_valid update if UNIT_STUB
+      (Closes: #903011)
+    - machined: Rework referencing of machine scopes from machined
+      (Closes: #903288)
+    - timesync: Fix serialization of IP address
+      (Closes: #916516)
+    - core: Don't track jobs-finishing-during-reload explicitly
+      (Closes: #916678)
+  * Rebase patches
+  * Install new systemd-id128 binary
+  * Update symbols file for libsystemd0
+  * Update nss build options
+
+  [ Martin Pitt ]
+  * tests: Disable some flaky upstream tests.
+    See https://github.com/systemd/systemd/issues/11195
+  * tests: Disable flaky TEST-17-UDEV-WANTS upstream test.
+    See https://github.com/systemd/systemd/issues/11195
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 22 Dec 2018 16:01:43 +0100
+
+systemd (239-15) unstable; urgency=medium
+
+  [ Felipe Sateler ]
+  * Fix container check in udev init script.
+    Udev needs writable /sys, so the init script tried to check before
+    starting. Unfortunately, the check was inverted. Let's add the missing
+    '!' to negate the check.
+    (Closes: #915261)
+  * Add myself to uploaders
+
+  [ Michael Biebl ]
+  * Remove obsolete systemd-shim conffile on upgrades.
+    The D-Bus policy file was dropped from the systemd-shim package in
+    version 8-4, but apparently there are cases where users removed the
+    package before that cleanup happened. The D-Bus policy file that was
+    shipped by systemd-shim was much more restrictive and now prevents
+    calling GetDynamicUsers() and other recent APIs on systemd Manager.
+    (Closes: #914285)
+
+ -- Felipe Sateler <fsateler@debian.org>  Wed, 05 Dec 2018 21:03:34 -0300
+
+systemd (239-14) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * autopkgtest: Drop test_custom_cgroup_cleanup from boot-and-services
+  * resolved: Increase size of TCP stub replies (Closes: #915049)
+  * meson: Unify linux/stat.h check with other checks and use _GNU_SOURCE.
+    Fixes a build failure with glibc 2.28.
+  * Drop procps dependency from systemd.
+    The systemd-exit.service user service no longer uses the "kill" binary.
+  * Simplify container check in udev SysV init script.
+    Instead of using "ps" to detect a container environment, simply test if
+    /sys is writable. This matches what's used in systemd-udevd.service via
+    ConditionPathIsReadWrite=/sys and follows
+    https://www.freedesktop.org/wiki/Software/systemd/ContainerInterface/
+    This means we no longer need procps, so drop that dependency from the
+    udev package. (Closes: #915095)
+
+  [ Mert Dirik ]
+  * 40-systemd: Honour __init_d_script_name.
+    Make /lib/lsb/init-functions.d/40-systemd use __init_d_script_name
+    (if available) to figure out real script name. (Closes: #826214)
+  * 40-systemd: Improve heuristics for init-d-script.
+    Improve heuristics for scripts run via init-d-script so that the
+    redirection works even for older init-d-script versions without the
+    __init_d_script_name variable.
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 02 Dec 2018 01:00:01 +0100
+
+systemd (239-13) unstable; urgency=medium
+
+  * autopktest: Add e2fsprogs dependency to upstream test.
+    Some of the upstream tests require mkfs.ext4. (Closes: #887250)
+  * systemctl: Tell update-rc.d to skip creating any systemd symlinks.
+    When calling update-rc.d via systemd-sysv-install, tell it to skip
+    creating any systemd symlinks as we want to handle those directly in
+    systemctl. Older update-rc.d versions will ignore that request, but
+    that's ok. This means we don't need a versioned dependency against
+    init-system-helpers. (Closes: #743217)
+  * pam_systemd: Suppress LOG_DEBUG log messages if debugging is off
+    (Closes: #825949)
+  * Drop cgroup-don-t-trim-cgroup-trees-created-by-someone-el.patch.
+    The patch is no longer necessary as lxc.service now uses Delegate=yes.
+  * Remove obsolete Replaces from pre-jessie
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 20 Nov 2018 19:44:39 +0100
+
 systemd (239-12~bpo9+1) stretch-backports; urgency=medium
 
   * Rebuild for stretch-backports

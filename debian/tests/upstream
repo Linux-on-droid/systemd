@@ -7,6 +7,15 @@ set -e
 # "Failed to install /usr/libexec/selinux/hll/pp"
 BLACKLIST="TEST-06-SELINUX"
 
+# some tests are flaky
+BLACKLIST="$BLACKLIST
+TEST-02-CRYPTSETUP
+TEST-10-ISSUE-2467
+TEST-13-NSPAWN-SMOKE
+TEST-16-EXTEND-TIMEOUT
+TEST-17-UDEV-WANTS
+"
+
 # quiesce Makefile.guess; not really relevant as systemd/nspawn run from
 # installed packages
 export BUILD_DIR=.

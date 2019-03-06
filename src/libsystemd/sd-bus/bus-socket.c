@@ -1,6 +1,4 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
-/***
-***/
 
 #include <endian.h>
 #include <poll.h>
@@ -23,6 +21,7 @@
 #include "missing.h"
 #include "path-util.h"
 #include "process-util.h"
+#include "rlimit-util.h"
 #include "selinux-util.h"
 #include "signal-util.h"
 #include "stdio-util.h"
@@ -46,8 +45,7 @@ static void iovec_advance(struct iovec iov[], unsigned *idx, size_t size) {
 
                 size -= i->iov_len;
 
-                i->iov_base = NULL;
-                i->iov_len = 0;
+                *i = IOVEC_MAKE(NULL, 0);
 
                 (*idx)++;
         }
@@ -58,9 +56,7 @@ static int append_iovec(sd_bus_message *m, const void *p, size_t sz) {
         assert(p);
         assert(sz > 0);
 
-        m->iovec[m->n_iovec].iov_base = (void*) p;
-        m->iovec[m->n_iovec].iov_len = sz;
-        m->n_iovec++;
+        m->iovec[m->n_iovec++] = IOVEC_MAKE((void*) p, sz);
 
         return 0;
 }
@@ -248,10 +244,7 @@ static bool line_begins(const char *s, size_t m, const char *word) {
         const char *p;
 
         p = memory_startswith(s, m, word);
-        if (!p)
-                return false;
-
-        return IN_SET(*p, 0, ' ');
+        return p && (p == (s + m) || *p == ' ');
 }
 
 static int verify_anonymous_token(sd_bus *b, const char *p, size_t l) {
@@ -521,8 +514,7 @@ static int bus_socket_read_auth(sd_bus *b) {
 
         b->rbuffer = p;
 
-        iov.iov_base = (uint8_t*) b->rbuffer + b->rbuffer_size;
-        iov.iov_len = n - b->rbuffer_size;
+        iov = IOVEC_MAKE((uint8_t *)b->rbuffer + b->rbuffer_size, n - b->rbuffer_size);
 
         if (b->prefer_readv)
                 k = readv(b->input_fd, &iov, 1);
@@ -639,12 +631,9 @@ static int bus_socket_start_auth_client(sd_bus *b) {
         else
                 auth_suffix = "\r\nBEGIN\r\n";
 
-        b->auth_iovec[0].iov_base = (void*) auth_prefix;
-        b->auth_iovec[0].iov_len = 1 + strlen(auth_prefix + 1);
-        b->auth_iovec[1].iov_base = (void*) b->auth_buffer;
-        b->auth_iovec[1].iov_len = l * 2;
-        b->auth_iovec[2].iov_base = (void*) auth_suffix;
-        b->auth_iovec[2].iov_len = strlen(auth_suffix);
+        b->auth_iovec[0] = IOVEC_MAKE((void*) auth_prefix, 1 + strlen(auth_prefix + 1));
+        b->auth_iovec[1] = IOVEC_MAKE(b->auth_buffer, l * 2);
+        b->auth_iovec[2] = IOVEC_MAKE_STRING(auth_suffix);
 
         return bus_socket_write_auth(b);
 }
@@ -944,6 +933,8 @@ int bus_socket_exec(sd_bus *b) {
                 if (rearrange_stdio(s[1], s[1], STDERR_FILENO) < 0)
                         _exit(EXIT_FAILURE);
 
+                (void) rlimit_nofile_safe();
+
                 if (b->exec_argv)
                         execvp(b->exec_path, b->exec_argv);
                 else {
@@ -990,7 +981,7 @@ int bus_socket_write_message(sd_bus *bus, sd_bus_message *m, size_t *idx) {
                 return r;
 
         n = m->n_iovec * sizeof(struct iovec);
-        iov = alloca(n);
+        iov = newa(struct iovec, n);
         memcpy_safe(iov, m->iovec, n);
 
         j = 0;
@@ -1081,7 +1072,7 @@ static int bus_socket_read_message_need(sd_bus *bus, size_t *need) {
 }
 
 static int bus_socket_make_message(sd_bus *bus, size_t size) {
-        sd_bus_message *t;
+        sd_bus_message *t = NULL;
         void *b;
         int r;
 
@@ -1106,7 +1097,9 @@ static int bus_socket_make_message(sd_bus *bus, size_t size) {
                                     bus->fds, bus->n_fds,
                                     NULL,
                                     &t);
-        if (r < 0) {
+        if (r == -EBADMSG)
+                log_debug_errno(r, "Received invalid message from connection %s, dropping.", strna(bus->description));
+        else if (r < 0) {
                 free(b);
                 return r;
         }
@@ -1117,7 +1110,8 @@ static int bus_socket_make_message(sd_bus *bus, size_t size) {
         bus->fds = NULL;
         bus->n_fds = 0;
 
-        bus->rqueue[bus->rqueue_size++] = t;
+        if (t)
+                bus->rqueue[bus->rqueue_size++] = t;
 
         return 1;
 }
@@ -1151,8 +1145,7 @@ int bus_socket_read_message(sd_bus *bus) {
 
         bus->rbuffer = b;
 
-        iov.iov_base = (uint8_t*) bus->rbuffer + bus->rbuffer_size;
-        iov.iov_len = need - bus->rbuffer_size;
+        iov = IOVEC_MAKE((uint8_t *)bus->rbuffer + bus->rbuffer_size, need - bus->rbuffer_size);
 
         if (bus->prefer_readv)
                 k = readv(bus->input_fd, &iov, 1);
