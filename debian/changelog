@@ -1,3 +1,22 @@
+systemd (232-25+deb9u10) stretch; urgency=medium
+
+  * journald: fix assertion failure on journal_file_link_data (Closes: #916880)
+  * tmpfiles: fix "e" to support shell style globs (Closes: #918400)
+  * mount-util: accept that name_to_handle_at() might fail with EPERM.
+    Container managers frequently block name_to_handle_at(), returning
+    EACCES or EPERM when this is issued. Accept that, and simply fall back
+    to fdinfo-based checks. (Closes: #917122)
+  * automount: ack automount requests even when already mounted.
+    Fixes a race condition in systemd which could result in automount requests
+    not being serviced and processes using them to hang, causing denial of
+    service. (CVE-2018-1049)
+  * core: when deserializing state always use read_line(…, LONG_LINE_MAX, …)
+    Fixes improper serialization on upgrade which can influence systemd
+    execution environment and lead to root privilege escalation.
+    (CVE-2018-15686, Closes: #912005)
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 10 Mar 2019 15:52:46 +0100
+
 systemd (232-25+deb9u9) stretch-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
