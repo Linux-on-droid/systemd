@@ -96,6 +96,7 @@ Allocate-temporary-strings-to-hold-dbus-paths-on-the.patch
 sd-bus-if-we-receive-an-invalid-dbus-message-ignore-.patch
 journald-fix-assertion-failure-on-journal_file_link_data..patch
 tmpfiles-e-takes-globs.patch
+mount-util-accept-that-name_to_handle_at-might-fail-with-.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch

@@ -1,0 +1,48 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Wed, 1 Mar 2017 17:35:05 +0100
+Subject: mount-util: accept that name_to_handle_at() might fail with EPERM
+ (#5499)
+
+Container managers frequently block name_to_handle_at(), returning
+EACCES or EPERM when this is issued. Accept that, and simply fall back
+to to fdinfo-based checks.
+
+Note that we accept either EACCES or EPERM here, as container managers
+can choose the error code and aren't very good on agreeing on just one.
+
+(note that this is a non-issue with nspawn, as we permit
+name_to_handle_at() there, only block open_by_handle_at(), which should
+be sufficiently safe).
+
+(cherry picked from commit 059c35f507b3efecf1b7d77e62427766f7a25b1a)
+---
+ src/basic/mount-util.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/basic/mount-util.c b/src/basic/mount-util.c
+index 5d37fb4..265d5fd 100644
+--- a/src/basic/mount-util.c
++++ b/src/basic/mount-util.c
+@@ -111,9 +111,10 @@ int fd_is_mount_point(int fd, const char *filename, int flags) {
+ 
+         r = name_to_handle_at(fd, filename, &h.handle, &mount_id, flags);
+         if (r < 0) {
+-                if (errno == ENOSYS)
+-                        /* This kernel does not support name_to_handle_at()
+-                         * fall back to simpler logic. */
++                if (IN_SET(errno, ENOSYS, EACCES, EPERM))
++                        /* This kernel does not support name_to_handle_at() at all, or the syscall was blocked (maybe
++                         * through seccomp, because we are running inside of a container?): fall back to simpler
++                         * logic. */
+                         goto fallback_fdinfo;
+                 else if (errno == EOPNOTSUPP)
+                         /* This kernel or file system does not support
+@@ -162,7 +163,7 @@ int fd_is_mount_point(int fd, const char *filename, int flags) {
+ 
+ fallback_fdinfo:
+         r = fd_fdinfo_mnt_id(fd, filename, flags, &mount_id);
+-        if (IN_SET(r, -EOPNOTSUPP, -EACCES))
++        if (IN_SET(r, -EOPNOTSUPP, -EACCES, -EPERM))
+                 goto fallback_fstat;
+         if (r < 0)
+                 return r;
