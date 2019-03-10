@@ -1,0 +1,29 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Wed, 22 Nov 2017 15:16:48 +0100
+Subject: tmpfiles: "e" takes globs
+
+Fixes #7369.
+
+(cherry picked from commit 65241c1485dbad934e22544cd9d8724f4d7ff91d)
+---
+ src/tmpfiles/tmpfiles.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tmpfiles/tmpfiles.c b/src/tmpfiles/tmpfiles.c
+index 97a564d..e139694 100644
+--- a/src/tmpfiles/tmpfiles.c
++++ b/src/tmpfiles/tmpfiles.c
+@@ -1615,12 +1615,12 @@ static int clean_item(Item *i) {
+         case CREATE_SUBVOLUME:
+         case CREATE_SUBVOLUME_INHERIT_QUOTA:
+         case CREATE_SUBVOLUME_NEW_QUOTA:
+-        case EMPTY_DIRECTORY:
+         case TRUNCATE_DIRECTORY:
+         case IGNORE_PATH:
+         case COPY_FILES:
+                 clean_item_instance(i, i->path);
+                 return 0;
++        case EMPTY_DIRECTORY:
+         case IGNORE_DIRECTORY_PATH:
+                 return glob_item(i, clean_item_instance, false);
+         default:
