@@ -1,3 +1,12 @@
+systemd (232-25+deb9u11) stretch-security; urgency=high
+
+  * pam-systemd: use secure_getenv() rather than getenv()
+    Fixes a vulnerability in the systemd PAM module which insecurely uses
+    the environment and lacks seat verification permitting spoofing an
+    active session to PolicyKit. (CVE-2019-3842)
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 08 Apr 2019 12:51:41 +0200
+
 systemd (232-25+deb9u10) stretch; urgency=medium
 
   * journald: fix assertion failure on journal_file_link_data (Closes: #916880)
