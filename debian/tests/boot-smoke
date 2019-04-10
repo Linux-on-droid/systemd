@@ -7,7 +7,14 @@ set -e
 
 . `dirname $0`/assert.sh
 
-if [ -z "$ADT_REBOOT_MARK" ]; then
+fail() {
+    journalctl --sync
+    journalctl -a > "$AUTOPKGTEST_ARTIFACTS/boot-smoke-journal.txt"
+    udevadm info --export-db > "$AUTOPKGTEST_ARTIFACTS/boot-smoke-udevdb.txt"
+    exit 1
+}
+
+if [ -z "$AUTOPKGTEST_REBOOT_MARK" ]; then
     # enable persistent journal
     mkdir -p /var/log/journal
     # allow X to start even on headless machines
@@ -20,7 +27,7 @@ EndSection
 EOF
 
 
-    ADT_REBOOT_MARK=0
+    AUTOPKGTEST_REBOOT_MARK=0
     if [ -d /tmp/systemd-replace/ ]; then
         for f in /tmp/systemd-replace/*; do
             echo "Installing $f..."
@@ -30,13 +37,14 @@ EOF
     fi
 else
     echo "checking for failed unmounts for user systemd"
-    JOURNAL=$(journalctl)
-    if echo "$JOURNAL" | grep -E "systemd\[([2-9]|[1-9][0-9]+)\].*Failed unmounting"; then
-        exit 1
+    # grep complete journal to catch shutdown messages
+    if journalctl | grep -E "systemd\[([2-9]|[1-9][0-9]+)\].*Failed unmounting"; then
+        fail
     fi
+    # grep only this boot's journal, earlier ones complain about missing "render" group
     echo "checking for connection timeouts"
-    if echo "$JOURNAL" | grep "Connection timed out"; then
-        exit 1
+    if journalctl -b | grep "Connection timed out"; then
+        fail
     fi
 
     echo "checking that polkitd runs"
@@ -51,16 +59,13 @@ else
     done
     if [ -n "$running" ]; then
         echo "running jobs after remaining timeout $TIMEOUT: $running"
-        journalctl --sync
-        journalctl -ab > $ADT_ARTIFACTS/journal.txt
-        udevadm info --export-db > $ADT_ARTIFACTS/udevdb.txt
-        exit 1
+        fail
     fi
 fi
 
-if [ "$ADT_REBOOT_MARK" -ge 5 ]; then
+if [ "$AUTOPKGTEST_REBOOT_MARK" -ge 5 ]; then
     exit 0
 fi
 
-echo "reboot #$ADT_REBOOT_MARK"
-/tmp/autopkgtest-reboot $(($ADT_REBOOT_MARK + 1))
+echo "reboot #$AUTOPKGTEST_REBOOT_MARK"
+/tmp/autopkgtest-reboot $(($AUTOPKGTEST_REBOOT_MARK + 1))
