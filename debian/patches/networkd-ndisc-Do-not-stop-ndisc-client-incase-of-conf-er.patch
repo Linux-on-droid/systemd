@@ -1,0 +1,32 @@
+From: Susant Sahani <susant@redhat.com>
+Date: Tue, 26 Sep 2017 17:17:32 +0530
+Subject: networkd: ndisc Do not stop ndisc client incase of conf error.
+
+Now in ndisc_netlink_handler if route or address fails we stop the clients.
+link_enter_failed->link_stop_clients that is dhcp, ndisc etc.
+
+The clients should be keep on running .
+
+Fixes #5625
+
+(cherry picked from commit 7f676aa324cb5498a5f9caaaa3d51ecfe53242e0)
+---
+ src/network/networkd-ndisc.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/network/networkd-ndisc.c b/src/network/networkd-ndisc.c
+index d3fa56b..1513d66 100644
+--- a/src/network/networkd-ndisc.c
++++ b/src/network/networkd-ndisc.c
+@@ -37,10 +37,8 @@ static int ndisc_netlink_handler(sd_netlink *rtnl, sd_netlink_message *m, void *
+         link->ndisc_messages--;
+ 
+         r = sd_netlink_message_get_errno(m);
+-        if (r < 0 && r != -EEXIST) {
++        if (r < 0 && r != -EEXIST)
+                 log_link_error_errno(link, r, "Could not set NDisc route or address: %m");
+-                link_enter_failed(link);
+-        }
+ 
+         if (link->ndisc_messages == 0) {
+                 link->ndisc_configured = true;

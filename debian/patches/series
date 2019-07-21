@@ -100,6 +100,7 @@ mount-util-accept-that-name_to_handle_at-might-fail-with-.patch
 automount-ack-automount-requests-even-when-already-mounte.patch
 backport-read_line-from-systemd-master.patch
 core-when-deserializing-state-always-use-read_line-LONG_L.patch
+networkd-ndisc-Do-not-stop-ndisc-client-incase-of-conf-er.patch
 debian/Use-Debian-specific-config-files.patch
 debian/don-t-try-to-start-autovt-units-when-not-running-wit.patch
 debian/Make-logind-hostnamed-localed-timedated-D-Bus-activa.patch
