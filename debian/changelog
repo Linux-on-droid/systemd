@@ -1,3 +1,13 @@
+systemd (232-25+deb9u12) stretch; urgency=medium
+
+  * networkd: Do not stop ndisc client in case of conf error.
+    When an NDisc error happens, e.g. in case of a prefix change, do not shut
+    down the dhcp client. Instead log about it and continue.
+    Otherwise networkd might fail to renew the DHCPv4 address and lose IPv4
+    connectivity. (Closes: #930353)
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 21 Jul 2019 20:43:29 +0200
+
 systemd (232-25+deb9u11) stretch-security; urgency=high
 
   * pam-systemd: use secure_getenv() rather than getenv()
