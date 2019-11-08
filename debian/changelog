@@ -1,3 +1,9 @@
+systemd (242-8~bpo10+1) buster-backports; urgency=medium
+
+  * Rebuild for buster-backports
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 09 Nov 2019 00:38:15 +0100
+
 systemd (242-8) unstable; urgency=medium
 
   [ Dan Streetman ]
