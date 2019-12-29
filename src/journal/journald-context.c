@@ -7,6 +7,7 @@
 #include "alloc-util.h"
 #include "audit-util.h"
 #include "cgroup-util.h"
+#include "env-util.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "fs-util.h"
@@ -48,7 +49,7 @@
  *    previously had trouble associating the log message with the service.
  *
  * NB: With and without the metadata cache: the implicitly added entry metadata in the journal (with the exception of
- *     UID/PID/GID and SELinux label) must be understood as possibly slightly out of sync (i.e. sometimes slighly older
+ *     UID/PID/GID and SELinux label) must be understood as possibly slightly out of sync (i.e. sometimes slightly older
  *     and sometimes slightly newer than what was current at the log event).
  */
 
@@ -76,18 +77,14 @@ static size_t cache_max(void) {
                 if (r < 0) {
                         log_warning_errno(r, "Cannot query /proc/meminfo for MemTotal: %m");
                         cached = CACHE_MAX_FALLBACK;
-                } else {
+                } else
                         /* Cache entries are usually a few kB, but the process cmdline is controlled by the
                          * user and can be up to _SC_ARG_MAX, usually 2MB. Let's say that approximately up to
                          * 1/8th of memory may be used by the cache.
                          *
                          * In the common case, this formula gives 64 cache entries for each GB of RAM.
                          */
-                        long l = sysconf(_SC_ARG_MAX);
-                        assert(l > 0);
-
-                        cached = CLAMP(mem_total / 8 / (uint64_t) l, CACHE_MAX_MIN, CACHE_MAX_MAX);
-                }
+                        cached = CLAMP(mem_total / 8 / sc_arg_max(), CACHE_MAX_MIN, CACHE_MAX_MAX);
         }
 
         return cached;
@@ -135,8 +132,8 @@ static int client_context_new(Server *s, pid_t pid, ClientContext **ret) {
         c->timestamp = USEC_INFINITY;
         c->extra_fields_mtime = NSEC_INFINITY;
         c->log_level_max = -1;
-        c->log_rate_limit_interval = s->rate_limit_interval;
-        c->log_rate_limit_burst = s->rate_limit_burst;
+        c->log_ratelimit_interval = s->ratelimit_interval;
+        c->log_ratelimit_burst = s->ratelimit_burst;
 
         r = hashmap_put(s->client_contexts, PID_TO_PTR(pid), c);
         if (r < 0) {
@@ -185,8 +182,8 @@ static void client_context_reset(Server *s, ClientContext *c) {
 
         c->log_level_max = -1;
 
-        c->log_rate_limit_interval = s->rate_limit_interval;
-        c->log_rate_limit_burst = s->rate_limit_burst;
+        c->log_ratelimit_interval = s->ratelimit_interval;
+        c->log_ratelimit_burst = s->ratelimit_burst;
 }
 
 static ClientContext* client_context_free(Server *s, ClientContext *c) {
@@ -233,7 +230,7 @@ static void client_context_read_basic(ClientContext *c) {
         if (get_process_exe(c->pid, &t) >= 0)
                 free_and_replace(c->exe, t);
 
-        if (get_process_cmdline(c->pid, 0, false, &t) >= 0)
+        if (get_process_cmdline(c->pid, SIZE_MAX, 0, &t) >= 0)
                 free_and_replace(c->cmdline, t);
 
         if (get_process_capeff(c->pid, &t) >= 0)
@@ -462,7 +459,7 @@ static int client_context_read_extra_fields(
         return 0;
 }
 
-static int client_context_read_log_rate_limit_interval(ClientContext *c) {
+static int client_context_read_log_ratelimit_interval(ClientContext *c) {
         _cleanup_free_ char *value = NULL;
         const char *p;
         int r;
@@ -477,10 +474,10 @@ static int client_context_read_log_rate_limit_interval(ClientContext *c) {
         if (r < 0)
                 return r;
 
-        return safe_atou64(value, &c->log_rate_limit_interval);
+        return safe_atou64(value, &c->log_ratelimit_interval);
 }
 
-static int client_context_read_log_rate_limit_burst(ClientContext *c) {
+static int client_context_read_log_ratelimit_burst(ClientContext *c) {
         _cleanup_free_ char *value = NULL;
         const char *p;
         int r;
@@ -495,7 +492,7 @@ static int client_context_read_log_rate_limit_burst(ClientContext *c) {
         if (r < 0)
                 return r;
 
-        return safe_atou(value, &c->log_rate_limit_burst);
+        return safe_atou(value, &c->log_ratelimit_burst);
 }
 
 static void client_context_really_refresh(
@@ -524,8 +521,8 @@ static void client_context_really_refresh(
         (void) client_context_read_invocation_id(s, c);
         (void) client_context_read_log_level_max(s, c);
         (void) client_context_read_extra_fields(s, c);
-        (void) client_context_read_log_rate_limit_interval(c);
-        (void) client_context_read_log_rate_limit_burst(c);
+        (void) client_context_read_log_ratelimit_interval(c);
+        (void) client_context_read_log_ratelimit_burst(c);
 
         c->timestamp = timestamp;
 

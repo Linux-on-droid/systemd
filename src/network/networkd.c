@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
+#include <netinet/in.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -94,6 +95,10 @@ static int run(int argc, char *argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Could not enumerate addresses: %m");
 
+        r = manager_rtnl_enumerate_neighbors(m);
+        if (r < 0)
+                return log_error_errno(r, "Could not enumerate neighbors: %m");
+
         r = manager_rtnl_enumerate_routes(m);
         if (r < 0)
                 return log_error_errno(r, "Could not enumerate routes: %m");
@@ -101,6 +106,10 @@ static int run(int argc, char *argv[]) {
         r = manager_rtnl_enumerate_rules(m);
         if (r < 0)
                 return log_error_errno(r, "Could not enumerate rules: %m");
+
+        r = manager_rtnl_enumerate_nexthop(m);
+        if (r < 0)
+                return log_error_errno(r, "Could not enumerate nexthop: %m");
 
         r = manager_start(m);
         if (r < 0)

@@ -152,6 +152,17 @@
       </varlistentry>
 
       <varlistentry>
+        <term><option>keyfile-timeout=</option></term>
+
+        <listitem><para> Specifies the timeout for the device on
+        which the key file resides and falls back to a password if
+        it could not be mounted. See
+        <citerefentry><refentrytitle>systemd-cryptsetup-generator</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+        for key files on external devices.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><option>luks</option></term>
 
         <listitem><para>Force LUKS mode. When this mode is used, the
@@ -197,11 +208,11 @@
         <term><option>nofail</option></term>
 
         <listitem><para>This device will not be a hard dependency of
-        <filename>cryptsetup.target</filename>. It'll be still pulled in and started, but the system
+        <filename>cryptsetup.target</filename>. It'll still be pulled in and started, but the system
         will not wait for the device to show up and be unlocked, and boot will not fail if this is
         unsuccessful. Note that other units that depend on the unlocked device may still fail. In
-        particular, if the device is used for a mount point, the mount point itself is also needs to
-        have <option>noauto</option> option, or the boot will fail if the device is not unlocked
+        particular, if the device is used for a mount point, the mount point itself also needs to
+        have the <option>nofail</option> option, or the boot will fail if the device is not unlocked
         successfully.</para></listitem>
       </varlistentry>
 
@@ -438,7 +449,8 @@
       <programlisting>luks       UUID=2505567a-9e27-4efe-a4d5-15ad146c258b
 swap       /dev/sda7       /dev/urandom       swap
 truecrypt  /dev/sda2       /etc/container_password  tcrypt
-hidden     /mnt/tc_hidden  /dev/null    tcrypt-hidden,tcrypt-keyfile=/etc/keyfile</programlisting>
+hidden     /mnt/tc_hidden  /dev/null    tcrypt-hidden,tcrypt-keyfile=/etc/keyfile
+external   /dev/sda3       keyfile:LABEL=keydev keyfile-timeout=10s</programlisting>
     </example>
   </refsect1>
 

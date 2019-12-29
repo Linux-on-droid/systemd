@@ -1,12 +1,10 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <errno.h>
-#include <linux/veth.h>
 #include <net/if.h>
+#include <linux/veth.h>
 
-#include "sd-netlink.h"
-
-#include "netdev/veth.h"
+#include "veth.h"
 
 static int netdev_veth_fill_message_create(NetDev *netdev, Link *link, sd_netlink_message *m) {
         Veth *v;
@@ -92,4 +90,5 @@ const NetDevVTable veth_vtable = {
         .fill_message_create = netdev_veth_fill_message_create,
         .create_type = NETDEV_CREATE_INDEPENDENT,
         .config_verify = netdev_veth_verify,
+        .generate_mac = true,
 };

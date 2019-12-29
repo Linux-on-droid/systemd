@@ -1,11 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#if HAVE_LINUX_CAN_VXCAN_H
 #include <linux/can/vxcan.h>
-#endif
 
-#include "missing.h"
-#include "netdev/vxcan.h"
+#include "vxcan.h"
 
 static int netdev_vxcan_fill_message_create(NetDev *netdev, Link *link, sd_netlink_message *m) {
         VxCan *v;
@@ -73,4 +70,5 @@ const NetDevVTable vxcan_vtable = {
         .fill_message_create = netdev_vxcan_fill_message_create,
         .create_type = NETDEV_CREATE_INDEPENDENT,
         .config_verify = netdev_vxcan_verify,
+        .generate_mac = true,
 };

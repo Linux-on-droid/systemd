@@ -3,9 +3,7 @@
 #include <errno.h>
 #include <sched.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/mount.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <linux/fs.h>
 
@@ -17,7 +15,6 @@
 #include "label.h"
 #include "loop-util.h"
 #include "loopback-setup.h"
-#include "missing.h"
 #include "mkdir.h"
 #include "mount-util.h"
 #include "mountpoint-util.h"
@@ -110,6 +107,12 @@ static const MountEntry protect_kernel_modules_table[] = {
         { "/lib/modules",        INACCESSIBLE, true  },
 #endif
         { "/usr/lib/modules",    INACCESSIBLE, true  },
+};
+
+/* ProtectKernelLogs= option */
+static const MountEntry protect_kernel_logs_table[] = {
+        { "/proc/kmsg",          INACCESSIBLE, true },
+        { "/dev/kmsg",           INACCESSIBLE, true },
 };
 
 /*
@@ -444,7 +447,7 @@ static int prefix_where_needed(MountEntry *m, size_t n, const char *root_directo
                 if (m[i].has_prefix)
                         continue;
 
-                s = prefix_root(root_directory, mount_entry_path(m+i));
+                s = path_join(root_directory, mount_entry_path(m+i));
                 if (!s)
                         return -ENOMEM;
 
@@ -875,7 +878,7 @@ static int follow_symlink(
          * a time by specifying CHASE_STEP. This function returns 0 if we resolved one step, and > 0 if we reached the
          * end and already have a fully normalized name. */
 
-        r = chase_symlinks(mount_entry_path(m), root_directory, CHASE_STEP|CHASE_NONEXISTENT, &target);
+        r = chase_symlinks(mount_entry_path(m), root_directory, CHASE_STEP|CHASE_NONEXISTENT, &target, NULL);
         if (r < 0)
                 return log_debug_errno(r, "Failed to chase symlinks '%s': %m", mount_entry_path(m));
         if (r > 0) /* Reached the end, nothing more to resolve */
@@ -957,7 +960,7 @@ static int apply_mount(
                  * mount source paths are always relative to the host root, hence we pass NULL as root directory to
                  * chase_symlinks() here. */
 
-                r = chase_symlinks(mount_entry_source(m), NULL, CHASE_TRAIL_SLASH, &chased);
+                r = chase_symlinks(mount_entry_source(m), NULL, CHASE_TRAIL_SLASH, &chased, NULL);
                 if (r == -ENOENT && m->ignore) {
                         log_debug_errno(r, "Path %s does not exist, ignoring.", mount_entry_source(m));
                         return 0;
@@ -1150,8 +1153,9 @@ static size_t namespace_calculate_mounts(
                 n_temporary_filesystems +
                 ns_info->private_dev +
                 (ns_info->protect_kernel_tunables ? ELEMENTSOF(protect_kernel_tunables_table) : 0) +
-                (ns_info->protect_control_groups ? 1 : 0) +
                 (ns_info->protect_kernel_modules ? ELEMENTSOF(protect_kernel_modules_table) : 0) +
+                (ns_info->protect_kernel_logs ? ELEMENTSOF(protect_kernel_logs_table) : 0) +
+                (ns_info->protect_control_groups ? 1 : 0) +
                 protect_home_cnt + protect_system_cnt +
                 (ns_info->protect_hostname ? 2 : 0) +
                 (namespace_info_mount_apivfs(ns_info) ? ELEMENTSOF(apivfs_table) : 0);
@@ -1187,7 +1191,8 @@ int setup_namespace(
                 ProtectHome protect_home,
                 ProtectSystem protect_system,
                 unsigned long mount_flags,
-                DissectImageFlags dissect_image_flags) {
+                DissectImageFlags dissect_image_flags,
+                char **error_path) {
 
         _cleanup_(loop_device_unrefp) LoopDevice *loop_device = NULL;
         _cleanup_(decrypted_image_unrefp) DecryptedImage *decrypted_image = NULL;
@@ -1321,6 +1326,12 @@ int setup_namespace(
                                 goto finish;
                 }
 
+                if (ns_info->protect_kernel_logs) {
+                        r = append_static_mounts(&m, protect_kernel_logs_table, ELEMENTSOF(protect_kernel_logs_table), ns_info->ignore_protect_paths);
+                        if (r < 0)
+                                goto finish;
+                }
+
                 if (ns_info->protect_control_groups) {
                         *(m++) = (MountEntry) {
                                 .path_const = "/sys/fs/cgroup",
@@ -1440,6 +1451,8 @@ int setup_namespace(
                 proc_self_mountinfo = fopen("/proc/self/mountinfo", "re");
                 if (!proc_self_mountinfo) {
                         r = log_debug_errno(errno, "Failed to open /proc/self/mountinfo: %m");
+                        if (error_path)
+                                *error_path = strdup("/proc/self/mountinfo");
                         goto finish;
                 }
 
@@ -1453,8 +1466,11 @@ int setup_namespace(
                                         continue;
 
                                 r = follow_symlink(root, m);
-                                if (r < 0)
+                                if (r < 0) {
+                                        if (error_path && mount_entry_path(m))
+                                                *error_path = strdup(mount_entry_path(m));
                                         goto finish;
+                                }
                                 if (r == 0) {
                                         /* We hit a symlinked mount point. The entry got rewritten and might point to a
                                          * very different place now. Let's normalize the changed list, and start from
@@ -1465,8 +1481,11 @@ int setup_namespace(
                                 }
 
                                 r = apply_mount(root, m);
-                                if (r < 0)
+                                if (r < 0) {
+                                        if (error_path && mount_entry_path(m))
+                                                *error_path = strdup(mount_entry_path(m));
                                         goto finish;
+                                }
 
                                 m->applied = true;
                         }
@@ -1490,8 +1509,11 @@ int setup_namespace(
                 /* Second round, flip the ro bits if necessary. */
                 for (m = mounts; m < mounts + n_mounts; ++m) {
                         r = make_read_only(m, blacklist, proc_self_mountinfo);
-                        if (r < 0)
+                        if (r < 0) {
+                                if (error_path && mount_entry_path(m))
+                                        *error_path = strdup(mount_entry_path(m));
                                 goto finish;
+                        }
                 }
         }
 
@@ -1687,7 +1709,7 @@ int setup_tmp_dirs(const char *id, char **tmp_dir, char **var_tmp_dir) {
         return 0;
 }
 
-int setup_netns(int netns_storage_socket[static 2]) {
+int setup_netns(const int netns_storage_socket[static 2]) {
         _cleanup_close_ int netns = -1;
         int r, q;
 
@@ -1750,7 +1772,7 @@ fail:
         return r;
 }
 
-int open_netns_path(int netns_storage_socket[static 2], const char *path) {
+int open_netns_path(const int netns_storage_socket[static 2], const char *path) {
         _cleanup_close_ int netns = -1;
         int q, r;
 

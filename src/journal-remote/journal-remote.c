@@ -2,11 +2,8 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/prctl.h>
-#include <sys/socket.h>
 #include <stdint.h>
 
 #include "sd-daemon.h"
@@ -181,7 +178,7 @@ static int get_source_for_fd(RemoteServer *s,
                 return log_warning_errno(r, "Failed to get writer for source %s: %m",
                                          name);
 
-        if (s->sources[fd] == NULL) {
+        if (!s->sources[fd]) {
                 s->sources[fd] = source_new(fd, false, name, writer);
                 if (!s->sources[fd]) {
                         writer_unref(writer);

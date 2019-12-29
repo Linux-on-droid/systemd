@@ -258,12 +258,16 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 .help = "System calls that are always permitted",
                 .value =
                 "clock_getres\0"
+                "clock_getres_time64\0"
                 "clock_gettime\0"
+                "clock_gettime64\0"
                 "clock_nanosleep\0"
+                "clock_nanosleep_time64\0"
                 "execve\0"
                 "exit\0"
                 "exit_group\0"
                 "futex\0"
+                "futex_time64\0"
                 "get_robust_list\0"
                 "get_thread_area\0"
                 "getegid\0"
@@ -312,8 +316,12 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "io_destroy\0"
                 "io_getevents\0"
                 "io_pgetevents\0"
+                "io_pgetevents_time64\0"
                 "io_setup\0"
                 "io_submit\0"
+                "io_uring_enter\0"
+                "io_uring_register\0"
+                "io_uring_setup\0"
         },
         [SYSCALL_FILTER_SET_BASIC_IO] = {
                 .name = "@basic-io",
@@ -354,7 +362,9 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 .value =
                 "adjtimex\0"
                 "clock_adjtime\0"
+                "clock_adjtime64\0"
                 "clock_settime\0"
+                "clock_settime64\0"
                 "settimeofday\0"
                 "stime\0"
         },
@@ -462,6 +472,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "unlinkat\0"
                 "utime\0"
                 "utimensat\0"
+                "utimensat_time64\0"
                 "utimes\0"
         },
         [SYSCALL_FILTER_SET_IO_EVENT] = {
@@ -480,7 +491,9 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "eventfd2\0"
                 "poll\0"
                 "ppoll\0"
+                "ppoll_time64\0"
                 "pselect6\0"
+                "pselect6_time64\0"
                 "select\0"
         },
         [SYSCALL_FILTER_SET_IPC] = {
@@ -493,7 +506,9 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "mq_notify\0"
                 "mq_open\0"
                 "mq_timedreceive\0"
+                "mq_timedreceive_time64\0"
                 "mq_timedsend\0"
+                "mq_timedsend_time64\0"
                 "mq_unlink\0"
                 "msgctl\0"
                 "msgget\0"
@@ -507,6 +522,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "semget\0"
                 "semop\0"
                 "semtimedop\0"
+                "semtimedop_time64\0"
                 "shmat\0"
                 "shmctl\0"
                 "shmdt\0"
@@ -543,7 +559,13 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 .help = "Mounting and unmounting of file systems",
                 .value =
                 "chroot\0"
+                "fsconfig\0"
+                "fsmount\0"
+                "fsopen\0"
+                "fspick\0"
                 "mount\0"
+                "move_mount\0"
+                "open_tree\0"
                 "pivot_root\0"
                 "umount\0"
                 "umount2\0"
@@ -563,6 +585,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "recv\0"
                 "recvfrom\0"
                 "recvmmsg\0"
+                "recvmmsg_time64\0"
                 "recvmsg\0"
                 "send\0"
                 "sendmmsg\0"
@@ -606,6 +629,14 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "ustat\0"
                 "vserver\0"
         },
+        [SYSCALL_FILTER_SET_PKEY] = {
+                .name = "@pkey",
+                .help = "System calls used for memory protection keys",
+                .value =
+                "pkey_alloc\0"
+                "pkey_free\0"
+                "pkey_mprotect\0"
+        },
         [SYSCALL_FILTER_SET_PRIVILEGED] = {
                 .name = "@privileged",
                 .help = "All system calls which need super-user capabilities",
@@ -622,6 +653,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "capset\0"
                 "chroot\0"
                 "fanotify_init\0"
+                "fanotify_mark\0"
                 "nfsservctl\0"
                 "open_by_handle_at\0"
                 "pivot_root\0"
@@ -647,10 +679,13 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "arch_prctl\0"
                 "capget\0"      /* Able to query arbitrary processes */
                 "clone\0"
+                "clone3\0"
                 "execveat\0"
                 "fork\0"
                 "getrusage\0"
                 "kill\0"
+                "pidfd_open\0"
+                "pidfd_send_signal\0"
                 "prctl\0"
                 "rt_sigqueueinfo\0"
                 "rt_tgsigqueueinfo\0"
@@ -734,6 +769,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "rt_sigprocmask\0"
                 "rt_sigsuspend\0"
                 "rt_sigtimedwait\0"
+                "rt_sigtimedwait_time64\0"
                 "sigaction\0"
                 "sigaltstack\0"
                 "signal\0"
@@ -759,6 +795,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "msync\0"
                 "sync\0"
                 "sync_file_range\0"
+                "sync_file_range2\0"
                 "syncfs\0"
         },
         [SYSCALL_FILTER_SET_SYSTEM_SERVICE] = {
@@ -812,6 +849,7 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "sched_getparam\0"
                 "sched_getscheduler\0"
                 "sched_rr_get_interval\0"
+                "sched_rr_get_interval_time64\0"
                 "sched_yield\0"
                 "sendfile\0"
                 "sendfile64\0"
@@ -840,10 +878,14 @@ const SyscallFilterSet syscall_filter_sets[_SYSCALL_FILTER_SET_MAX] = {
                 "timer_delete\0"
                 "timer_getoverrun\0"
                 "timer_gettime\0"
+                "timer_gettime64\0"
                 "timer_settime\0"
+                "timer_settime64\0"
                 "timerfd_create\0"
                 "timerfd_gettime\0"
+                "timerfd_gettime64\0"
                 "timerfd_settime\0"
+                "timerfd_settime64\0"
                 "times\0"
         },
 };
@@ -952,7 +994,7 @@ int seccomp_load_syscall_filter_set(uint32_t default_action, const SyscallFilter
                         return log_debug_errno(r, "Failed to add filter set: %m");
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install filter set for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1007,7 +1049,7 @@ int seccomp_load_syscall_filter_set_raw(uint32_t default_action, Hashmap* set, u
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install filter set for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1193,7 +1235,7 @@ int seccomp_restrict_namespaces(unsigned long retain) {
                         continue;
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install namespace restriction rules for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1230,10 +1272,42 @@ int seccomp_protect_sysctl(void) {
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install sysctl protection rules for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
+        }
+
+        return 0;
+}
+
+int seccomp_protect_syslog(void) {
+        uint32_t arch;
+        int r;
+
+        SECCOMP_FOREACH_LOCAL_ARCH(arch) {
+                _cleanup_(seccomp_releasep) scmp_filter_ctx seccomp = NULL;
+
+                r = seccomp_init_for_arch(&seccomp, arch, SCMP_ACT_ALLOW);
+                if (r < 0)
+                        return r;
+
+                r = seccomp_rule_add_exact(
+                                seccomp,
+                                SCMP_ACT_ERRNO(EPERM),
+                                SCMP_SYS(syslog),
+                                0);
+
+                if (r < 0) {
+                        log_debug_errno(r, "Failed to add syslog() rule for architecture %s, skipping %m", seccomp_arch_to_string(arch));
+                        continue;
+                }
+
+                r = seccomp_load(seccomp);
+                if (ERRNO_IS_SECCOMP_FATAL(r))
+                        return r;
+                if (r < 0)
+                        log_debug_errno(r, "Failed to install syslog protection rules for architecture %s, skipping %m", seccomp_arch_to_string(arch));
         }
 
         return 0;
@@ -1394,7 +1468,7 @@ int seccomp_restrict_address_families(Set *address_families, bool whitelist) {
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install socket family rules for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1471,7 +1545,7 @@ int seccomp_restrict_realtime(void) {
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install realtime protection rules for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1520,6 +1594,7 @@ int seccomp_memory_deny_write_execute(void) {
                 switch (arch) {
 
                 case SCMP_ARCH_X86:
+                case SCMP_ARCH_S390:
                         filter_syscall = SCMP_SYS(mmap2);
                         block_syscall = SCMP_SYS(mmap);
                         shmat_syscall = SCMP_SYS(shmat);
@@ -1544,13 +1619,14 @@ int seccomp_memory_deny_write_execute(void) {
                 case SCMP_ARCH_X86_64:
                 case SCMP_ARCH_X32:
                 case SCMP_ARCH_AARCH64:
-                        filter_syscall = SCMP_SYS(mmap); /* amd64, x32, and arm64 have only mmap */
+                case SCMP_ARCH_S390X:
+                        filter_syscall = SCMP_SYS(mmap); /* amd64, x32, s390x, and arm64 have only mmap */
                         shmat_syscall = SCMP_SYS(shmat);
                         break;
 
                 /* Please add more definitions here, if you port systemd to other architectures! */
 
-#if !defined(__i386__) && !defined(__x86_64__) && !defined(__powerpc__) && !defined(__powerpc64__) && !defined(__arm__) && !defined(__aarch64__)
+#if !defined(__i386__) && !defined(__x86_64__) && !defined(__powerpc__) && !defined(__powerpc64__) && !defined(__arm__) && !defined(__aarch64__) && !defined(__s390__) && !defined(__s390x__)
 #warning "Consider adding the right mmap() syscall definitions here!"
 #endif
                 }
@@ -1598,7 +1674,7 @@ int seccomp_memory_deny_write_execute(void) {
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to install MemoryDenyWriteExecute= rule for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1651,7 +1727,7 @@ int seccomp_restrict_archs(Set *archs) {
                 return r;
 
         r = seccomp_load(seccomp);
-        if (IN_SET(r, -EPERM, -EACCES))
+        if (ERRNO_IS_SECCOMP_FATAL(r))
                 return r;
         if (r < 0)
                 log_debug_errno(r, "Failed to restrict system call architectures, skipping: %m");
@@ -1753,7 +1829,7 @@ int seccomp_lock_personality(unsigned long personality) {
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to enable personality lock for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1794,7 +1870,7 @@ int seccomp_protect_hostname(void) {
                 }
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to apply hostname restrictions for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
@@ -1956,11 +2032,26 @@ int seccomp_restrict_suid_sgid(void) {
                         continue;
 
                 r = seccomp_load(seccomp);
-                if (IN_SET(r, -EPERM, -EACCES))
+                if (ERRNO_IS_SECCOMP_FATAL(r))
                         return r;
                 if (r < 0)
                         log_debug_errno(r, "Failed to apply suid/sgid restrictions for architecture %s, skipping: %m", seccomp_arch_to_string(arch));
         }
 
         return 0;
+}
+
+uint32_t scmp_act_kill_process(void) {
+
+        /* Returns SCMP_ACT_KILL_PROCESS if it's supported, and SCMP_ACT_KILL_THREAD otherwise. We never
+         * actually want to use SCMP_ACT_KILL_THREAD as its semantics are nuts (killing arbitrary threads of
+         * a program is just a bad idea), but on old kernels/old libseccomp it is all we have, and at least
+         * for single-threaded apps does the right thing. */
+
+#ifdef SCMP_ACT_KILL_PROCESS
+        if (seccomp_api_get() >= 3)
+                return SCMP_ACT_KILL_PROCESS;
+#endif
+
+        return SCMP_ACT_KILL; /* same as SCMP_ACT_KILL_THREAD */
 }

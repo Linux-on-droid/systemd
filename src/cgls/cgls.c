@@ -3,7 +3,6 @@
 #include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "sd-bus.h"
@@ -165,6 +164,7 @@ static void show_cg_info(const char *controller, const char *path) {
 static int run(int argc, char *argv[]) {
         int r, output_flags;
 
+        log_show_color(true);
         log_parse_environment();
         log_open();
 
@@ -242,7 +242,7 @@ static int run(int argc, char *argv[]) {
 
                                 controller = c ?: SYSTEMD_CGROUP_CONTROLLER;
                                 if (p) {
-                                        j = strjoin(root, "/", p);
+                                        j = path_join(root, p);
                                         if (!j)
                                                 return log_oom();
 

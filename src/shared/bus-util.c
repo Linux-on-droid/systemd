@@ -3,9 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -27,10 +25,10 @@
 #include "def.h"
 #include "escape.h"
 #include "fd-util.h"
-#include "missing.h"
 #include "mountpoint-util.h"
 #include "nsflags.h"
 #include "parse-util.h"
+#include "path-util.h"
 #include "proc-cmdline.h"
 #include "rlimit-util.h"
 #include "stdio-util.h"
@@ -413,7 +411,8 @@ int bus_verify_polkit_async(
                         e = sd_bus_message_get_error(q->reply);
 
                         /* Treat no PK available as access denied */
-                        if (sd_bus_error_has_name(e, SD_BUS_ERROR_SERVICE_UNKNOWN))
+                        if (sd_bus_error_has_name(e, SD_BUS_ERROR_SERVICE_UNKNOWN) ||
+                            sd_bus_error_has_name(e, SD_BUS_ERROR_NAME_HAS_NO_OWNER))
                                 return -EACCES;
 
                         /* Copy error from polkit reply */
@@ -424,7 +423,6 @@ int bus_verify_polkit_async(
                 r = sd_bus_message_enter_container(q->reply, 'r', "bba{ss}");
                 if (r >= 0)
                         r = sd_bus_message_read(q->reply, "bb", &authorized, &challenge);
-
                 if (r < 0)
                         return r;
 
@@ -794,7 +792,7 @@ static int bus_print_property(const char *name, const char *expected_value, sd_b
 
                         bus_print_property_value(name, expected_value, value, "[not set]");
 
-                else if ((STR_IN_SET(name, "MemoryLow", "MemoryHigh", "MemoryMax", "MemorySwapMax", "MemoryLimit") && u == CGROUP_LIMIT_MAX) ||
+                else if ((STR_IN_SET(name, "DefaultMemoryLow", "DefaultMemoryMin", "MemoryLow", "MemoryHigh", "MemoryMax", "MemorySwapMax", "MemoryLimit") && u == CGROUP_LIMIT_MAX) ||
                          (STR_IN_SET(name, "TasksMax", "DefaultTasksMax") && u == (uint64_t) -1) ||
                          (startswith(name, "Limit") && u == (uint64_t) -1) ||
                          (startswith(name, "DefaultLimit") && u == (uint64_t) -1))
@@ -989,7 +987,7 @@ int bus_message_print_all_properties(
                                 return log_oom();
                 }
 
-                name_with_equal = strappend(name, "=");
+                name_with_equal = strjoin(name, "=");
                 if (!name_with_equal)
                         return log_oom();
 
@@ -1102,7 +1100,8 @@ static int map_basic(sd_bus *bus, const char *member, sd_bus_message *m, unsigne
 
         switch (type) {
 
-        case SD_BUS_TYPE_STRING: {
+        case SD_BUS_TYPE_STRING:
+        case SD_BUS_TYPE_OBJECT_PATH: {
                 const char **p = userdata;
                 const char *s;
 
@@ -1479,14 +1478,6 @@ int bus_property_get_ulong(
 }
 #endif
 
-int bus_log_parse_error(int r) {
-        return log_error_errno(r, "Failed to parse bus message: %m");
-}
-
-int bus_log_create_error(int r) {
-        return log_error_errno(r, "Failed to create bus message: %m");
-}
-
 /**
  * bus_path_encode_unique() - encode unique object path
  * @b: bus connection or NULL
@@ -1552,7 +1543,7 @@ int bus_path_encode_unique(sd_bus *b, const char *prefix, const char *sender_id,
         if (!external_label)
                 return -ENOMEM;
 
-        p = strjoin(prefix, "/", sender_label, "/", external_label);
+        p = path_join(prefix, sender_label, external_label);
         if (!p)
                 return -ENOMEM;
 
@@ -1688,7 +1679,8 @@ int bus_open_system_watch_bind_with_description(sd_bus **ret, const char *descri
 
         assert(ret);
 
-        /* Match like sd_bus_open_system(), but with the "watch_bind" feature and the Connected() signal turned on. */
+        /* Match like sd_bus_open_system(), but with the "watch_bind" feature and the Connected() signal
+         * turned on. */
 
         r = sd_bus_new(&bus);
         if (r < 0)
@@ -1709,10 +1701,6 @@ int bus_open_system_watch_bind_with_description(sd_bus **ret, const char *descri
                 return r;
 
         r = sd_bus_set_bus_client(bus, true);
-        if (r < 0)
-                return r;
-
-        r = sd_bus_set_trusted(bus, true);
         if (r < 0)
                 return r;
 
@@ -1744,8 +1732,8 @@ int bus_reply_pair_array(sd_bus_message *m, char **l) {
 
         assert(m);
 
-        /* Reply to the specified message with a message containing a dictionary put together from the specified
-         * strv */
+        /* Reply to the specified message with a message containing a dictionary put together from the
+         * specified strv */
 
         r = sd_bus_message_new_method_return(m, &reply);
         if (r < 0)
@@ -1767,3 +1755,13 @@ int bus_reply_pair_array(sd_bus_message *m, char **l) {
 
         return sd_bus_send(NULL, reply, NULL);
 }
+
+static void bus_message_unref_wrapper(void *m) {
+        sd_bus_message_unref(m);
+}
+
+const struct hash_ops bus_message_hash_ops = {
+        .hash = trivial_hash_func,
+        .compare = trivial_compare_func,
+        .free_value = bus_message_unref_wrapper,
+};

@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <errno.h>
-#include <string.h>
 #include <sys/utsname.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -116,6 +115,8 @@ static int context_read_data(Context *c) {
                 return r;
 
         r = id128_read("/sys/class/dmi/id/product_uuid", ID128_UUID, &c->uuid);
+        if (r == -ENOENT)
+                r = id128_read("/sys/firmware/devicetree/base/vm,uuid", ID128_UUID, &c->uuid);
         if (r < 0)
                 log_full_errno(r == -ENOENT ? LOG_DEBUG : LOG_WARNING, r,
                                "Failed to read product UUID, ignoring: %m");
@@ -253,11 +254,11 @@ static char* context_fallback_icon_name(Context *c) {
         assert(c);
 
         if (!isempty(c->data[PROP_CHASSIS]))
-                return strappend("computer-", c->data[PROP_CHASSIS]);
+                return strjoin("computer-", c->data[PROP_CHASSIS]);
 
         chassis = fallback_chassis();
         if (chassis)
-                return strappend("computer-", chassis);
+                return strjoin("computer-", chassis);
 
         return strdup("computer");
 }

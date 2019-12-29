@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include <ctype.h>
 #include <net/if.h>
+#include <netinet/in.h>
+#include <linux/netdevice.h>
 
 #include "alloc-util.h"
 #include "conf-files.h"
@@ -10,7 +11,7 @@
 #include "fd-util.h"
 #include "hostname-util.h"
 #include "in-addr-util.h"
-#include "missing_network.h"
+#include "networkd-dhcp-server.h"
 #include "network-internal.h"
 #include "networkd-manager.h"
 #include "networkd-network.h"
@@ -143,36 +144,28 @@ static int network_resolve_stacked_netdevs(Network *network) {
         return 0;
 }
 
-static uint32_t network_get_stacked_netdevs_mtu(Network *network) {
-        uint32_t mtu = 0;
-        NetDev *dev;
-        Iterator i;
-
-        HASHMAP_FOREACH(dev, network->stacked_netdevs, i)
-                if (dev->kind == NETDEV_KIND_VLAN && dev->mtu > 0)
-                        /* See vlan_dev_change_mtu() in kernel.
-                         * Note that the additional 4bytes may not be necessary for all devices. */
-                        mtu = MAX(mtu, dev->mtu + 4);
-
-                else if (dev->kind == NETDEV_KIND_MACVLAN && dev->mtu > mtu)
-                        /* See macvlan_change_mtu() in kernel. */
-                        mtu = dev->mtu;
-
-        return mtu;
-}
-
 int network_verify(Network *network) {
-        Address *address, *address_next;
-        Route *route, *route_next;
-        FdbEntry *fdb, *fdb_next;
+        RoutePrefix *route_prefix, *route_prefix_next;
+        RoutingPolicyRule *rule, *rule_next;
         Neighbor *neighbor, *neighbor_next;
         AddressLabel *label, *label_next;
+        NextHop *nexthop, *nextnop_next;
+        Address *address, *address_next;
         Prefix *prefix, *prefix_next;
-        RoutingPolicyRule *rule, *rule_next;
-        uint32_t mtu;
+        Route *route, *route_next;
+        FdbEntry *fdb, *fdb_next;
 
         assert(network);
         assert(network->filename);
+
+        if (set_isempty(network->match_mac) && strv_isempty(network->match_path) &&
+            strv_isempty(network->match_driver) && strv_isempty(network->match_type) &&
+            strv_isempty(network->match_name) && strv_isempty(network->match_property) &&
+            strv_isempty(network->match_ssid) && !network->conditions)
+                log_warning("%s: No valid settings found in the [Match] section. "
+                            "The file will match all interfaces. "
+                            "If that is intended, please add Name=* in the [Match] section.",
+                            network->filename);
 
         /* skip out early if configuration does not match the environment */
         if (!condition_test_list(network->conditions, NULL, NULL, NULL))
@@ -230,6 +223,33 @@ int network_verify(Network *network) {
         if (network->link_local < 0)
                 network->link_local = network->bridge ? ADDRESS_FAMILY_NO : ADDRESS_FAMILY_IPV6;
 
+        if (!FLAGS_SET(network->link_local, ADDRESS_FAMILY_IPV6)) {
+                if (network->ipv6_accept_ra > 0) {
+                        log_warning("%s: IPv6AcceptRA= is enabled by the .network file but IPv6 link local addressing is disabled. "
+                                    "Disabling IPv6AcceptRA=.", network->filename);
+                        network->ipv6_accept_ra = false;
+                }
+
+                if (FLAGS_SET(network->dhcp, ADDRESS_FAMILY_IPV6)) {
+                        log_warning("%s: DHCPv6 client is enabled by the .network file but IPv6 link local addressing is disabled. "
+                                    "Disabling DHCPv6 client.", network->filename);
+                        SET_FLAG(network->dhcp, ADDRESS_FAMILY_IPV6, false);
+                }
+
+                if (network->router_prefix_delegation != RADV_PREFIX_DELEGATION_NONE) {
+                        log_warning("%s: IPv6PrefixDelegation= is enabled but IPv6 link local addressing is disabled. "
+                                    "Disabling IPv6PrefixDelegation=.", network->filename);
+                        network->router_prefix_delegation = RADV_PREFIX_DELEGATION_NONE;
+                }
+        }
+
+        if (FLAGS_SET(network->link_local, ADDRESS_FAMILY_FALLBACK_IPV4) &&
+            !FLAGS_SET(network->dhcp, ADDRESS_FAMILY_IPV4)) {
+                log_warning("%s: fallback assignment of IPv4 link local address is enabled but DHCPv4 is disabled. "
+                            "Disabling the fallback assignment.", network->filename);
+                SET_FLAG(network->link_local, ADDRESS_FAMILY_FALLBACK_IPV4, false);
+        }
+
         if (network->ipv6_accept_ra < 0 && network->bridge)
                 network->ipv6_accept_ra = false;
 
@@ -237,20 +257,25 @@ int network_verify(Network *network) {
         if (network->ip_masquerade)
                 network->ip_forward |= ADDRESS_FAMILY_IPV4;
 
-        network->mtu_is_set = network->mtu > 0;
-        mtu = network_get_stacked_netdevs_mtu(network);
-        if (network->mtu < mtu) {
-                if (network->mtu_is_set)
-                        log_notice("%s: Bumping MTUBytes= from %"PRIu32" to %"PRIu32" because of stacked device",
-                                   network->filename, network->mtu, mtu);
-                network->mtu = mtu;
-        }
-
-        if (network->mtu_is_set && network->dhcp_use_mtu) {
+        if (network->mtu > 0 && network->dhcp_use_mtu) {
                 log_warning("%s: MTUBytes= in [Link] section and UseMTU= in [DHCP] section are set. "
                             "Disabling UseMTU=.", network->filename);
                 network->dhcp_use_mtu = false;
         }
+
+        if (network->dhcp_critical >= 0) {
+                if (network->keep_configuration >= 0)
+                        log_warning("%s: Both KeepConfiguration= and deprecated CriticalConnection= are set. "
+                                    "Ignoring CriticalConnection=.", network->filename);
+                else if (network->dhcp_critical)
+                        /* CriticalConnection=yes also preserve foreign static configurations. */
+                        network->keep_configuration = KEEP_CONFIGURATION_YES;
+                else
+                        network->keep_configuration = KEEP_CONFIGURATION_NO;
+        }
+
+        if (network->keep_configuration < 0)
+                network->keep_configuration = KEEP_CONFIGURATION_NO;
 
         LIST_FOREACH_SAFE(addresses, address, address_next, network->static_addresses)
                 if (address_section_verify(address) < 0)
@@ -260,12 +285,16 @@ int network_verify(Network *network) {
                 if (route_section_verify(route, network) < 0)
                         route_free(route);
 
+        LIST_FOREACH_SAFE(nexthops, nexthop, nextnop_next, network->static_nexthops)
+                if (nexthop_section_verify(nexthop) < 0)
+                        nexthop_free(nexthop);
+
         LIST_FOREACH_SAFE(static_fdb_entries, fdb, fdb_next, network->static_fdb_entries)
                 if (section_is_invalid(fdb->section))
                         fdb_entry_free(fdb);
 
         LIST_FOREACH_SAFE(neighbors, neighbor, neighbor_next, network->neighbors)
-                if (section_is_invalid(neighbor->section))
+                if (neighbor_section_verify(neighbor) < 0)
                         neighbor_free(neighbor);
 
         LIST_FOREACH_SAFE(labels, label, label_next, network->address_labels)
@@ -276,16 +305,20 @@ int network_verify(Network *network) {
                 if (section_is_invalid(prefix->section))
                         prefix_free(prefix);
 
+        LIST_FOREACH_SAFE(route_prefixes, route_prefix, route_prefix_next, network->static_route_prefixes)
+                if (section_is_invalid(route_prefix->section))
+                        route_prefix_free(route_prefix);
+
         LIST_FOREACH_SAFE(rules, rule, rule_next, network->rules)
-                if (section_is_invalid(rule->section))
+                if (routing_policy_rule_section_verify(rule) < 0)
                         routing_policy_rule_free(rule);
 
         return 0;
 }
 
-int network_load_one(Manager *manager, const char *filename) {
+int network_load_one(Manager *manager, OrderedHashmap **networks, const char *filename) {
         _cleanup_free_ char *fname = NULL, *name = NULL;
-        _cleanup_(network_freep) Network *network = NULL;
+        _cleanup_(network_unrefp) Network *network = NULL;
         _cleanup_fclose_ FILE *file = NULL;
         const char *dropin_dirname;
         char *d;
@@ -331,19 +364,25 @@ int network_load_one(Manager *manager, const char *filename) {
                 .filename = TAKE_PTR(fname),
                 .name = TAKE_PTR(name),
 
+                .manager = manager,
+                .n_ref = 1,
+
                 .required_for_online = true,
                 .required_operstate_for_online = LINK_OPERSTATE_DEGRADED,
                 .dhcp = ADDRESS_FAMILY_NO,
+                .dhcp_critical = -1,
                 .dhcp_use_ntp = true,
+                .dhcp_use_sip = true,
                 .dhcp_use_dns = true,
                 .dhcp_use_hostname = true,
                 .dhcp_use_routes = true,
-                /* NOTE: this var might be overwriten by network_apply_anonymize_if_set */
+                /* NOTE: this var might be overwritten by network_apply_anonymize_if_set */
                 .dhcp_send_hostname = true,
+                .dhcp_send_release = true,
                 /* To enable/disable RFC7844 Anonymity Profiles */
                 .dhcp_anonymize = false,
                 .dhcp_route_metric = DHCP_ROUTE_METRIC,
-                /* NOTE: this var might be overwrite by network_apply_anonymize_if_set */
+                /* NOTE: this var might be overwritten by network_apply_anonymize_if_set */
                 .dhcp_client_identifier = DHCP_CLIENT_ID_DUID,
                 .dhcp_route_table = RT_TABLE_MAIN,
                 .dhcp_route_table_set = false,
@@ -353,8 +392,12 @@ int network_load_one(Manager *manager, const char *filename) {
                 .dhcp_use_timezone = false,
                 .rapid_commit = true,
 
+                .dhcp6_use_ntp = true,
+                .dhcp6_use_dns = true,
+
                 .dhcp_server_emit_dns = true,
                 .dhcp_server_emit_ntp = true,
+                .dhcp_server_emit_sip = true,
                 .dhcp_server_emit_router = true,
                 .dhcp_server_emit_timezone = true,
 
@@ -370,7 +413,10 @@ int network_load_one(Manager *manager, const char *filename) {
                 .multicast_to_unicast = -1,
                 .neighbor_suppression = -1,
                 .learning = -1,
+                .bridge_proxy_arp = -1,
+                .bridge_proxy_arp_wifi = -1,
                 .priority = LINK_BRIDGE_PORT_PRIORITY_INVALID,
+                .multicast_router = _MULTICAST_ROUTER_INVALID,
 
                 .lldp_mode = LLDP_MODE_ROUTERS_ONLY,
 
@@ -381,7 +427,7 @@ int network_load_one(Manager *manager, const char *filename) {
                 .dns_over_tls_mode = _DNS_OVER_TLS_MODE_INVALID,
 
                 /* If LinkLocalAddressing= is not set, then set to ADDRESS_FAMILY_IPV6 later. */
-                .link_local = _ADDRESS_FAMILY_BOOLEAN_INVALID,
+                .link_local = _ADDRESS_FAMILY_INVALID,
 
                 .ipv6_privacy_extensions = IPV6_PRIVACY_EXTENSIONS_NO,
                 .ipv6_accept_ra = -1,
@@ -399,7 +445,10 @@ int network_load_one(Manager *manager, const char *filename) {
                 .ipv6_accept_ra_route_table = RT_TABLE_MAIN,
                 .ipv6_accept_ra_route_table_set = false,
 
+                .keep_configuration = _KEEP_CONFIGURATION_INVALID,
+
                 .can_triple_sampling = -1,
+                .ip_service_type = -1,
         };
 
         r = config_parse_many(filename, NETWORK_DIRS, dropin_dirname,
@@ -411,8 +460,10 @@ int network_load_one(Manager *manager, const char *filename) {
                               "IPv6AddressLabel\0"
                               "RoutingPolicyRule\0"
                               "Route\0"
-                              "DHCP\0"
-                              "DHCPv4\0" /* compat */
+                              "NextHop\0"
+                              "DHCP\0" /* compat */
+                              "DHCPv4\0"
+                              "DHCPv6\0"
                               "DHCPServer\0"
                               "IPv6AcceptRA\0"
                               "IPv6NDPProxyAddress\0"
@@ -421,6 +472,8 @@ int network_load_one(Manager *manager, const char *filename) {
                               "BridgeVLAN\0"
                               "IPv6PrefixDelegation\0"
                               "IPv6Prefix\0"
+                              "IPv6RoutePrefix\0"
+                              "TrafficControlQueueingDiscipline\0"
                               "CAN\0",
                               config_item_perf_lookup, network_network_gperf_lookup,
                               CONFIG_PARSE_WARN, network);
@@ -433,60 +486,110 @@ int network_load_one(Manager *manager, const char *filename) {
         if (r < 0)
                 log_warning_errno(r, "%s: Failed to add IPv4LL route, ignoring: %m", network->filename);
 
-        LIST_PREPEND(networks, manager->networks, network);
-        network->manager = manager;
-
-        r = hashmap_ensure_allocated(&manager->networks_by_name, &string_hash_ops);
+        r = network_add_default_route_on_device(network);
         if (r < 0)
-                return r;
+                log_warning_errno(r, "%s: Failed to add default route on device, ignoring: %m",
+                                  network->filename);
 
-        r = hashmap_put(manager->networks_by_name, network->name, network);
-        if (r < 0)
-                return r;
+        struct stat stats;
+        if (stat(filename, &stats) < 0)
+                return -errno;
+        network->timestamp = timespec_load(&stats.st_mtim);
 
         if (network_verify(network) < 0)
+                /* Ignore .network files that do not match the conditions. */
                 return 0;
+
+        r = ordered_hashmap_ensure_allocated(networks, &string_hash_ops);
+        if (r < 0)
+                return r;
+
+        r = ordered_hashmap_put(*networks, network->name, network);
+        if (r < 0)
+                return r;
 
         network = NULL;
         return 0;
 }
 
-int network_load(Manager *manager) {
-        Network *network;
+int network_load(Manager *manager, OrderedHashmap **networks) {
         _cleanup_strv_free_ char **files = NULL;
         char **f;
         int r;
 
         assert(manager);
 
-        while ((network = manager->networks))
-                network_free(network);
+        ordered_hashmap_clear_with_destructor(*networks, network_unref);
 
         r = conf_files_list_strv(&files, ".network", NULL, 0, NETWORK_DIRS);
         if (r < 0)
                 return log_error_errno(r, "Failed to enumerate network files: %m");
 
-        STRV_FOREACH_BACKWARDS(f, files) {
-                r = network_load_one(manager, *f);
+        STRV_FOREACH(f, files) {
+                r = network_load_one(manager, networks, *f);
                 if (r < 0)
-                        return r;
+                        log_error_errno(r, "Failed to load %s, ignoring: %m", *f);
         }
 
         return 0;
 }
 
-void network_free(Network *network) {
+int network_reload(Manager *manager) {
+        OrderedHashmap *new_networks = NULL;
+        Network *n, *old;
+        Iterator i;
+        int r;
+
+        assert(manager);
+
+        r = network_load(manager, &new_networks);
+        if (r < 0)
+                goto failure;
+
+        ORDERED_HASHMAP_FOREACH(n, new_networks, i) {
+                r = network_get_by_name(manager, n->name, &old);
+                if (r < 0)
+                        continue; /* The .network file is new. */
+
+                if (n->timestamp != old->timestamp)
+                        continue; /* The .network file is modified. */
+
+                if (!streq(n->filename, old->filename))
+                        continue;
+
+                r = ordered_hashmap_replace(new_networks, old->name, old);
+                if (r < 0)
+                        goto failure;
+
+                network_ref(old);
+                network_unref(n);
+        }
+
+        ordered_hashmap_free_with_destructor(manager->networks, network_unref);
+        manager->networks = new_networks;
+
+        return 0;
+
+failure:
+        ordered_hashmap_free_with_destructor(new_networks, network_unref);
+
+        return r;
+}
+
+static Network *network_free(Network *network) {
         IPv6ProxyNDPAddress *ipv6_proxy_ndp_address;
+        RoutePrefix *route_prefix;
         RoutingPolicyRule *rule;
+        AddressLabel *label;
         FdbEntry *fdb_entry;
         Neighbor *neighbor;
-        AddressLabel *label;
-        Prefix *prefix;
         Address *address;
+        NextHop *nexthop;
+        Prefix *prefix;
         Route *route;
 
         if (!network)
-                return;
+                return NULL;
 
         free(network->filename);
 
@@ -495,23 +598,30 @@ void network_free(Network *network) {
         strv_free(network->match_driver);
         strv_free(network->match_type);
         strv_free(network->match_name);
+        strv_free(network->match_property);
+        strv_free(network->match_wlan_iftype);
+        strv_free(network->match_ssid);
+        set_free_free(network->match_bssid);
         condition_free_list(network->conditions);
 
         free(network->description);
         free(network->dhcp_vendor_class_identifier);
         strv_free(network->dhcp_user_class);
         free(network->dhcp_hostname);
-
+        set_free(network->dhcp_black_listed_ip);
+        set_free(network->dhcp_request_options);
         free(network->mac);
 
         strv_free(network->ntp);
         free(network->dns);
+        strv_free(network->sip);
         ordered_set_free_free(network->search_domains);
         ordered_set_free_free(network->route_domains);
         strv_free(network->bind_carrier);
 
         ordered_set_free_free(network->router_search_domains);
         free(network->router_dns);
+        set_free_free(network->ndisc_black_listed_prefix);
 
         free(network->bridge_name);
         free(network->bond_name);
@@ -524,6 +634,9 @@ void network_free(Network *network) {
 
         while ((route = network->static_routes))
                 route_free(route);
+
+        while ((nexthop = network->static_nexthops))
+                nexthop_free(nexthop);
 
         while ((address = network->static_addresses))
                 address_free(address);
@@ -543,38 +656,43 @@ void network_free(Network *network) {
         while ((prefix = network->static_prefixes))
                 prefix_free(prefix);
 
+        while ((route_prefix = network->static_route_prefixes))
+                route_prefix_free(route_prefix);
+
         while ((rule = network->rules))
                 routing_policy_rule_free(rule);
 
         hashmap_free(network->addresses_by_section);
         hashmap_free(network->routes_by_section);
+        hashmap_free(network->nexthops_by_section);
         hashmap_free(network->fdb_entries_by_section);
         hashmap_free(network->neighbors_by_section);
         hashmap_free(network->address_labels_by_section);
         hashmap_free(network->prefixes_by_section);
+        hashmap_free(network->route_prefixes_by_section);
         hashmap_free(network->rules_by_section);
+        ordered_hashmap_free_with_destructor(network->qdiscs_by_section, qdisc_free);
 
-        if (network->manager) {
-                if (network->manager->networks)
-                        LIST_REMOVE(networks, network->manager->networks, network);
-
-                if (network->manager->networks_by_name && network->name)
-                        hashmap_remove(network->manager->networks_by_name, network->name);
-
-                if (network->manager->duids_requesting_uuid)
-                        set_remove(network->manager->duids_requesting_uuid, &network->duid);
-        }
+        if (network->manager &&
+            network->manager->duids_requesting_uuid)
+                set_remove(network->manager->duids_requesting_uuid, &network->duid);
 
         free(network->name);
 
         free(network->dhcp_server_timezone);
         free(network->dhcp_server_dns);
         free(network->dhcp_server_ntp);
+        free(network->dhcp_server_sip);
 
         set_free_free(network->dnssec_negative_trust_anchors);
 
-        free(network);
+        ordered_hashmap_free(network->dhcp_client_send_options);
+        ordered_hashmap_free(network->dhcp_server_send_options);
+
+        return mfree(network);
 }
+
+DEFINE_TRIVIAL_REF_UNREF_FUNC(Network, network, network_free);
 
 int network_get_by_name(Manager *manager, const char *name, Network **ret) {
         Network *network;
@@ -583,7 +701,7 @@ int network_get_by_name(Manager *manager, const char *name, Network **ret) {
         assert(name);
         assert(ret);
 
-        network = hashmap_get(manager->networks_by_name, name);
+        network = ordered_hashmap_get(manager->networks, name);
         if (!network)
                 return -ENOENT;
 
@@ -594,26 +712,19 @@ int network_get_by_name(Manager *manager, const char *name, Network **ret) {
 
 int network_get(Manager *manager, sd_device *device,
                 const char *ifname, const struct ether_addr *address,
+                enum nl80211_iftype wlan_iftype, const char *ssid, const struct ether_addr *bssid,
                 Network **ret) {
-        const char *path = NULL, *driver = NULL, *devtype = NULL;
         Network *network;
+        Iterator i;
 
         assert(manager);
         assert(ret);
 
-        if (device) {
-                (void) sd_device_get_property_value(device, "ID_PATH", &path);
-
-                (void) sd_device_get_property_value(device, "ID_NET_DRIVER", &driver);
-
-                (void) sd_device_get_devtype(device, &devtype);
-        }
-
-        LIST_FOREACH(networks, network, manager->networks) {
-                if (net_match_config(network->match_mac, network->match_path,
-                                     network->match_driver, network->match_type,
-                                     network->match_name,
-                                     address, path, driver, devtype, ifname)) {
+        ORDERED_HASHMAP_FOREACH(network, manager->networks, i)
+                if (net_match_config(network->match_mac, network->match_path, network->match_driver,
+                                     network->match_type, network->match_name, network->match_property,
+                                     network->match_wlan_iftype, network->match_ssid, network->match_bssid,
+                                     device, address, ifname, wlan_iftype, ssid, bssid)) {
                         if (network->match_name && device) {
                                 const char *attr;
                                 uint8_t name_assign_type = NET_NAME_UNKNOWN;
@@ -632,7 +743,6 @@ int network_get(Manager *manager, sd_device *device,
                         *ret = network;
                         return 0;
                 }
-        }
 
         *ret = NULL;
 
@@ -643,7 +753,7 @@ int network_apply(Network *network, Link *link) {
         assert(network);
         assert(link);
 
-        link->network = network;
+        link->network = network_ref(network);
 
         if (network->n_dns > 0 ||
             !strv_isempty(network->ntp) ||
@@ -654,15 +764,35 @@ int network_apply(Network *network, Link *link) {
         return 0;
 }
 
-bool network_has_static_ipv6_addresses(Network *network) {
+bool network_has_static_ipv6_configurations(Network *network) {
         Address *address;
+        Route *route;
+        FdbEntry *fdb;
+        Neighbor *neighbor;
 
         assert(network);
 
-        LIST_FOREACH(addresses, address, network->static_addresses) {
+        LIST_FOREACH(addresses, address, network->static_addresses)
                 if (address->family == AF_INET6)
                         return true;
-        }
+
+        LIST_FOREACH(routes, route, network->static_routes)
+                if (route->family == AF_INET6)
+                        return true;
+
+        LIST_FOREACH(static_fdb_entries, fdb, network->static_fdb_entries)
+                if (fdb->family == AF_INET6)
+                        return true;
+
+        LIST_FOREACH(neighbors, neighbor, network->neighbors)
+                if (neighbor->family == AF_INET6)
+                        return true;
+
+        if (!LIST_IS_EMPTY(network->address_labels))
+                return true;
+
+        if (!LIST_IS_EMPTY(network->static_prefixes))
+                return true;
 
         return false;
 }
@@ -688,8 +818,9 @@ int config_parse_stacked_netdev(const char *unit,
         assert(data);
         assert(IN_SET(kind,
                       NETDEV_KIND_VLAN, NETDEV_KIND_MACVLAN, NETDEV_KIND_MACVTAP,
-                      NETDEV_KIND_IPVLAN, NETDEV_KIND_VXLAN, NETDEV_KIND_L2TP,
-                      _NETDEV_KIND_TUNNEL));
+                      NETDEV_KIND_IPVLAN, NETDEV_KIND_IPVTAP, NETDEV_KIND_VXLAN,
+                      NETDEV_KIND_L2TP, NETDEV_KIND_MACSEC, _NETDEV_KIND_TUNNEL,
+                      NETDEV_KIND_XFRM));
 
         if (!ifname_valid(rvalue)) {
                 log_syntax(unit, LOG_ERR, filename, line, 0,
@@ -799,96 +930,6 @@ int config_parse_domains(
         return 0;
 }
 
-int config_parse_ipv4ll(
-                const char* unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        AddressFamilyBoolean *link_local = data;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-        assert(data);
-
-        /* Note that this is mostly like
-         * config_parse_address_family_boolean(), except that it
-         * applies only to IPv4 */
-
-        SET_FLAG(*link_local, ADDRESS_FAMILY_IPV4, parse_boolean(rvalue));
-
-        return 0;
-}
-
-int config_parse_dhcp(
-                const char* unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        AddressFamilyBoolean *dhcp = data, s;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-        assert(data);
-
-        /* Note that this is mostly like
-         * config_parse_address_family_boolean(), except that it
-         * understands some old names for the enum values */
-
-        s = address_family_boolean_from_string(rvalue);
-        if (s < 0) {
-
-                /* Previously, we had a slightly different enum here,
-                 * support its values for compatbility. */
-
-                if (streq(rvalue, "none"))
-                        s = ADDRESS_FAMILY_NO;
-                else if (streq(rvalue, "v4"))
-                        s = ADDRESS_FAMILY_IPV4;
-                else if (streq(rvalue, "v6"))
-                        s = ADDRESS_FAMILY_IPV6;
-                else if (streq(rvalue, "both"))
-                        s = ADDRESS_FAMILY_YES;
-                else {
-                        log_syntax(unit, LOG_ERR, filename, line, 0,
-                                   "Failed to parse DHCP option, ignoring: %s", rvalue);
-                        return 0;
-                }
-
-                log_syntax(unit, LOG_WARNING, filename, line, 0,
-                           "DHCP=%s is deprecated, please use DHCP=%s instead.",
-                           rvalue, address_family_boolean_to_string(s));
-        }
-
-        *dhcp = s;
-        return 0;
-}
-
-static const char* const dhcp_client_identifier_table[_DHCP_CLIENT_ID_MAX] = {
-        [DHCP_CLIENT_ID_MAC] = "mac",
-        [DHCP_CLIENT_ID_DUID] = "duid",
-        [DHCP_CLIENT_ID_DUID_ONLY] = "duid-only",
-};
-
-DEFINE_PRIVATE_STRING_TABLE_LOOKUP_FROM_STRING(dhcp_client_identifier, DHCPClientIdentifier);
-DEFINE_CONFIG_PARSE_ENUM(config_parse_dhcp_client_identifier, dhcp_client_identifier, DHCPClientIdentifier,
-                         "Failed to parse client identifier type");
-
 int config_parse_ipv6token(
                 const char* unit,
                 const char *filename,
@@ -940,7 +981,8 @@ static const char* const ipv6_privacy_extensions_table[_IPV6_PRIVACY_EXTENSIONS_
         [IPV6_PRIVACY_EXTENSIONS_YES] = "yes",
 };
 
-DEFINE_STRING_TABLE_LOOKUP(ipv6_privacy_extensions, IPv6PrivacyExtensions);
+DEFINE_STRING_TABLE_LOOKUP_WITH_BOOLEAN(ipv6_privacy_extensions, IPv6PrivacyExtensions,
+                                        IPV6_PRIVACY_EXTENSIONS_YES);
 
 int config_parse_ipv6_privacy_extensions(
                 const char* unit,
@@ -954,39 +996,25 @@ int config_parse_ipv6_privacy_extensions(
                 void *data,
                 void *userdata) {
 
-        IPv6PrivacyExtensions *ipv6_privacy_extensions = data;
-        int k;
+        IPv6PrivacyExtensions s, *ipv6_privacy_extensions = data;
 
         assert(filename);
         assert(lvalue);
         assert(rvalue);
         assert(ipv6_privacy_extensions);
 
-        /* Our enum shall be a superset of booleans, hence first try
-         * to parse as boolean, and then as enum */
-
-        k = parse_boolean(rvalue);
-        if (k > 0)
-                *ipv6_privacy_extensions = IPV6_PRIVACY_EXTENSIONS_YES;
-        else if (k == 0)
-                *ipv6_privacy_extensions = IPV6_PRIVACY_EXTENSIONS_NO;
-        else {
-                IPv6PrivacyExtensions s;
-
-                s = ipv6_privacy_extensions_from_string(rvalue);
-                if (s < 0) {
-
-                        if (streq(rvalue, "kernel"))
-                                s = _IPV6_PRIVACY_EXTENSIONS_INVALID;
-                        else {
-                                log_syntax(unit, LOG_ERR, filename, line, 0,
-                                           "Failed to parse IPv6 privacy extensions option, ignoring: %s", rvalue);
-                                return 0;
-                        }
+        s = ipv6_privacy_extensions_from_string(rvalue);
+        if (s < 0) {
+                if (streq(rvalue, "kernel"))
+                        s = _IPV6_PRIVACY_EXTENSIONS_INVALID;
+                else {
+                        log_syntax(unit, LOG_ERR, filename, line, 0,
+                                   "Failed to parse IPv6 privacy extensions option, ignoring: %s", rvalue);
+                        return 0;
                 }
-
-                *ipv6_privacy_extensions = s;
         }
+
+        *ipv6_privacy_extensions = s;
 
         return 0;
 }
@@ -1067,216 +1095,6 @@ int config_parse_timezone(
         }
 
         return free_and_replace(*datap, tz);
-}
-
-int config_parse_dhcp_server_dns(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        Network *n = data;
-        const char *p = rvalue;
-        int r;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-
-        for (;;) {
-                _cleanup_free_ char *w = NULL;
-                struct in_addr a, *m;
-
-                r = extract_first_word(&p, &w, NULL, 0);
-                if (r == -ENOMEM)
-                        return log_oom();
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r,
-                                   "Failed to extract word, ignoring: %s", rvalue);
-                        return 0;
-                }
-                if (r == 0)
-                        break;
-
-                if (inet_pton(AF_INET, w, &a) <= 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, 0,
-                                   "Failed to parse DNS server address, ignoring: %s", w);
-                        continue;
-                }
-
-                m = reallocarray(n->dhcp_server_dns, n->n_dhcp_server_dns + 1, sizeof(struct in_addr));
-                if (!m)
-                        return log_oom();
-
-                m[n->n_dhcp_server_dns++] = a;
-                n->dhcp_server_dns = m;
-        }
-
-        return 0;
-}
-
-int config_parse_radv_dns(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        Network *n = data;
-        const char *p = rvalue;
-        int r;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-
-        for (;;) {
-                _cleanup_free_ char *w = NULL;
-                union in_addr_union a;
-
-                r = extract_first_word(&p, &w, NULL, 0);
-                if (r == -ENOMEM)
-                        return log_oom();
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r,
-                                   "Failed to extract word, ignoring: %s", rvalue);
-                        return 0;
-                }
-                if (r == 0)
-                        break;
-
-                if (in_addr_from_string(AF_INET6, w, &a) >= 0) {
-                        struct in6_addr *m;
-
-                        m = reallocarray(n->router_dns, n->n_router_dns + 1, sizeof(struct in6_addr));
-                        if (!m)
-                                return log_oom();
-
-                        m[n->n_router_dns++] = a.in6;
-                        n->router_dns = m;
-
-                } else
-                        log_syntax(unit, LOG_ERR, filename, line, 0,
-                                   "Failed to parse DNS server address, ignoring: %s", w);
-        }
-
-        return 0;
-}
-
-int config_parse_radv_search_domains(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        Network *n = data;
-        const char *p = rvalue;
-        int r;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-
-        for (;;) {
-                _cleanup_free_ char *w = NULL, *idna = NULL;
-
-                r = extract_first_word(&p, &w, NULL, 0);
-                if (r == -ENOMEM)
-                        return log_oom();
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r,
-                                   "Failed to extract word, ignoring: %s", rvalue);
-                        return 0;
-                }
-                if (r == 0)
-                        break;
-
-                r = dns_name_apply_idna(w, &idna);
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r,
-                                   "Failed to apply IDNA to domain name '%s', ignoring: %m", w);
-                        continue;
-                } else if (r == 0)
-                        /* transfer ownership to simplify subsequent operations */
-                        idna = TAKE_PTR(w);
-
-                r = ordered_set_ensure_allocated(&n->router_search_domains, &string_hash_ops);
-                if (r < 0)
-                        return r;
-
-                r = ordered_set_consume(n->router_search_domains, TAKE_PTR(idna));
-                if (r < 0)
-                        return r;
-        }
-
-        return 0;
-}
-
-int config_parse_dhcp_server_ntp(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        Network *n = data;
-        const char *p = rvalue;
-        int r;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-
-        for (;;) {
-                _cleanup_free_ char *w = NULL;
-                struct in_addr a, *m;
-
-                r = extract_first_word(&p, &w, NULL, 0);
-                if (r == -ENOMEM)
-                        return log_oom();
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r,
-                                   "Failed to extract word, ignoring: %s", rvalue);
-                        return 0;
-                }
-                if (r == 0)
-                        return 0;
-
-                if (inet_pton(AF_INET, w, &a) <= 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, 0,
-                                   "Failed to parse NTP server address, ignoring: %s", w);
-                        continue;
-                }
-
-                m = reallocarray(n->dhcp_server_ntp, n->n_dhcp_server_ntp + 1, sizeof(struct in_addr));
-                if (!m)
-                        return log_oom();
-
-                m[n->n_dhcp_server_ntp++] = a;
-                n->dhcp_server_ntp = m;
-        }
 }
 
 int config_parse_dns(
@@ -1455,152 +1273,6 @@ int config_parse_ntp(
         return 0;
 }
 
-int config_parse_dhcp_user_class(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        char ***l = data;
-        int r;
-
-        assert(l);
-        assert(lvalue);
-        assert(rvalue);
-
-        if (isempty(rvalue)) {
-                *l = strv_free(*l);
-                return 0;
-        }
-
-        for (;;) {
-                _cleanup_free_ char *w = NULL;
-
-                r = extract_first_word(&rvalue, &w, NULL, 0);
-                if (r == -ENOMEM)
-                        return log_oom();
-                if (r < 0) {
-                        log_syntax(unit, LOG_ERR, filename, line, r,
-                                   "Failed to split user classes option, ignoring: %s", rvalue);
-                        break;
-                }
-                if (r == 0)
-                        break;
-
-                if (strlen(w) > 255) {
-                        log_syntax(unit, LOG_ERR, filename, line, 0,
-                                   "%s length is not in the range 1-255, ignoring.", w);
-                        continue;
-                }
-
-                r = strv_push(l, w);
-                if (r < 0)
-                        return log_oom();
-
-                w = NULL;
-        }
-
-        return 0;
-}
-
-int config_parse_section_route_table(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        Network *network = data;
-        uint32_t rt;
-        int r;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-        assert(data);
-
-        r = safe_atou32(rvalue, &rt);
-        if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
-                           "Failed to parse RouteTable=%s, ignoring assignment: %m", rvalue);
-                return 0;
-        }
-
-        if (streq_ptr(section, "DHCP")) {
-                network->dhcp_route_table = rt;
-                network->dhcp_route_table_set = true;
-        } else { /* section is IPv6AcceptRA */
-                network->ipv6_accept_ra_route_table = rt;
-                network->ipv6_accept_ra_route_table_set = true;
-        }
-
-        return 0;
-}
-
-DEFINE_CONFIG_PARSE_ENUM(config_parse_dhcp_use_domains, dhcp_use_domains, DHCPUseDomains,
-                         "Failed to parse DHCP use domains setting");
-
-static const char* const dhcp_use_domains_table[_DHCP_USE_DOMAINS_MAX] = {
-        [DHCP_USE_DOMAINS_NO] = "no",
-        [DHCP_USE_DOMAINS_ROUTE] = "route",
-        [DHCP_USE_DOMAINS_YES] = "yes",
-};
-
-DEFINE_STRING_TABLE_LOOKUP_WITH_BOOLEAN(dhcp_use_domains, DHCPUseDomains, DHCP_USE_DOMAINS_YES);
-
-DEFINE_CONFIG_PARSE_ENUM(config_parse_lldp_mode, lldp_mode, LLDPMode, "Failed to parse LLDP= setting.");
-
-static const char* const lldp_mode_table[_LLDP_MODE_MAX] = {
-        [LLDP_MODE_NO] = "no",
-        [LLDP_MODE_YES] = "yes",
-        [LLDP_MODE_ROUTERS_ONLY] = "routers-only",
-};
-
-DEFINE_STRING_TABLE_LOOKUP_WITH_BOOLEAN(lldp_mode, LLDPMode, LLDP_MODE_YES);
-
-int config_parse_iaid(const char *unit,
-                      const char *filename,
-                      unsigned line,
-                      const char *section,
-                      unsigned section_line,
-                      const char *lvalue,
-                      int ltype,
-                      const char *rvalue,
-                      void *data,
-                      void *userdata) {
-        Network *network = data;
-        uint32_t iaid;
-        int r;
-
-        assert(filename);
-        assert(lvalue);
-        assert(rvalue);
-        assert(network);
-
-        r = safe_atou32(rvalue, &iaid);
-        if (r < 0) {
-                log_syntax(unit, LOG_ERR, filename, line, r,
-                           "Unable to read IAID, ignoring assignment: %s", rvalue);
-                return 0;
-        }
-
-        network->iaid = iaid;
-        network->iaid_set = true;
-
-        return 0;
-}
-
 int config_parse_required_for_online(
                 const char *unit,
                 const char *filename,
@@ -1643,3 +1315,16 @@ int config_parse_required_for_online(
 
         return 0;
 }
+
+DEFINE_CONFIG_PARSE_ENUM(config_parse_keep_configuration, keep_configuration, KeepConfiguration,
+                         "Failed to parse KeepConfiguration= setting");
+
+static const char* const keep_configuration_table[_KEEP_CONFIGURATION_MAX] = {
+        [KEEP_CONFIGURATION_NO]           = "no",
+        [KEEP_CONFIGURATION_DHCP_ON_STOP] = "dhcp-on-stop",
+        [KEEP_CONFIGURATION_DHCP]         = "dhcp",
+        [KEEP_CONFIGURATION_STATIC]       = "static",
+        [KEEP_CONFIGURATION_YES]          = "yes",
+};
+
+DEFINE_STRING_TABLE_LOOKUP_WITH_BOOLEAN(keep_configuration, KeepConfiguration, KEEP_CONFIGURATION_YES);

@@ -60,8 +60,13 @@
   <refsect1>
     <title>[Match] Section Options</title>
 
-    <para>A link file is said to match a device if each of the entries in the [Match] section matches, or if
-    the section is empty. The following keys are accepted:</para>
+    <para>A link file is said to match a device if all matches specified by the
+    <literal>[Match]</literal> section are satisfied. When a link file does not contain valid settings
+    in <literal>[Match]</literal> section, then the file will match all devices and
+    <command>systemd-udevd</command> warns about that. Hint: to avoid the warning and to make it clear
+    that all interfaces shall be matched, add the following:
+    <programlisting>OriginalName=*</programlisting>
+    The following keys are accepted:</para>
 
     <variablelist class='network-directives'>
       <varlistentry>
@@ -98,7 +103,7 @@
         <term><varname>Driver=</varname></term>
         <listitem>
           <para>A whitespace-separated list of shell-style globs matching the driver currently bound to the
-          device, as exposed by the udev property <varname>DRIVER</varname> of its parent device, or if that
+          device, as exposed by the udev property <varname>ID_NET_DRIVER</varname> of its parent device, or if that
           is not set, the driver as exposed by <command>ethtool -i</command> of the device itself.</para>
         </listitem>
       </varlistentry>
@@ -108,6 +113,21 @@
           <para>A whitespace-separated list of shell-style globs matching
           the device type, as exposed by the udev
           property <varname>DEVTYPE</varname>.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>Property=</varname></term>
+        <listitem>
+          <para>A whitespace-separated list of udev property name with its value after a equal
+          (<literal>=</literal>). If multiple properties are specified, the test results are ANDed.
+          If the list is prefixed with a "!", the test is inverted. If a value contains white
+          spaces, then please quote whole key and value pair. If a value contains quotation, then
+          please escape the quotation with <literal>\</literal>.</para>
+
+          <para>Example: if a .link file has the following:
+          <programlisting>Property=ID_MODEL_ID=9999 "ID_VENDOR_FROM_DATABASE=vendor name" "KEY=with \"quotation\""</programlisting>
+          then, the .link file matches only when an interface has all the above three properties.
+          </para>
         </listitem>
       </varlistentry>
       <varlistentry>
@@ -273,6 +293,7 @@
                 <para>The name is set based on information given by
                 the firmware for on-board devices, as exported by the
                 udev property <varname>ID_NET_NAME_ONBOARD</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
                 </para>
               </listitem>
             </varlistentry>
@@ -282,6 +303,7 @@
                 <para>The name is set based on information given by
                 the firmware for hot-plug devices, as exported by the
                 udev property <varname>ID_NET_NAME_SLOT</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
                 </para>
               </listitem>
             </varlistentry>
@@ -290,7 +312,9 @@
               <listitem>
                 <para>The name is set based on the device's physical
                 location, as exported by the udev property
-                <varname>ID_NET_NAME_PATH</varname>.</para>
+                <varname>ID_NET_NAME_PATH</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+                </para>
               </listitem>
             </varlistentry>
             <varlistentry>
@@ -298,7 +322,9 @@
               <listitem>
                 <para>The name is set based on the device's persistent
                 MAC address, as exported by the udev property
-                <varname>ID_NET_NAME_MAC</varname>.</para>
+                <varname>ID_NET_NAME_MAC</varname>.
+                See <citerefentry><refentrytitle>systemd.net-naming-scheme</refentrytitle><manvolnum>7</manvolnum></citerefentry>.
+                </para>
               </listitem>
             </varlistentry>
             <varlistentry>
@@ -598,6 +624,19 @@
           <para>Sets the number of combined set channels (a number between 1 and 4294967295).</para>
         </listitem>
       </varlistentry>
+      <varlistentry>
+        <term><varname>RxBufferSize=</varname></term>
+        <listitem>
+          <para>Takes a integer. Specifies the NIC receive ring buffer size. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term><varname>TxBufferSize=</varname></term>
+        <listitem>
+          <para>Takes a integer. Specifies the NIC transmit ring buffer size. When unset, the kernel's default will be used.</para>
+        </listitem>
+      </varlistentry>
+
     </variablelist>
   </refsect1>
 
@@ -629,7 +668,7 @@ MACAddress=00:a0:de:63:7a:e6
 Name=dmz0</programlisting>
 
       <para><varname>NamePolicy=</varname> is not set, so <varname>Name=</varname> takes effect. We use the
-      <literal>10-</literal> prefix to order this file early in the list. Note that it needs to before
+      <literal>10-</literal> prefix to order this file early in the list. Note that it needs to be before
       <literal>99-link</literal>, i.e. it needs a numerical prefix, to have any effect at all.</para>
     </example>
 
@@ -670,7 +709,7 @@ ID_NET_LINK_FILE=/usr/lib/systemd/network/99-default.link
 </programlisting>
 
      <para>In this case, the interface was already renamed, so the <option>keep</option> policy specified as
-     the first option in <filename noindex='true'>99-default.link</filename> means that the existing name is
+     the first option in <filename index="false">99-default.link</filename> means that the existing name is
      preserved. If <option>keep</option> was removed, or if were in boot before the renaming has happened,
      we might get the following instead:</para>
 

@@ -40,6 +40,7 @@ struct link_config {
         char **match_driver;
         char **match_type;
         char **match_name;
+        char **match_property;
         LIST_HEAD(Condition, conditions);
 
         char *description;
@@ -52,11 +53,12 @@ struct link_config {
         size_t speed;
         Duplex duplex;
         int autonegotiation;
-        uint32_t advertise[2];
+        uint32_t advertise[N_ADVERTISE];
         WakeOnLan wol;
         NetDevPort port;
         int features[_NET_DEV_FEAT_MAX];
         netdev_channels channels;
+        netdev_ring_param ring;
 
         LIST_FIELDS(link_config, links);
 };

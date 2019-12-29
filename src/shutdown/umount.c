@@ -5,8 +5,8 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/dm-ioctl.h>
 #include <linux/loop.h>
-#include <string.h>
 #include <sys/mount.h>
 #include <sys/swap.h>
 #include <sys/stat.h>
@@ -23,7 +23,6 @@
 #include "fd-util.h"
 #include "fstab-util.h"
 #include "libmount-util.h"
-#include "linux-3.13/dm-ioctl.h"
 #include "mount-setup.h"
 #include "mount-util.h"
 #include "mountpoint-util.h"
@@ -55,20 +54,15 @@ void mount_points_list_free(MountPoint **head) {
 }
 
 int mount_points_list_get(const char *mountinfo, MountPoint **head) {
-        _cleanup_(mnt_free_tablep) struct libmnt_table *t = NULL;
-        _cleanup_(mnt_free_iterp) struct libmnt_iter *i = NULL;
+        _cleanup_(mnt_free_tablep) struct libmnt_table *table = NULL;
+        _cleanup_(mnt_free_iterp) struct libmnt_iter *iter = NULL;
         int r;
 
         assert(head);
 
-        t = mnt_new_table();
-        i = mnt_new_iter(MNT_ITER_FORWARD);
-        if (!t || !i)
-                return log_oom();
-
-        r = mnt_table_parse_mtab(t, mountinfo);
+        r = libmount_parse(mountinfo, NULL, &table, &iter);
         if (r < 0)
-                return log_error_errno(r, "Failed to parse %s: %m", mountinfo);
+                return log_error_errno(r, "Failed to parse %s: %m", mountinfo ?: "/proc/self/mountinfo");
 
         for (;;) {
                 struct libmnt_fs *fs;
@@ -79,11 +73,11 @@ int mount_points_list_get(const char *mountinfo, MountPoint **head) {
                 bool try_remount_ro;
                 _cleanup_free_ MountPoint *m = NULL;
 
-                r = mnt_table_next_fs(t, i, &fs);
+                r = mnt_table_next_fs(table, iter, &fs);
                 if (r == 1)
                         break;
                 if (r < 0)
-                        return log_error_errno(r, "Failed to get next entry from %s: %m", mountinfo);
+                        return log_error_errno(r, "Failed to get next entry from %s: %m", mountinfo ?: "/proc/self/mountinfo");
 
                 path = mnt_fs_get_target(fs);
                 if (!path)
@@ -190,8 +184,10 @@ int swap_list_get(const char *swaps, MountPoint **head) {
                 return log_oom();
 
         r = mnt_table_parse_swaps(t, swaps);
+        if (r == -ENOENT) /* no /proc/swaps is fine */
+                return 0;
         if (r < 0)
-                return log_error_errno(r, "Failed to parse %s: %m", swaps);
+                return log_error_errno(r, "Failed to parse %s: %m", swaps ?: "/proc/swaps");
 
         for (;;) {
                 struct libmnt_fs *fs;
@@ -202,7 +198,7 @@ int swap_list_get(const char *swaps, MountPoint **head) {
                 if (r == 1)
                         break;
                 if (r < 0)
-                        return log_error_errno(r, "Failed to get next entry from %s: %m", swaps);
+                        return log_error_errno(r, "Failed to get next entry from %s: %m", swaps ?: "/proc/swaps");
 
                 source = mnt_fs_get_source(fs);
                 if (!source)
@@ -210,11 +206,11 @@ int swap_list_get(const char *swaps, MountPoint **head) {
 
                 swap = new0(MountPoint, 1);
                 if (!swap)
-                        return -ENOMEM;
+                        return log_oom();
 
                 swap->path = strdup(source);
                 if (!swap->path)
-                        return -ENOMEM;
+                        return log_oom();
 
                 LIST_PREPEND(mount_point, *head, TAKE_PTR(swap));
         }
@@ -390,7 +386,7 @@ static int remount_with_timeout(MountPoint *m, int umount_log_level) {
 
         assert(m);
 
-        /* Due to the possiblity of a remount operation hanging, we
+        /* Due to the possibility of a remount operation hanging, we
          * fork a child process and set a timeout. If the timeout
          * lapses, the assumption is that that particular remount
          * failed. */
@@ -428,7 +424,7 @@ static int umount_with_timeout(MountPoint *m, int umount_log_level) {
 
         assert(m);
 
-        /* Due to the possiblity of a umount operation hanging, we
+        /* Due to the possibility of a umount operation hanging, we
          * fork a child process and set a timeout. If the timeout
          * lapses, the assumption is that that particular umount
          * failed. */
@@ -486,7 +482,7 @@ static int mount_points_list_umount(MountPoint **head, bool *changed, int umount
                          * underlying mount. There's nothing we can do
                          * about it for the general case, but we can
                          * do something about it if it is aliased
-                         * somehwere else via a bind mount. If we
+                         * somewhere else via a bind mount. If we
                          * explicitly remount the super block of that
                          * alias read-only we hence should be
                          * relatively safe regarding keeping a dirty fs

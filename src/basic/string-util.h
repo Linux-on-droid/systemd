@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
-#include <alloca.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
@@ -43,6 +42,22 @@ static inline const char* strnull(const char *s) {
 
 static inline const char *strna(const char *s) {
         return s ?: "n/a";
+}
+
+static inline const char* yes_no(bool b) {
+        return b ? "yes" : "no";
+}
+
+static inline const char* true_false(bool b) {
+        return b ? "true" : "false";
+}
+
+static inline const char* one_zero(bool b) {
+        return b ? "1" : "0";
+}
+
+static inline const char* enable_disable(bool b) {
+        return b ? "enable" : "disable";
 }
 
 static inline bool isempty(const char *p) {
@@ -108,7 +123,6 @@ const char* split(const char **state, size_t *l, const char *separator, SplitFla
 #define _FOREACH_WORD(word, length, s, separator, flags, state)         \
         for ((state) = (s), (word) = split(&(state), &(length), (separator), (flags)); (word); (word) = split(&(state), &(length), (separator), (flags)))
 
-char *strappend(const char *s, const char *suffix);
 char *strnappend(const char *s, const char *suffix, size_t length);
 
 char *strjoin_real(const char *x, ...) _sentinel_;
@@ -197,12 +211,6 @@ static inline int free_and_strdup_warn(char **p, const char *s) {
 }
 int free_and_strndup(char **p, const char *s, size_t l);
 
-char *string_erase(char *x);
-
-char *string_free_erase(char *s);
-DEFINE_TRIVIAL_CLEANUP_FUNC(char *, string_free_erase);
-#define _cleanup_string_free_erase_ _cleanup_(string_free_erasep)
-
 bool string_is_safe(const char *p) _pure_;
 
 static inline size_t strlen_ptr(const char *s) {
@@ -211,6 +219,12 @@ static inline size_t strlen_ptr(const char *s) {
 
         return strlen(s);
 }
+
+DISABLE_WARNING_STRINGOP_TRUNCATION;
+static inline void strncpy_exact(char *buf, const char *src, size_t buf_len) {
+        strncpy(buf, src, buf_len);
+}
+REENABLE_WARNING;
 
 /* Like startswith(), but operates on arbitrary memory blocks */
 static inline void *memory_startswith(const void *p, size_t sz, const char *token) {
@@ -250,4 +264,17 @@ static inline void *memory_startswith_no_case(const void *p, size_t sz, const ch
         }
 
         return (uint8_t*) p + n;
+}
+
+static inline char* str_realloc(char **p) {
+        /* Reallocate *p to actual size */
+
+        if (!*p)
+                return NULL;
+
+        char *t = realloc(*p, strlen(*p) + 1);
+        if (!t)
+                return NULL;
+
+        return (*p = t);
 }

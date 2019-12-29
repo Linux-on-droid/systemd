@@ -2,7 +2,6 @@
 #pragma once
 
 #include <pthread.h>
-#include <sys/socket.h>
 
 #include "sd-bus.h"
 
@@ -43,6 +42,11 @@ struct match_callback {
         sd_bus_slot *install_slot; /* The AddMatch() call */
 
         unsigned last_iteration;
+
+        /* Don't dispatch this slot with with messages that arrived in any iteration before or at the this
+         * one. We use this to ensure that matches don't apply "retroactively" and thus can confuse the
+         * caller: matches will only match incoming messages from the moment on the match was installed. */
+        uint64_t after;
 
         char *match_string;
 
@@ -226,6 +230,7 @@ struct sd_bus {
         size_t wqueue_allocated;
 
         uint64_t cookie;
+        uint64_t read_counter; /* A counter for each incoming msg */
 
         char *unique_name;
         uint64_t unique_id;
@@ -326,8 +331,8 @@ struct sd_bus {
  * with enough entropy yet and might delay the boot */
 #define BUS_AUTH_TIMEOUT ((usec_t) DEFAULT_TIMEOUT_USEC)
 
-#define BUS_WQUEUE_MAX (192*1024)
-#define BUS_RQUEUE_MAX (192*1024)
+#define BUS_WQUEUE_MAX (384*1024)
+#define BUS_RQUEUE_MAX (384*1024)
 
 #define BUS_MESSAGE_SIZE_MAX (128*1024*1024)
 #define BUS_AUTH_SIZE_MAX (64*1024)

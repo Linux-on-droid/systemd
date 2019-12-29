@@ -269,7 +269,7 @@ int dhcp_network_bind_raw_socket(
         return test_fd[0];
 }
 
-int dhcp_network_bind_udp_socket(int ifindex, be32_t address, uint16_t port) {
+int dhcp_network_bind_udp_socket(int ifindex, be32_t address, uint16_t port, int ip_service_type) {
         int fd;
 
         fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
@@ -418,7 +418,7 @@ static uint8_t test_addr_acq_ack[] = {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static void test_addr_acq_acquired(sd_dhcp_client *client, int event,
+static int test_addr_acq_acquired(sd_dhcp_client *client, int event,
                                    void *userdata) {
         sd_event *e = userdata;
         sd_dhcp_lease *lease;
@@ -426,7 +426,7 @@ static void test_addr_acq_acquired(sd_dhcp_client *client, int event,
         const struct in_addr *addrs;
 
         assert_se(client);
-        assert_se(event == SD_DHCP_CLIENT_EVENT_IP_ACQUIRE);
+        assert_se(IN_SET(event, SD_DHCP_CLIENT_EVENT_IP_ACQUIRE, SD_DHCP_CLIENT_EVENT_SELECTING));
 
         assert_se(sd_dhcp_client_get_lease(client, &lease) >= 0);
         assert_se(lease);
@@ -447,6 +447,8 @@ static void test_addr_acq_acquired(sd_dhcp_client *client, int event,
                 printf("  DHCP address acquired\n");
 
         sd_event_exit(e, 0);
+
+        return 0;
 }
 
 static int test_addr_acq_recv_request(size_t size, DHCPMessage *request) {

@@ -123,7 +123,7 @@ static int spawn_getter(const char *getter) {
         _cleanup_strv_free_ char **words = NULL;
 
         assert(getter);
-        r = strv_split_extract(&words, getter, WHITESPACE, EXTRACT_QUOTES);
+        r = strv_split_extract(&words, getter, WHITESPACE, EXTRACT_UNQUOTE);
         if (r < 0)
                 return log_error_errno(r, "Failed to split getter option: %m");
 
@@ -266,7 +266,6 @@ static int request_handler(
         int r, code, fd;
         _cleanup_free_ char *hostname = NULL;
         bool chunked = false;
-        size_t len;
 
         assert(connection);
         assert(connection_cls);
@@ -302,6 +301,8 @@ static int request_handler(
 
         header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Content-Length");
         if (header) {
+                size_t len;
+
                 if (chunked)
                         return mhd_respond(connection, MHD_HTTP_BAD_REQUEST,
                                            "Content-Length must not specified when Transfer-Encoding type is 'chuncked'");
@@ -528,7 +529,7 @@ static int dispatch_http_event(sd_event_source *event,
                                void *userdata) {
         MHDDaemonWrapper *d = userdata;
         int r;
-        MHD_UNSIGNED_LONG_LONG timeout = ULONG_LONG_MAX;
+        MHD_UNSIGNED_LONG_LONG timeout = ULLONG_MAX;
 
         assert(d);
 
@@ -538,7 +539,7 @@ static int dispatch_http_event(sd_event_source *event,
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
                                        "MHD_run failed!");
         if (MHD_get_timeout(d->daemon, &timeout) == MHD_NO)
-                timeout = ULONG_LONG_MAX;
+                timeout = ULLONG_MAX;
 
         r = sd_event_source_set_time(d->timer_event, timeout);
         if (r < 0) {

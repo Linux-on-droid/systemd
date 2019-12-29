@@ -4,7 +4,6 @@
 #include <netdb.h>
 #include <nss.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -169,7 +168,7 @@ enum nss_status _nss_resolve_gethostbyname4_r(
                 /* Return NSS_STATUS_UNAVAIL when communication with systemd-resolved fails,
                    allowing falling back to other nss modules. Treat all other error conditions as
                    NOTFOUND. This includes DNSSEC errors and suchlike. (We don't use UNAVAIL in this
-                   case so that the nsswitch.conf configuration can distuingish such executed but
+                   case so that the nsswitch.conf configuration can distinguish such executed but
                    negative replies from complete failure to talk to resolved). */
                 goto fail;
         }

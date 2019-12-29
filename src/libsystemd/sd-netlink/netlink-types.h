@@ -36,8 +36,6 @@ struct NLTypeSystemUnion {
         const NLTypeSystem *type_systems;
 };
 
-extern const NLTypeSystem rtnl_type_system_root;
-extern const NLTypeSystem genl_type_system_root;
 extern const NLTypeSystem genl_family_type_system_root;
 
 uint16_t type_get_type(const NLType *type);
@@ -47,6 +45,7 @@ void type_get_type_system_union(const NLType *type, const NLTypeSystemUnion **re
 
 const NLTypeSystem* type_system_get_root(int protocol);
 uint16_t type_system_get_count(const NLTypeSystem *type_system);
+int type_system_root_get_type(sd_netlink *nl, const NLType **ret, uint16_t type);
 int type_system_get_type(const NLTypeSystem *type_system, const NLType **ret, uint16_t type);
 int type_system_get_type_system(const NLTypeSystem *type_system, const NLTypeSystem **ret, uint16_t type);
 int type_system_get_type_system_union(const NLTypeSystem *type_system, const NLTypeSystemUnion **ret, uint16_t type);
@@ -62,6 +61,7 @@ typedef enum NLUnionLinkInfoData {
         NL_UNION_LINK_INFO_DATA_MACVLAN,
         NL_UNION_LINK_INFO_DATA_MACVTAP,
         NL_UNION_LINK_INFO_DATA_IPVLAN,
+        NL_UNION_LINK_INFO_DATA_IPVTAP,
         NL_UNION_LINK_INFO_DATA_VXLAN,
         NL_UNION_LINK_INFO_DATA_IPIP_TUNNEL,
         NL_UNION_LINK_INFO_DATA_IPGRE_TUNNEL,
@@ -80,6 +80,9 @@ typedef enum NLUnionLinkInfoData {
         NL_UNION_LINK_INFO_DATA_WIREGUARD,
         NL_UNION_LINK_INFO_DATA_NETDEVSIM,
         NL_UNION_LINK_INFO_DATA_CAN,
+        NL_UNION_LINK_INFO_DATA_MACSEC,
+        NL_UNION_LINK_INFO_DATA_NLMON,
+        NL_UNION_LINK_INFO_DATA_XFRM,
         _NL_UNION_LINK_INFO_DATA_MAX,
         _NL_UNION_LINK_INFO_DATA_INVALID = -1
 } NLUnionLinkInfoData;

@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <fcntl.h>
-#include <linux/magic.h>
+#include <sys/ioctl.h>
 
 #include "fd-util.h"
-#include "missing.h"
+#include "missing_fs.h"
+#include "missing_magic.h"
 #include "namespace-util.h"
 #include "process-util.h"
 #include "stat-util.h"
@@ -62,21 +63,19 @@ int namespace_open(pid_t pid, int *pidns_fd, int *mntns_fd, int *netns_fd, int *
         }
 
         if (pidns_fd)
-                *pidns_fd = pidnsfd;
+                *pidns_fd = TAKE_FD(pidnsfd);
 
         if (mntns_fd)
-                *mntns_fd = mntnsfd;
+                *mntns_fd = TAKE_FD(mntnsfd);
 
         if (netns_fd)
-                *netns_fd = netnsfd;
+                *netns_fd = TAKE_FD(netnsfd);
 
         if (userns_fd)
-                *userns_fd = usernsfd;
+                *userns_fd = TAKE_FD(usernsfd);
 
         if (root_fd)
-                *root_fd = rfd;
-
-        pidnsfd = mntnsfd = netnsfd = usernsfd = -1;
+                *root_fd = TAKE_FD(rfd);
 
         return 0;
 }

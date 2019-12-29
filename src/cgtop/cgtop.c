@@ -1,12 +1,10 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include <alloca.h>
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "sd-bus.h"
@@ -20,6 +18,7 @@
 #include "fileio.h"
 #include "hashmap.h"
 #include "main-func.h"
+#include "missing_sched.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "pretty-print.h"
@@ -111,7 +110,7 @@ static bool is_root_cgroup(const char *path) {
          *
          * There's one extra complication in all of this, though 😣: if the path to the cgroup indicates we are in the
          * root cgroup this might actually not be the case, because cgroup namespacing might be in effect
-         * (CLONE_NEWCGROUP). Since there's no nice way to distuingish a real cgroup root from a fake namespaced one we
+         * (CLONE_NEWCGROUP). Since there's no nice way to distinguish a real cgroup root from a fake namespaced one we
          * do an explicit container check here, under the assumption that CLONE_NEWCGROUP is generally used when
          * container managers are used too.
          *
@@ -459,7 +458,7 @@ static int refresh_one(
                 if (r == 0)
                         break;
 
-                p = strjoin(path, "/", fn);
+                p = path_join(path, fn);
                 if (!p)
                         return -ENOMEM;
 
@@ -898,7 +897,7 @@ static const char* counting_what(void) {
                 return "userspace processes (excl. kernel)";
 }
 
-DEFINE_PRIVATE_HASH_OPS_WITH_VALUE_DESTRUCTOR(group_hash_ops, char, path_hash_func, path_compare_func, Group, group_free);
+DEFINE_PRIVATE_HASH_OPS_WITH_VALUE_DESTRUCTOR(group_hash_ops, char, path_hash_func, path_compare, Group, group_free);
 
 static int run(int argc, char *argv[]) {
         _cleanup_hashmap_free_ Hashmap *a = NULL, *b = NULL;
@@ -909,6 +908,7 @@ static int run(int argc, char *argv[]) {
         CGroupMask mask;
         int r;
 
+        log_show_color(true);
         log_parse_environment();
         log_open();
 
@@ -929,7 +929,7 @@ static int run(int argc, char *argv[]) {
         r = show_cgroup_get_path_and_warn(arg_machine, arg_root, &root);
         if (r < 0)
                 return log_error_errno(r, "Failed to get root control group path: %m");
-        log_debug("Cgroup path: %s", root);
+        log_debug("CGroup path: %s", root);
 
         a = hashmap_new(&group_hash_ops);
         b = hashmap_new(&group_hash_ops);

@@ -17,6 +17,7 @@ typedef struct Server Server;
 #include "list.h"
 #include "prioq.h"
 #include "time-util.h"
+#include "varlink.h"
 
 typedef enum Storage {
         STORAGE_AUTO,
@@ -93,10 +94,10 @@ struct Server {
         char *buffer;
         size_t buffer_size;
 
-        JournalRateLimit *rate_limit;
+        JournalRateLimit *ratelimit;
         usec_t sync_interval_usec;
-        usec_t rate_limit_interval;
-        unsigned rate_limit_burst;
+        usec_t ratelimit_interval;
+        unsigned ratelimit_burst;
 
         JournalStorage runtime_storage;
         JournalStorage system_storage;
@@ -112,8 +113,6 @@ struct Server {
 
         unsigned n_forward_syslog_missed;
         usec_t last_warn_forward_syslog_missed;
-
-        uint64_t var_available_timestamp;
 
         usec_t max_retention_usec;
         usec_t max_file_usec;
@@ -166,6 +165,8 @@ struct Server {
 
         ClientContext *my_context; /* the context of journald itself */
         ClientContext *pid1_context; /* the context of PID 1 */
+
+        VarlinkServer *varlink_server;
 };
 
 #define SERVER_MACHINE_ID(s) ((s)->machine_id_field + STRLEN("_MACHINE_ID="))

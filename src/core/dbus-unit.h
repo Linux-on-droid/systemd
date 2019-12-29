@@ -4,7 +4,6 @@
 #include "sd-bus.h"
 #include "sd-bus-vtable.h"
 
-#include "job.h"
 #include "unit.h"
 
 extern const sd_bus_vtable bus_unit_vtable[];
@@ -25,6 +24,7 @@ int bus_unit_method_get_processes(sd_bus_message *message, void *userdata, sd_bu
 int bus_unit_method_attach_processes(sd_bus_message *message, void *userdata, sd_bus_error *error);
 int bus_unit_method_ref(sd_bus_message *message, void *userdata, sd_bus_error *error);
 int bus_unit_method_unref(sd_bus_message *message, void *userdata, sd_bus_error *error);
+int bus_unit_method_clean(sd_bus_message *message, void *userdata, sd_bus_error *error);
 
 typedef enum BusUnitQueueFlags {
         BUS_UNIT_QUEUE_RELOAD_IF_POSSIBLE = 1 << 0,

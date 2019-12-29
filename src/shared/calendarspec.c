@@ -1,16 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include <alloca.h>
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdio_ext.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/mman.h>
-#include <time.h>
 
 #include "alloc-util.h"
 #include "calendarspec.h"
@@ -330,11 +326,9 @@ int calendar_spec_to_string(const CalendarSpec *c, char **p) {
         assert(c);
         assert(p);
 
-        f = open_memstream(&buf, &sz);
+        f = open_memstream_unlocked(&buf, &sz);
         if (!f)
                 return -ENOMEM;
-
-        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
 
         if (c->weekdays_bits > 0 && c->weekdays_bits <= BITS_WEEKDAYS) {
                 format_weekdays(f, c);
@@ -865,7 +859,6 @@ int calendar_spec_from_string(const char *p, CalendarSpec **spec) {
         int r;
 
         assert(p);
-        assert(spec);
 
         c = new(CalendarSpec, 1);
         if (!c)
@@ -1079,7 +1072,8 @@ int calendar_spec_from_string(const char *p, CalendarSpec **spec) {
         if (!calendar_spec_valid(c))
                 return -EINVAL;
 
-        *spec = TAKE_PTR(c);
+        if (spec)
+                *spec = TAKE_PTR(c);
         return 0;
 }
 
@@ -1149,14 +1143,9 @@ static int find_matching_component(const CalendarSpec *spec, const CalendarCompo
         return r;
 }
 
-static bool tm_out_of_bounds(const struct tm *tm, bool utc) {
+static int tm_within_bounds(struct tm *tm, bool utc) {
         struct tm t;
         assert(tm);
-
-        t = *tm;
-
-        if (mktime_or_timegm(&t, utc) < 0)
-                return true;
 
         /*
          * Set an upper bound on the year so impossible dates like "*-02-31"
@@ -1164,16 +1153,22 @@ static bool tm_out_of_bounds(const struct tm *tm, bool utc) {
          * since 1900, so adjust it accordingly.
          */
         if (tm->tm_year + 1900 > MAX_YEAR)
-                return true;
+                return -ERANGE;
+
+        t = *tm;
+        if (mktime_or_timegm(&t, utc) < 0)
+                return negative_errno();
 
         /* Did any normalization take place? If so, it was out of bounds before */
-        return
-                t.tm_year != tm->tm_year ||
-                t.tm_mon != tm->tm_mon ||
-                t.tm_mday != tm->tm_mday ||
-                t.tm_hour != tm->tm_hour ||
-                t.tm_min != tm->tm_min ||
-                t.tm_sec != tm->tm_sec;
+        bool good = t.tm_year == tm->tm_year &&
+                    t.tm_mon  == tm->tm_mon  &&
+                    t.tm_mday == tm->tm_mday &&
+                    t.tm_hour == tm->tm_hour &&
+                    t.tm_min  == tm->tm_min  &&
+                    t.tm_sec  == tm->tm_sec;
+        if (!good)
+                *tm = t;
+        return good;
 }
 
 static bool matches_weekday(int weekdays_bits, const struct tm *tm, bool utc) {
@@ -1195,6 +1190,8 @@ static int find_next(const CalendarSpec *spec, struct tm *tm, usec_t *usec) {
         struct tm c;
         int tm_usec;
         int r;
+
+        /* Returns -ENOENT if the expression is not going to elapse anymore */
 
         assert(spec);
         assert(tm);
@@ -1218,7 +1215,7 @@ static int find_next(const CalendarSpec *spec, struct tm *tm, usec_t *usec) {
                 }
                 if (r < 0)
                         return r;
-                if (tm_out_of_bounds(&c, spec->utc))
+                if (tm_within_bounds(&c, spec->utc) <= 0)
                         return -ENOENT;
 
                 c.tm_mon += 1;
@@ -1229,23 +1226,27 @@ static int find_next(const CalendarSpec *spec, struct tm *tm, usec_t *usec) {
                         c.tm_mday = 1;
                         c.tm_hour = c.tm_min = c.tm_sec = tm_usec = 0;
                 }
-                if (r < 0 || tm_out_of_bounds(&c, spec->utc)) {
+                if (r < 0 || (r = tm_within_bounds(&c, spec->utc)) < 0) {
                         c.tm_year++;
                         c.tm_mon = 0;
                         c.tm_mday = 1;
                         c.tm_hour = c.tm_min = c.tm_sec = tm_usec = 0;
                         continue;
                 }
+                if (r == 0)
+                        continue;
 
                 r = find_matching_component(spec, spec->day, &c, &c.tm_mday);
                 if (r > 0)
                         c.tm_hour = c.tm_min = c.tm_sec = tm_usec = 0;
-                if (r < 0 || tm_out_of_bounds(&c, spec->utc)) {
+                if (r < 0 || (r = tm_within_bounds(&c, spec->utc)) < 0) {
                         c.tm_mon++;
                         c.tm_mday = 1;
                         c.tm_hour = c.tm_min = c.tm_sec = tm_usec = 0;
                         continue;
                 }
+                if (r == 0)
+                        continue;
 
                 if (!matches_weekday(spec->weekdays_bits, &c, spec->utc)) {
                         c.tm_mday++;
@@ -1256,31 +1257,40 @@ static int find_next(const CalendarSpec *spec, struct tm *tm, usec_t *usec) {
                 r = find_matching_component(spec, spec->hour, &c, &c.tm_hour);
                 if (r > 0)
                         c.tm_min = c.tm_sec = tm_usec = 0;
-                if (r < 0 || tm_out_of_bounds(&c, spec->utc)) {
+                if (r < 0 || (r = tm_within_bounds(&c, spec->utc)) < 0) {
                         c.tm_mday++;
                         c.tm_hour = c.tm_min = c.tm_sec = tm_usec = 0;
                         continue;
                 }
+                if (r == 0)
+                        /* The next hour we set might be missing if there
+                         * are time zone changes. Let's try again starting at
+                         * normalized time. */
+                        continue;
 
                 r = find_matching_component(spec, spec->minute, &c, &c.tm_min);
                 if (r > 0)
                         c.tm_sec = tm_usec = 0;
-                if (r < 0 || tm_out_of_bounds(&c, spec->utc)) {
+                if (r < 0 || (r = tm_within_bounds(&c, spec->utc)) < 0) {
                         c.tm_hour++;
                         c.tm_min = c.tm_sec = tm_usec = 0;
                         continue;
                 }
+                if (r == 0)
+                        continue;
 
                 c.tm_sec = c.tm_sec * USEC_PER_SEC + tm_usec;
                 r = find_matching_component(spec, spec->microsecond, &c, &c.tm_sec);
                 tm_usec = c.tm_sec % USEC_PER_SEC;
                 c.tm_sec /= USEC_PER_SEC;
 
-                if (r < 0 || tm_out_of_bounds(&c, spec->utc)) {
+                if (r < 0 || (r = tm_within_bounds(&c, spec->utc)) < 0) {
                         c.tm_min++;
                         c.tm_sec = tm_usec = 0;
                         continue;
                 }
+                if (r == 0)
+                        continue;
 
                 *tm = c;
                 *usec = tm_usec;
@@ -1288,14 +1298,13 @@ static int find_next(const CalendarSpec *spec, struct tm *tm, usec_t *usec) {
         }
 }
 
-static int calendar_spec_next_usec_impl(const CalendarSpec *spec, usec_t usec, usec_t *next) {
+static int calendar_spec_next_usec_impl(const CalendarSpec *spec, usec_t usec, usec_t *ret_next) {
         struct tm tm;
         time_t t;
         int r;
         usec_t tm_usec;
 
         assert(spec);
-        assert(next);
 
         if (usec > USEC_TIMESTAMP_FORMATTABLE_MAX)
                 return -EINVAL;
@@ -1313,7 +1322,9 @@ static int calendar_spec_next_usec_impl(const CalendarSpec *spec, usec_t usec, u
         if (t < 0)
                 return -EINVAL;
 
-        *next = (usec_t) t * USEC_PER_SEC + tm_usec;
+        if (ret_next)
+                *ret_next = (usec_t) t * USEC_PER_SEC + tm_usec;
+
         return 0;
 }
 
@@ -1322,12 +1333,14 @@ typedef struct SpecNextResult {
         int return_value;
 } SpecNextResult;
 
-int calendar_spec_next_usec(const CalendarSpec *spec, usec_t usec, usec_t *next) {
+int calendar_spec_next_usec(const CalendarSpec *spec, usec_t usec, usec_t *ret_next) {
         SpecNextResult *shared, tmp;
         int r;
 
+        assert(spec);
+
         if (isempty(spec->timezone))
-                return calendar_spec_next_usec_impl(spec, usec, next);
+                return calendar_spec_next_usec_impl(spec, usec, ret_next);
 
         shared = mmap(NULL, sizeof *shared, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
         if (shared == MAP_FAILED)
@@ -1339,7 +1352,12 @@ int calendar_spec_next_usec(const CalendarSpec *spec, usec_t usec, usec_t *next)
                 return r;
         }
         if (r == 0) {
-                if (setenv("TZ", spec->timezone, 1) != 0) {
+                char *colon_tz;
+
+                /* tzset(3) says $TZ should be prefixed with ":" if we reference timezone files */
+                colon_tz = strjoina(":", spec->timezone);
+
+                if (setenv("TZ", colon_tz, 1) != 0) {
                         shared->return_value = negative_errno();
                         _exit(EXIT_FAILURE);
                 }
@@ -1355,8 +1373,8 @@ int calendar_spec_next_usec(const CalendarSpec *spec, usec_t usec, usec_t *next)
         if (munmap(shared, sizeof *shared) < 0)
                 return negative_errno();
 
-        if (tmp.return_value == 0)
-                *next = tmp.next;
+        if (tmp.return_value == 0 && ret_next)
+                *ret_next = tmp.next;
 
         return tmp.return_value;
 }

@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <errno.h>
-#include <linux/if_vlan.h>
 #include <net/if.h>
+#include <linux/if_vlan.h>
 
-#include "netdev/vlan.h"
 #include "vlan-util.h"
+#include "vlan.h"
 
 static int netdev_vlan_fill_message_create(NetDev *netdev, Link *link, sd_netlink_message *req) {
         struct ifla_vlan_flags flags = {};

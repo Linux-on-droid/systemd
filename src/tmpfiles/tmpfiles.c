@@ -4,16 +4,12 @@
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <getopt.h>
-#include <glob.h>
 #include <limits.h>
 #include <linux/fs.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/file.h>
-#include <sys/stat.h>
 #include <sys/xattr.h>
 #include <sysexits.h>
 #include <time.h>
@@ -41,7 +37,6 @@
 #include "log.h"
 #include "macro.h"
 #include "main-func.h"
-#include "missing.h"
 #include "mkdir.h"
 #include "mountpoint-util.h"
 #include "pager.h"
@@ -77,7 +72,7 @@ typedef enum OperationMask {
 typedef enum ItemType {
         /* These ones take file names */
         CREATE_FILE = 'f',
-        TRUNCATE_FILE = 'F',
+        TRUNCATE_FILE = 'F', /* deprecated: use f+ */
         CREATE_DIRECTORY = 'd',
         TRUNCATE_DIRECTORY = 'D',
         CREATE_SUBVOLUME = 'v',
@@ -135,7 +130,7 @@ typedef struct Item {
 
         bool keep_first_level:1;
 
-        bool force:1;
+        bool append_or_force:1;
 
         bool allow_failure:1;
 
@@ -461,38 +456,6 @@ static bool unix_socket_alive(const char *fn) {
         return !!set_get(unix_sockets, (char*) fn);
 }
 
-static int dir_is_mount_point(DIR *d, const char *subdir) {
-
-        int mount_id_parent, mount_id;
-        int r_p, r;
-
-        r_p = name_to_handle_at_loop(dirfd(d), ".", NULL, &mount_id_parent, 0);
-        if (r_p < 0)
-                r_p = -errno;
-
-        r = name_to_handle_at_loop(dirfd(d), subdir, NULL, &mount_id, 0);
-        if (r < 0)
-                r = -errno;
-
-        /* got no handle; make no assumptions, return error */
-        if (r_p < 0 && r < 0)
-                return r_p;
-
-        /* got both handles; if they differ, it is a mount point */
-        if (r_p >= 0 && r >= 0)
-                return mount_id_parent != mount_id;
-
-        /* got only one handle; assume different mount points if one
-         * of both queries was not supported by the filesystem */
-        if (IN_SET(r_p, -ENOSYS, -EOPNOTSUPP) || IN_SET(r, -ENOSYS, -EOPNOTSUPP))
-                return true;
-
-        /* return error */
-        if (r_p < 0)
-                return r_p;
-        return r;
-}
-
 static DIR* xopendirat_nomod(int dirfd, const char *path) {
         DIR *dir;
 
@@ -557,13 +520,19 @@ static int dir_cleanup(
                 /* Try to detect bind mounts of the same filesystem instance; they
                  * do not differ in device major/minors. This type of query is not
                  * supported on all kernels or filesystem types though. */
-                if (S_ISDIR(s.st_mode) && dir_is_mount_point(d, dent->d_name) > 0) {
-                        log_debug("Ignoring \"%s/%s\": different mount of the same filesystem.",
-                                  p, dent->d_name);
-                        continue;
+                if (S_ISDIR(s.st_mode)) {
+                        int q;
+
+                        q = fd_is_mount_point(dirfd(d), dent->d_name, 0);
+                        if (q < 0)
+                                log_debug_errno(q, "Failed to determine whether \"%s/%s\" is a mount point, ignoring: %m", p, dent->d_name);
+                        else if (q > 0) {
+                                log_debug("Ignoring \"%s/%s\": different mount of the same filesystem.", p, dent->d_name);
+                                continue;
+                        }
                 }
 
-                sub_path = strjoin(p, "/", dent->d_name);
+                sub_path = path_join(p, dent->d_name);
                 if (!sub_path) {
                         r = log_oom();
                         goto finish;
@@ -656,14 +625,16 @@ static int dir_cleanup(
                                 continue;
                         }
 
-                        if (mountpoint && S_ISREG(s.st_mode))
-                                if (s.st_uid == 0 && STR_IN_SET(dent->d_name,
-                                                                ".journal",
-                                                                "aquota.user",
-                                                                "aquota.group")) {
-                                        log_debug("Skipping \"%s\".", sub_path);
-                                        continue;
-                                }
+                        if (mountpoint &&
+                            S_ISREG(s.st_mode) &&
+                            s.st_uid == 0 &&
+                            STR_IN_SET(dent->d_name,
+                                       ".journal",
+                                       "aquota.user",
+                                       "aquota.group")) {
+                                log_debug("Skipping \"%s\".", sub_path);
+                                continue;
+                        }
 
                         /* Ignore sockets that are listed in /proc/net/unix */
                         if (S_ISSOCK(s.st_mode) && unix_socket_alive(sub_path)) {
@@ -776,8 +747,24 @@ static bool hardlink_vulnerable(const struct stat *st) {
         return !S_ISDIR(st->st_mode) && st->st_nlink > 1 && dangerous_hardlinks();
 }
 
+static mode_t process_mask_perms(mode_t mode, mode_t current) {
+
+        if ((current & 0111) == 0)
+                mode &= ~0111;
+        if ((current & 0222) == 0)
+                mode &= ~0222;
+        if ((current & 0444) == 0)
+                mode &= ~0444;
+        if (!S_ISDIR(current))
+                mode &= ~07000; /* remove sticky/sgid/suid bit, unless directory */
+
+        return mode;
+}
+
 static int fd_set_perms(Item *i, int fd, const char *path, const struct stat *st) {
         struct stat stbuf;
+        mode_t new_mode;
+        bool do_chown;
 
         assert(i);
         assert(fd);
@@ -797,35 +784,39 @@ static int fd_set_perms(Item *i, int fd, const char *path, const struct stat *st
                                        "Refusing to set permissions on hardlinked file %s while the fs.protected_hardlinks sysctl is turned off.",
                                        path);
 
-        if (i->mode_set) {
+        /* Do we need a chown()? */
+        do_chown =
+                (i->uid_set && i->uid != st->st_uid) ||
+                (i->gid_set && i->gid != st->st_gid);
+
+        /* Calculate the mode to apply */
+        new_mode = i->mode_set ? (i->mask_perms ?
+                                  process_mask_perms(i->mode, st->st_mode) :
+                                  i->mode) :
+                                 (st->st_mode & 07777);
+
+        if (i->mode_set && do_chown) {
+                /* Before we issue the chmod() let's reduce the access mode to the common bits of the old and
+                 * the new mode. That way there's no time window where the file exists under the old owner
+                 * with more than the old access modes — and not under the new owner with more than the new
+                 * access modes either. */
+
                 if (S_ISLNK(st->st_mode))
-                        log_debug("Skipping mode fix for symlink %s.", path);
+                        log_debug("Skipping temporary mode fix for symlink %s.", path);
                 else {
-                        mode_t m = i->mode;
+                        mode_t m = new_mode & st->st_mode; /* Mask new mode by old mode */
 
-                        if (i->mask_perms) {
-                                if (!(st->st_mode & 0111))
-                                        m &= ~0111;
-                                if (!(st->st_mode & 0222))
-                                        m &= ~0222;
-                                if (!(st->st_mode & 0444))
-                                        m &= ~0444;
-                                if (!S_ISDIR(st->st_mode))
-                                        m &= ~07000; /* remove sticky/sgid/suid bit, unless directory */
-                        }
-
-                        if (m == (st->st_mode & 07777))
-                                log_debug("\"%s\" has correct mode %o already.", path, st->st_mode);
+                        if (((m ^ st->st_mode) & 07777) == 0)
+                                log_debug("\"%s\" matches temporary mode %o already.", path, m);
                         else {
-                                log_debug("Changing \"%s\" to mode %o.", path, m);
+                                log_debug("Temporarily changing \"%s\" to mode %o.", path, m);
                                 if (fchmod_opath(fd, m) < 0)
                                         return log_error_errno(errno, "fchmod() of %s failed: %m", path);
                         }
                 }
         }
 
-        if ((i->uid_set && i->uid != st->st_uid) ||
-            (i->gid_set && i->gid != st->st_gid)) {
+        if (do_chown) {
                 log_debug("Changing \"%s\" to owner "UID_FMT":"GID_FMT,
                           path,
                           i->uid_set ? i->uid : UID_INVALID,
@@ -839,13 +830,31 @@ static int fd_set_perms(Item *i, int fd, const char *path, const struct stat *st
                         return log_error_errno(errno, "fchownat() of %s failed: %m", path);
         }
 
+        /* Now, apply the final mode. We do this in two cases: when the user set a mode explicitly, or after a
+         * chown(), since chown()'s mangle the access mode in regards to sgid/suid in some conditions. */
+        if (i->mode_set || do_chown) {
+                if (S_ISLNK(st->st_mode))
+                        log_debug("Skipping mode fix for symlink %s.", path);
+                else {
+                       /* Check if the chmod() is unnecessary. Note that if we did a chown() before we always
+                        * chmod() here again, since it might have mangled the bits. */
+                        if (!do_chown && ((new_mode ^ st->st_mode) & 07777) == 0)
+                                log_debug("\"%s\" matches mode %o already.", path, new_mode);
+                        else {
+                                log_debug("Changing \"%s\" to mode %o.", path, new_mode);
+                                if (fchmod_opath(fd, new_mode) < 0)
+                                        return log_error_errno(errno, "fchmod() of %s failed: %m", path);
+                        }
+                }
+        }
+
 shortcut:
         return label_fix(path, 0);
 }
 
 static int path_open_parent_safe(const char *path) {
         _cleanup_free_ char *dn = NULL;
-        int fd;
+        int r, fd;
 
         if (path_equal(path, "/") || !path_is_normalized(path))
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
@@ -856,15 +865,15 @@ static int path_open_parent_safe(const char *path) {
         if (!dn)
                 return log_oom();
 
-        fd = chase_symlinks(dn, arg_root, CHASE_OPEN|CHASE_SAFE|CHASE_WARN, NULL);
-        if (fd < 0 && fd != -ENOLINK)
-                return log_error_errno(fd, "Failed to validate path %s: %m", path);
+        r = chase_symlinks(dn, arg_root, CHASE_SAFE|CHASE_WARN, NULL, &fd);
+        if (r < 0 && r != -ENOLINK)
+                return log_error_errno(r, "Failed to validate path %s: %m", path);
 
-        return fd;
+        return r < 0 ? r : fd;
 }
 
 static int path_open_safe(const char *path) {
-        int fd;
+        int r, fd;
 
         /* path_open_safe() returns a file descriptor opened with O_PATH after
          * verifying that the path doesn't contain unsafe transitions, except
@@ -877,11 +886,11 @@ static int path_open_safe(const char *path) {
                                        "Failed to open invalid path '%s'.",
                                        path);
 
-        fd = chase_symlinks(path, arg_root, CHASE_OPEN|CHASE_SAFE|CHASE_WARN|CHASE_NOFOLLOW, NULL);
-        if (fd < 0 && fd != -ENOLINK)
-                return log_error_errno(fd, "Failed to validate path %s: %m", path);
+        r = chase_symlinks(path, arg_root, CHASE_SAFE|CHASE_WARN|CHASE_NOFOLLOW, NULL, &fd);
+        if (r < 0 && r != -ENOLINK)
+                return log_error_errno(r, "Failed to validate path %s: %m", path);
 
-        return fd;
+        return r < 0 ? r : fd;
 }
 
 static int path_set_perms(Item *i, const char *path) {
@@ -909,7 +918,7 @@ static int parse_xattrs_from_arg(Item *i) {
         for (;;) {
                 _cleanup_free_ char *name = NULL, *value = NULL, *xattr = NULL;
 
-                r = extract_first_word(&p, &xattr, NULL, EXTRACT_QUOTES|EXTRACT_CUNESCAPE);
+                r = extract_first_word(&p, &xattr, NULL, EXTRACT_UNQUOTE|EXTRACT_CUNESCAPE);
                 if (r < 0)
                         log_warning_errno(r, "Failed to parse extended attribute '%s', ignoring: %m", p);
                 if (r <= 0)
@@ -973,10 +982,10 @@ static int parse_acls_from_arg(Item *item) {
 
         assert(item);
 
-        /* If force (= modify) is set, we will not modify the acl
+        /* If append_or_force (= modify) is set, we will not modify the acl
          * afterwards, so the mask can be added now if necessary. */
 
-        r = parse_acl(item->argument, &item->acl_access, &item->acl_default, !item->force);
+        r = parse_acl(item->argument, &item->acl_access, &item->acl_default, !item->append_or_force);
         if (r < 0)
                 log_warning_errno(r, "Failed to parse ACL \"%s\": %m. Ignoring", item->argument);
 #else
@@ -1061,11 +1070,11 @@ static int fd_set_acls(Item *item, int fd, const char *path, const struct stat *
         xsprintf(procfs_path, "/proc/self/fd/%i", fd);
 
         if (item->acl_access)
-                r = path_set_acl(procfs_path, path, ACL_TYPE_ACCESS, item->acl_access, item->force);
+                r = path_set_acl(procfs_path, path, ACL_TYPE_ACCESS, item->acl_access, item->append_or_force);
 
         /* set only default acls to folders */
         if (r == 0 && item->acl_default && S_ISDIR(st->st_mode))
-                r = path_set_acl(procfs_path, path, ACL_TYPE_DEFAULT, item->acl_default, item->force);
+                r = path_set_acl(procfs_path, path, ACL_TYPE_DEFAULT, item->acl_default, item->append_or_force);
 
         if (r > 0)
                 return -r; /* already warned */
@@ -1243,7 +1252,7 @@ static int path_set_attribute(Item *item, const char *path) {
 static int write_one_file(Item *i, const char *path) {
         _cleanup_close_ int fd = -1, dir_fd = -1;
         char *bn;
-        int r;
+        int flags, r;
 
         assert(i);
         assert(path);
@@ -1258,8 +1267,10 @@ static int write_one_file(Item *i, const char *path) {
 
         bn = basename(path);
 
+        flags = O_NONBLOCK|O_CLOEXEC|O_WRONLY|O_NOCTTY;
+
         /* Follows symlinks */
-        fd = openat(dir_fd, bn, O_NONBLOCK|O_CLOEXEC|O_WRONLY|O_NOCTTY, i->mode);
+        fd = openat(dir_fd, bn, i->append_or_force ? flags|O_APPEND : flags, i->mode);
         if (fd < 0) {
                 if (errno == ENOENT) {
                         log_debug_errno(errno, "Not writing missing file \"%s\": %m", path);
@@ -1354,7 +1365,7 @@ static int truncate_file(Item *i, const char *path) {
 
         assert(i);
         assert(path);
-        assert(i->type == TRUNCATE_FILE);
+        assert(i->type == TRUNCATE_FILE || (i->type == CREATE_FILE && i->append_or_force));
 
         /* We want to operate on regular file exclusively especially since
          * O_TRUNC is unspecified if the file is neither a regular file nor a
@@ -1682,7 +1693,7 @@ static int create_device(Item *i, mode_t file_type) {
 
                 if ((st.st_mode & S_IFMT) != file_type) {
 
-                        if (i->force) {
+                        if (i->append_or_force) {
 
                                 RUN_WITH_UMASK(0000) {
                                         mac_selinux_create_file_prepare(i->path, file_type);
@@ -1743,7 +1754,7 @@ static int create_fifo(Item *i, const char *path) {
 
                 if (!S_ISFIFO(st.st_mode)) {
 
-                        if (i->force) {
+                        if (i->append_or_force) {
                                 RUN_WITH_UMASK(0000) {
                                         mac_selinux_create_file_prepare(path, S_IFIFO);
                                         r = mkfifoat_atomic(pfd, bn, i->mode);
@@ -1911,20 +1922,16 @@ static int create_item(Item *i) {
         case RECURSIVE_REMOVE_PATH:
                 return 0;
 
+        case TRUNCATE_FILE:
         case CREATE_FILE:
                 RUN_WITH_UMASK(0000)
                         (void) mkdir_parents_label(i->path, 0755);
 
-                r = create_file(i, i->path);
-                if (r < 0)
-                        return r;
-                break;
+                if ((i->type == CREATE_FILE && i->append_or_force) || i->type == TRUNCATE_FILE)
+                        r = truncate_file(i, i->path);
+                else
+                        r = create_file(i, i->path);
 
-        case TRUNCATE_FILE:
-                RUN_WITH_UMASK(0000)
-                        (void) mkdir_parents_label(i->path, 0755);
-
-                r = truncate_file(i, i->path);
                 if (r < 0)
                         return r;
                 break;
@@ -1998,7 +2005,7 @@ static int create_item(Item *i) {
                         r = readlink_malloc(i->path, &x);
                         if (r < 0 || !streq(i->argument, x)) {
 
-                                if (i->force) {
+                                if (i->append_or_force) {
                                         mac_selinux_create_file_prepare(i->path, S_IFLNK);
                                         r = symlink_atomic(i->argument, i->path);
                                         mac_selinux_create_file_clear();
@@ -2241,7 +2248,7 @@ static int process_item(Item *i, OperationMask operation) {
 
         i->done |= operation;
 
-        r = chase_symlinks(i->path, arg_root, CHASE_NO_AUTOFS|CHASE_WARN, NULL);
+        r = chase_symlinks(i->path, arg_root, CHASE_NO_AUTOFS|CHASE_WARN, NULL, NULL);
         if (r == -EREMOTE) {
                 log_notice_errno(r, "Skipping %s", i->path);
                 return 0;
@@ -2397,7 +2404,7 @@ static int specifier_expansion_from_arg(Item *i) {
 
         assert(i);
 
-        if (i->argument == NULL)
+        if (!i->argument)
                 return 0;
 
         switch (i->type) {
@@ -2457,15 +2464,14 @@ static int patch_var_run(const char *fname, unsigned line, char **path) {
         if (isempty(k)) /* Don't complain about other paths than /var/run, and not about /var/run itself either. */
                 return 0;
 
-        n = strjoin("/run/", k);
+        n = path_join("/run", k);
         if (!n)
                 return log_oom();
 
         /* Also log about this briefly. We do so at LOG_NOTICE level, as we fixed up the situation automatically, hence
          * there's no immediate need for action by the user. However, in the interest of making things less confusing
          * to the user, let's still inform the user that these snippets should really be updated. */
-
-        log_notice("[%s:%u] Line references path below legacy directory /var/run/, updating %s → %s; please update the tmpfiles.d/ drop-in file accordingly.", fname, line, *path, n);
+        log_syntax(NULL, LOG_NOTICE, fname, line, 0, "Line references path below legacy directory /var/run/, updating %s → %s; please update the tmpfiles.d/ drop-in file accordingly.", *path, n);
 
         free_and_replace(*path, n);
 
@@ -2479,7 +2485,7 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
         ItemArray *existing;
         OrderedHashmap *h;
         int r, pos;
-        bool force = false, boot = false, allow_failure = false;
+        bool append_or_force = false, boot = false, allow_failure = false;
 
         assert(fname);
         assert(line >= 1);
@@ -2488,7 +2494,7 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
         r = extract_many_words(
                         &buffer,
                         NULL,
-                        EXTRACT_QUOTES,
+                        EXTRACT_UNQUOTE,
                         &action,
                         &path,
                         &mode,
@@ -2522,8 +2528,8 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
         for (pos = 1; action[pos]; pos++) {
                 if (action[pos] == '!' && !boot)
                         boot = true;
-                else if (action[pos] == '+' && !force)
-                        force = true;
+                else if (action[pos] == '+' && !append_or_force)
+                        append_or_force = true;
                 else if (action[pos] == '-' && !allow_failure)
                         allow_failure = true;
                 else {
@@ -2541,7 +2547,7 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
         }
 
         i.type = action[0];
-        i.force = force;
+        i.append_or_force = append_or_force;
         i.allow_failure = allow_failure;
 
         r = specifier_printf(path, specifier_table, NULL, &i.path);
@@ -2584,7 +2590,7 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
 
         case CREATE_SYMLINK:
                 if (!i.argument) {
-                        i.argument = strappend("/usr/share/factory/", i.path);
+                        i.argument = path_join("/usr/share/factory", i.path);
                         if (!i.argument)
                                 return log_oom();
                 }
@@ -2600,13 +2606,22 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
 
         case COPY_FILES:
                 if (!i.argument) {
-                        i.argument = strappend("/usr/share/factory/", i.path);
+                        i.argument = path_join(arg_root, "/usr/share/factory", i.path);
                         if (!i.argument)
                                 return log_oom();
+
                 } else if (!path_is_absolute(i.argument)) {
                         *invalid_config = true;
                         log_error("[%s:%u] Source path is not absolute.", fname, line);
                         return -EBADMSG;
+
+                } else if (arg_root) {
+                        char *p;
+
+                        p = path_join(arg_root, i.argument);
+                        if (!p)
+                                return log_oom();
+                        free_and_replace(i.argument, p);
                 }
 
                 path_simplify(i.argument, false);
@@ -2697,10 +2712,9 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
         if (arg_root) {
                 char *p;
 
-                p = prefix_root(arg_root, i.path);
+                p = path_join(arg_root, i.path);
                 if (!p)
                         return log_oom();
-
                 free_and_replace(i.path, p);
         }
 
@@ -2773,7 +2787,7 @@ static int parse_line(const char *fname, unsigned line, const char *buffer, bool
                 size_t n;
 
                 for (n = 0; n < existing->n_items; n++) {
-                        if (!item_compatible(existing->items + n, &i)) {
+                        if (!item_compatible(existing->items + n, &i) && !i.append_or_force) {
                                 log_notice("[%s:%u] Duplicate line for path \"%s\", ignoring.",
                                            fname, line, i.path);
                                 return 0;

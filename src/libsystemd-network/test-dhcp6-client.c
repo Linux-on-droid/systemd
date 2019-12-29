@@ -4,9 +4,9 @@
 ***/
 
 #include <net/ethernet.h>
+#include <net/if_arp.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 

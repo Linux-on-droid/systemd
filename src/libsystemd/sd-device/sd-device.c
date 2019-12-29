@@ -146,7 +146,7 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
                                        _syspath);
 
         if (verify) {
-                r = chase_symlinks(_syspath, NULL, 0, &syspath);
+                r = chase_symlinks(_syspath, NULL, 0, &syspath, NULL);
                 if (r == -ENOENT)
                         return -ENODEV; /* the device does not exist (any more?) */
                 if (r < 0)
@@ -157,7 +157,7 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
                         char *p;
 
                         /* /sys is a symlink to somewhere sysfs is mounted on? In that case, we convert the path to real sysfs to "/sys". */
-                        r = chase_symlinks("/sys", NULL, 0, &real_sys);
+                        r = chase_symlinks("/sys", NULL, 0, &real_sys, NULL);
                         if (r < 0)
                                 return log_debug_errno(r, "sd-device: Failed to chase symlink /sys: %m");
 
@@ -167,7 +167,7 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
                                                        "sd-device: Canonicalized path '%s' does not starts with sysfs mount point '%s'",
                                                        syspath, real_sys);
 
-                        new_syspath = strjoin("/sys/", p);
+                        new_syspath = path_join("/sys", p);
                         if (!new_syspath)
                                 return -ENOMEM;
 
@@ -200,6 +200,10 @@ int device_set_syspath(sd_device *device, const char *_syspath, bool verify) {
         }
 
         devpath = syspath + STRLEN("/sys");
+
+        if (devpath[0] == '\0')
+                /* '/sys' alone is not a valid device path */
+                return -ENODEV;
 
         r = device_add_property_internal(device, "DEVPATH", devpath);
         if (r < 0)
@@ -834,8 +838,7 @@ _public_ int sd_device_get_subsystem(sd_device *device, const char **ret) {
 _public_ int sd_device_get_devtype(sd_device *device, const char **devtype) {
         int r;
 
-        assert(devtype);
-        assert(device);
+        assert_return(device, -EINVAL);
 
         r = device_read_uevent_file(device);
         if (r < 0)
@@ -844,9 +847,10 @@ _public_ int sd_device_get_devtype(sd_device *device, const char **devtype) {
         if (!device->devtype)
                 return -ENOENT;
 
-        *devtype = device->devtype;
+        if (devtype)
+                *devtype = device->devtype;
 
-        return 0;
+        return !!device->devtype;
 }
 
 _public_ int sd_device_get_parent_with_subsystem_devtype(sd_device *child, const char *subsystem, const char *devtype, sd_device **ret) {
@@ -1536,7 +1540,6 @@ int device_properties_prepare(sd_device *device) {
 
 _public_ const char *sd_device_get_property_first(sd_device *device, const char **_value) {
         const char *key;
-        const char *value;
         int r;
 
         assert_return(device, NULL);
@@ -1548,16 +1551,12 @@ _public_ const char *sd_device_get_property_first(sd_device *device, const char 
         device->properties_iterator_generation = device->properties_generation;
         device->properties_iterator = ITERATOR_FIRST;
 
-        ordered_hashmap_iterate(device->properties, &device->properties_iterator, (void**)&value, (const void**)&key);
-
-        if (_value)
-                *_value = value;
+        (void) ordered_hashmap_iterate(device->properties, &device->properties_iterator, (void**)_value, (const void**)&key);
         return key;
 }
 
 _public_ const char *sd_device_get_property_next(sd_device *device, const char **_value) {
         const char *key;
-        const char *value;
         int r;
 
         assert_return(device, NULL);
@@ -1569,10 +1568,7 @@ _public_ const char *sd_device_get_property_next(sd_device *device, const char *
         if (device->properties_iterator_generation != device->properties_generation)
                 return NULL;
 
-        ordered_hashmap_iterate(device->properties, &device->properties_iterator, (void**)&value, (const void**)&key);
-
-        if (_value)
-                *_value = value;
+        (void) ordered_hashmap_iterate(device->properties, &device->properties_iterator, (void**)_value, (const void**)&key);
         return key;
 }
 
@@ -1600,14 +1596,16 @@ static int device_sysattrs_read_all(sd_device *device) {
                 return r;
 
         FOREACH_DIRENT_ALL(dent, dir, return -errno) {
-                char *path;
+                _cleanup_free_ char *path = NULL;
                 struct stat statbuf;
 
                 /* only handle symlinks and regular files */
                 if (!IN_SET(dent->d_type, DT_LNK, DT_REG))
                         continue;
 
-                path = strjoina(syspath, "/", dent->d_name);
+                path = path_join(syspath, dent->d_name);
+                if (!path)
+                        return -ENOMEM;
 
                 if (lstat(path, &statbuf) != 0)
                         continue;
@@ -1733,8 +1731,7 @@ static int device_get_sysattr_value(sd_device *device, const char *_key, const c
  * with a NULL value in the cache, otherwise the returned string is stored */
 _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr, const char **_value) {
         _cleanup_free_ char *value = NULL;
-        const char *syspath, *cached_value = NULL;
-        char *path;
+        const char *path, *syspath, *cached_value = NULL;
         struct stat statbuf;
         int r;
 
@@ -1761,7 +1758,7 @@ _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr,
         if (r < 0)
                 return r;
 
-        path = strjoina(syspath, "/", sysattr);
+        path = prefix_roota(syspath, sysattr);
         r = lstat(path, &statbuf);
         if (r < 0) {
                 /* remember that we could not access the sysattr */
@@ -1789,7 +1786,7 @@ _public_ int sd_device_get_sysattr_value(sd_device *device, const char *sysattr,
                 size_t size;
 
                 /* read attribute value */
-                r = read_full_file(path, &value, &size);
+                r = read_full_virtual_file(path, &value, &size);
                 if (r < 0)
                         return r;
 
@@ -1836,7 +1833,7 @@ _public_ int sd_device_set_sysattr_value(sd_device *device, const char *sysattr,
         if (r < 0)
                 return r;
 
-        path = strjoina(syspath, "/", sysattr);
+        path = prefix_roota(syspath, sysattr);
 
         len = strlen(_value);
 

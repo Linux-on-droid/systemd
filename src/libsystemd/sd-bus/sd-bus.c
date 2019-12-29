@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -34,8 +35,9 @@
 #include "hostname-util.h"
 #include "macro.h"
 #include "memory-util.h"
-#include "missing.h"
+#include "missing_syscall.h"
 #include "parse-util.h"
+#include "path-util.h"
 #include "process-util.h"
 #include "string-util.h"
 #include "strv.h"
@@ -465,9 +467,9 @@ static int synthesize_connected_signal(sd_bus *bus) {
 
         /* If enabled, synthesizes a local "Connected" signal mirroring the local "Disconnected" signal. This is called
          * whenever we fully established a connection, i.e. after the authorization phase, and after receiving the
-         * Hello() reply. Or in other words, whenver we enter BUS_RUNNING state.
+         * Hello() reply. Or in other words, whenever we enter BUS_RUNNING state.
          *
-         * This is useful so that clients can start doing stuff whenver the connection is fully established in a way
+         * This is useful so that clients can start doing stuff whenever the connection is fully established in a way
          * that works independently from whether we connected to a full bus or just a direct connection. */
 
         if (!bus->connected_signal)
@@ -483,6 +485,7 @@ static int synthesize_connected_signal(sd_bus *bus) {
                 return r;
 
         bus_message_set_sender_local(bus, m);
+        m->read_counter = ++bus->read_counter;
 
         r = bus_seal_synthetic_message(bus, m);
         if (r < 0)
@@ -534,29 +537,41 @@ static int hello_callback(sd_bus_message *reply, void *userdata, sd_bus_error *e
         assert(IN_SET(bus->state, BUS_HELLO, BUS_CLOSING));
 
         r = sd_bus_message_get_errno(reply);
-        if (r > 0)
-                return -r;
+        if (r > 0) {
+                r = -r;
+                goto fail;
+        }
 
         r = sd_bus_message_read(reply, "s", &s);
         if (r < 0)
-                return r;
+                goto fail;
 
-        if (!service_name_is_valid(s) || s[0] != ':')
-                return -EBADMSG;
+        if (!service_name_is_valid(s) || s[0] != ':') {
+                r = -EBADMSG;
+                goto fail;
+        }
 
         r = free_and_strdup(&bus->unique_name, s);
         if (r < 0)
-                return r;
+                goto fail;
 
         if (bus->state == BUS_HELLO) {
                 bus_set_state(bus, BUS_RUNNING);
 
                 r = synthesize_connected_signal(bus);
                 if (r < 0)
-                        return r;
+                        goto fail;
         }
 
         return 1;
+
+fail:
+        /* When Hello() failed, let's propagate this in two ways: first we return the error immediately here,
+         * which is the propagated up towards the event loop. Let's also invalidate the connection, so that
+         * if the user then calls back into us again we won't wait any longer. */
+
+        bus_set_state(bus, BUS_CLOSING);
+        return r;
 }
 
 static int bus_send_hello(sd_bus *bus) {
@@ -1204,7 +1219,7 @@ _public_ int sd_bus_open_with_description(sd_bus **ret, const char *description)
         assert_return(ret, -EINVAL);
 
         /* Let's connect to the starter bus if it is set, and
-         * otherwise to the bus that is appropropriate for the scope
+         * otherwise to the bus that is appropriate for the scope
          * we are running in */
 
         e = secure_getenv("DBUS_STARTER_BUS_TYPE");
@@ -1352,8 +1367,7 @@ _public_ int sd_bus_open_user_with_description(sd_bus **ret, const char *descrip
         b->bus_client = true;
         b->is_user = true;
 
-        /* We don't do any per-method access control on the user
-         * bus. */
+        /* We don't do any per-method access control on the user bus. */
         b->trusted = true;
         b->is_local = true;
 
@@ -2421,6 +2435,8 @@ static int process_timeout(sd_bus *bus) {
         if (r < 0)
                 return r;
 
+        m->read_counter = ++bus->read_counter;
+
         r = bus_seal_synthetic_message(bus, m);
         if (r < 0)
                 return r;
@@ -2523,6 +2539,7 @@ static int process_reply(sd_bus *bus, sd_bus_message *m) {
                 synthetic_reply->realtime = m->realtime;
                 synthetic_reply->monotonic = m->monotonic;
                 synthetic_reply->seqnum = m->seqnum;
+                synthetic_reply->read_counter = m->read_counter;
 
                 r = bus_seal_synthetic_message(bus, synthetic_reply);
                 if (r < 0)
@@ -2865,6 +2882,8 @@ static int process_closing_reply_callback(sd_bus *bus, struct reply_callback *c)
         if (r < 0)
                 return r;
 
+        m->read_counter = ++bus->read_counter;
+
         r = bus_seal_synthetic_message(bus, m);
         if (r < 0)
                 return r;
@@ -2929,6 +2948,7 @@ static int process_closing(sd_bus *bus, sd_bus_message **ret) {
                 return r;
 
         bus_message_set_sender_local(bus, m);
+        m->read_counter = ++bus->read_counter;
 
         r = bus_seal_synthetic_message(bus, m);
         if (r < 0)
@@ -3238,14 +3258,15 @@ static int add_match_callback(
                 bus->current_slot = match_slot->match_callback.install_slot;
                 bus->current_handler = add_match_callback;
                 bus->current_userdata = userdata;
-
-                match_slot->match_callback.install_slot = sd_bus_slot_unref(match_slot->match_callback.install_slot);
         } else {
                 if (failed) /* Generic failure handling: destroy the connection */
                         bus_enter_closing(sd_bus_message_get_bus(m));
 
                 r = 1;
         }
+
+        /* We don't need the install method reply slot anymore, let's free it */
+        match_slot->match_callback.install_slot = sd_bus_slot_unref(match_slot->match_callback.install_slot);
 
         if (failed && match_slot->floating)
                 bus_slot_disconnect(match_slot, true);
@@ -3318,7 +3339,7 @@ static int bus_add_match_full(
                                  * then make it floating. */
                                 r = sd_bus_slot_set_floating(s->match_callback.install_slot, true);
                         } else
-                                r = bus_add_match_internal(bus, s->match_callback.match_string);
+                                r = bus_add_match_internal(bus, s->match_callback.match_string, &s->match_callback.after);
                         if (r < 0)
                                 goto finish;
 
@@ -3756,7 +3777,7 @@ _public_ int sd_bus_path_encode(const char *prefix, const char *external_id, cha
         if (!e)
                 return -ENOMEM;
 
-        ret = strjoin(prefix, "/", e);
+        ret = path_join(prefix, e);
         if (!ret)
                 return -ENOMEM;
 
@@ -3869,7 +3890,7 @@ _public_ int sd_bus_path_decode_many(const char *path, const char *path_template
          *     For each matched label, the *decoded* label is stored in the
          *     passed output argument, and the caller is responsible to free
          *     it. Note that the output arguments are only modified if the
-         *     actualy path matched the template. Otherwise, they're left
+         *     actually path matched the template. Otherwise, they're left
          *     untouched.
          *
          * This function returns <0 on error, 0 if the path does not match the

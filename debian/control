@@ -7,7 +7,7 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Sjoerd Simons <sjoerd@debian.org>,
            Martin Pitt <mpitt@debian.org>,
            Felipe Sateler <fsateler@debian.org>
-Standards-Version: 4.3.0
+Standards-Version: 4.4.1
 Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/systemd-team/systemd.git
 Vcs-Browser: https://salsa.debian.org/systemd-team/systemd
@@ -63,8 +63,7 @@ Architecture: linux-any
 Multi-Arch: foreign
 Section: admin
 Priority: important
-Recommends: libpam-systemd,
-            dbus
+Recommends: dbus
 Suggests: systemd-container,
           policykit-1
 Pre-Depends: ${shlibs:Pre-Depends},
@@ -107,7 +106,8 @@ Replaces: sysvinit-core,
 Pre-Depends: systemd
 Depends: ${shlibs:Depends},
          ${misc:Depends}
-Recommends: libnss-systemd
+Recommends: libpam-systemd,
+            libnss-systemd
 Description: system and service manager - SysV links
  systemd is a system and service manager for Linux. It provides aggressive
  parallelization capabilities, uses socket and D-Bus activation for starting

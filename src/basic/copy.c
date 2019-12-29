@@ -1,16 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/sendfile.h>
-#include <sys/stat.h>
 #include <sys/xattr.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "alloc-util.h"
@@ -22,8 +18,9 @@
 #include "fs-util.h"
 #include "io-util.h"
 #include "macro.h"
-#include "missing.h"
+#include "missing_syscall.h"
 #include "mountpoint-util.h"
+#include "nulstr-util.h"
 #include "stat-util.h"
 #include "string-util.h"
 #include "strv.h"
@@ -84,6 +81,22 @@ static int fd_is_nonblock_pipe(int fd) {
                 return -errno;
 
         return FLAGS_SET(flags, O_NONBLOCK) ? FD_IS_NONBLOCKING_PIPE : FD_IS_BLOCKING_PIPE;
+}
+
+static int sigint_pending(void) {
+        sigset_t ss;
+
+        assert_se(sigemptyset(&ss) >= 0);
+        assert_se(sigaddset(&ss, SIGINT) >= 0);
+
+        if (sigtimedwait(&ss, NULL, &(struct timespec) { 0, 0 }) < 0) {
+                if (errno == EAGAIN)
+                        return false;
+
+                return -errno;
+        }
+
+        return true;
 }
 
 int copy_bytes_full(
@@ -173,6 +186,14 @@ int copy_bytes_full(
 
                 if (max_bytes <= 0)
                         return 1; /* return > 0 if we hit the max_bytes limit */
+
+                if (FLAGS_SET(copy_flags, COPY_SIGINT)) {
+                        r = sigint_pending();
+                        if (r < 0)
+                                return r;
+                        if (r > 0)
+                                return -EINTR;
+                }
 
                 if (max_bytes != UINT64_MAX && m > max_bytes)
                         m = max_bytes;
@@ -559,6 +580,14 @@ static int fd_copy_directory(
                 if (dot_or_dot_dot(de->d_name))
                         continue;
 
+                if (FLAGS_SET(copy_flags, COPY_SIGINT)) {
+                        r = sigint_pending();
+                        if (r < 0)
+                                return r;
+                        if (r > 0)
+                                return -EINTR;
+                }
+
                 if (fstatat(dirfd(d), de->d_name, &buf, AT_SYMLINK_NOFOLLOW) < 0) {
                         r = -errno;
                         continue;
@@ -566,7 +595,7 @@ static int fd_copy_directory(
 
                 if (progress_path) {
                         if (display_path)
-                                child_display_path = dp = strjoin(display_path, "/", de->d_name);
+                                child_display_path = dp = path_join(display_path, de->d_name);
                         else
                                 child_display_path = de->d_name;
 
@@ -618,9 +647,10 @@ static int fd_copy_directory(
                 else
                         q = -EOPNOTSUPP;
 
+                if (q == -EINTR) /* Propagate SIGINT up instantly */
+                        return q;
                 if (q == -EEXIST && (copy_flags & COPY_MERGE))
                         q = 0;
-
                 if (q < 0)
                         r = q;
         }
@@ -884,63 +914,28 @@ int copy_times(int fdf, int fdt, CopyFlags flags) {
 }
 
 int copy_xattr(int fdf, int fdt) {
-        _cleanup_free_ char *bufa = NULL, *bufb = NULL;
-        size_t sza = 100, szb = 100;
-        ssize_t n;
-        int ret = 0;
+        _cleanup_free_ char *names = NULL;
+        int ret = 0, r;
         const char *p;
 
-        for (;;) {
-                bufa = malloc(sza);
-                if (!bufa)
-                        return -ENOMEM;
+        r = flistxattr_malloc(fdf, &names);
+        if (r < 0)
+                return r;
 
-                n = flistxattr(fdf, bufa, sza);
-                if (n == 0)
-                        return 0;
-                if (n > 0)
-                        break;
-                if (errno != ERANGE)
-                        return -errno;
+        NULSTR_FOREACH(p, names) {
+                _cleanup_free_ char *value = NULL;
 
-                sza *= 2;
+                if (!startswith(p, "user."))
+                        continue;
 
-                bufa = mfree(bufa);
-        }
+                r = fgetxattr_malloc(fdf, p, &value);
+                if (r == -ENODATA)
+                        continue; /* gone by now */
+                if (r < 0)
+                        return r;
 
-        p = bufa;
-        while (n > 0) {
-                size_t l;
-
-                l = strlen(p);
-                assert(l < (size_t) n);
-
-                if (startswith(p, "user.")) {
-                        ssize_t m;
-
-                        if (!bufb) {
-                                bufb = malloc(szb);
-                                if (!bufb)
-                                        return -ENOMEM;
-                        }
-
-                        m = fgetxattr(fdf, p, bufb, szb);
-                        if (m < 0) {
-                                if (errno == ERANGE) {
-                                        szb *= 2;
-                                        bufb = mfree(bufb);
-                                        continue;
-                                }
-
-                                return -errno;
-                        }
-
-                        if (fsetxattr(fdt, p, bufb, m, 0) < 0)
-                                ret = -errno;
-                }
-
-                p += l + 1;
-                n -= l + 1;
+                if (fsetxattr(fdt, p, value, r, 0) < 0)
+                        ret = -errno;
         }
 
         return ret;

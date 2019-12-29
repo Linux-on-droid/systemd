@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include <stdio_ext.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -20,7 +19,7 @@
 #include "hexdecoct.h"
 #include "log.h"
 #include "macro.h"
-#include "missing.h"
+#include "mkdir.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "stdio-util.h"
@@ -28,6 +27,52 @@
 #include "tmpfile-util.h"
 
 #define READ_FULL_BYTES_MAX (4U*1024U*1024U)
+
+int fopen_unlocked(const char *path, const char *options, FILE **ret) {
+        assert(ret);
+
+        FILE *f = fopen(path, options);
+        if (!f)
+                return -errno;
+
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+
+        *ret = f;
+        return 0;
+}
+
+int fdopen_unlocked(int fd, const char *options, FILE **ret) {
+        assert(ret);
+
+        FILE *f = fdopen(fd, options);
+        if (!f)
+                return -errno;
+
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+
+        *ret = f;
+        return 0;
+}
+
+FILE* open_memstream_unlocked(char **ptr, size_t *sizeloc) {
+        FILE *f = open_memstream(ptr, sizeloc);
+        if (!f)
+                return NULL;
+
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+
+        return f;
+}
+
+FILE* fmemopen_unlocked(void *buf, size_t size, const char *mode) {
+        FILE *f = fmemopen(buf, size, mode);
+        if (!f)
+                return NULL;
+
+        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+
+        return f;
+}
 
 int write_string_stream_ts(
                 FILE *f,
@@ -95,7 +140,6 @@ static int write_string_file_atomic(
         if (r < 0)
                 return r;
 
-        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
         (void) fchmod_umask(fileno(f), 0644);
 
         r = write_string_stream_ts(f, line, flags, ts);
@@ -129,6 +173,12 @@ int write_string_file_ts(
         /* We don't know how to verify whether the file contents was already on-disk. */
         assert(!((flags & WRITE_STRING_FILE_VERIFY_ON_FAILURE) && (flags & WRITE_STRING_FILE_SYNC)));
 
+        if (flags & WRITE_STRING_FILE_MKDIR_0755) {
+                r = mkdir_parents(fn, 0755);
+                if (r < 0)
+                        return r;
+        }
+
         if (flags & WRITE_STRING_FILE_ATOMIC) {
                 assert(flags & WRITE_STRING_FILE_CREATE);
 
@@ -141,11 +191,9 @@ int write_string_file_ts(
                 assert(!ts);
 
         if (flags & WRITE_STRING_FILE_CREATE) {
-                f = fopen(fn, "we");
-                if (!f) {
-                        r = -errno;
+                r = fopen_unlocked(fn, "we", &f);
+                if (r < 0)
                         goto fail;
-                }
         } else {
                 int fd;
 
@@ -157,15 +205,12 @@ int write_string_file_ts(
                         goto fail;
                 }
 
-                f = fdopen(fd, "w");
-                if (!f) {
-                        r = -errno;
+                r = fdopen_unlocked(fd, "w", &f);
+                if (r < 0) {
                         safe_close(fd);
                         goto fail;
                 }
         }
-
-        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
 
         if (flags & WRITE_STRING_FILE_DISABLE_BUFFER)
                 setvbuf(f, NULL, _IONBF, 0);
@@ -213,15 +258,14 @@ int write_string_filef(
 
 int read_one_line_file(const char *fn, char **line) {
         _cleanup_fclose_ FILE *f = NULL;
+        int r;
 
         assert(fn);
         assert(line);
 
-        f = fopen(fn, "re");
-        if (!f)
-                return -errno;
-
-        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+        r = fopen_unlocked(fn, "re", &f);
+        if (r < 0)
+                return r;
 
         return read_line(f, LONG_LINE_MAX, line);
 }
@@ -230,6 +274,7 @@ int verify_file(const char *fn, const char *blob, bool accept_extra_nl) {
         _cleanup_fclose_ FILE *f = NULL;
         _cleanup_free_ char *buf = NULL;
         size_t l, k;
+        int r;
 
         assert(fn);
         assert(blob);
@@ -243,17 +288,15 @@ int verify_file(const char *fn, const char *blob, bool accept_extra_nl) {
         if (!buf)
                 return -ENOMEM;
 
-        f = fopen(fn, "re");
-        if (!f)
-                return -errno;
-
-        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+        r = fopen_unlocked(fn, "re", &f);
+        if (r < 0)
+                return r;
 
         /* We try to read one byte more than we need, so that we know whether we hit eof */
         errno = 0;
         k = fread(buf, 1, l + accept_extra_nl + 1, f);
         if (ferror(f))
-                return errno > 0 ? -errno : -EIO;
+                return errno_or_else(EIO);
 
         if (k != l && k != l + accept_extra_nl)
                 return 0;
@@ -263,6 +306,113 @@ int verify_file(const char *fn, const char *blob, bool accept_extra_nl) {
                 return 0;
 
         return 1;
+}
+
+int read_full_virtual_file(const char *filename, char **ret_contents, size_t *ret_size) {
+        _cleanup_free_ char *buf = NULL;
+        _cleanup_close_ int fd = -1;
+        struct stat st;
+        size_t n, size;
+        int n_retries;
+        char *p;
+
+        assert(ret_contents);
+
+        /* Virtual filesystems such as sysfs or procfs use kernfs, and kernfs can work
+         * with two sorts of virtual files. One sort uses "seq_file", and the results of
+         * the first read are buffered for the second read. The other sort uses "raw"
+         * reads which always go direct to the device. In the latter case, the content of
+         * the virtual file must be retrieved with a single read otherwise a second read
+         * might get the new value instead of finding EOF immediately. That's the reason
+         * why the usage of fread(3) is prohibited in this case as it always performs a
+         * second call to read(2) looking for EOF. See issue 13585. */
+
+        fd = open(filename, O_RDONLY|O_CLOEXEC);
+        if (fd < 0)
+                return -errno;
+
+        /* Start size for files in /proc which usually report a file size of 0. */
+        size = LINE_MAX / 2;
+
+        /* Limit the number of attempts to read the number of bytes returned by fstat(). */
+        n_retries = 3;
+
+        for (;;) {
+                if (n_retries <= 0)
+                        return -EIO;
+
+                if (fstat(fd, &st) < 0)
+                        return -errno;
+
+                if (!S_ISREG(st.st_mode))
+                        return -EBADF;
+
+                /* Be prepared for files from /proc which generally report a file size of 0. */
+                if (st.st_size > 0) {
+                        size = st.st_size;
+                        n_retries--;
+                } else
+                        size = size * 2;
+
+                if (size > READ_FULL_BYTES_MAX)
+                        return -E2BIG;
+
+                p = realloc(buf, size + 1);
+                if (!p)
+                        return -ENOMEM;
+                buf = TAKE_PTR(p);
+
+                for (;;) {
+                        ssize_t k;
+
+                        /* Read one more byte so we can detect whether the content of the
+                         * file has already changed or the guessed size for files from /proc
+                         * wasn't large enough . */
+                        k = read(fd, buf, size + 1);
+                        if (k >= 0) {
+                                n = k;
+                                break;
+                        }
+
+                        if (errno != -EINTR)
+                                return -errno;
+                }
+
+                /* Consider a short read as EOF */
+                if (n <= size)
+                        break;
+
+                /* Hmm... either we read too few bytes from /proc or less likely the content
+                 * of the file might have been changed (and is now bigger) while we were
+                 * processing, let's try again either with a bigger guessed size or the new
+                 * file size. */
+
+                if (lseek(fd, 0, SEEK_SET) < 0)
+                        return -errno;
+        }
+
+        if (n < size) {
+                p = realloc(buf, n + 1);
+                if (!p)
+                        return -ENOMEM;
+                buf = TAKE_PTR(p);
+        }
+
+        if (!ret_size) {
+                /* Safety check: if the caller doesn't want to know the size of what we
+                 * just read it will rely on the trailing NUL byte. But if there's an
+                 * embedded NUL byte, then we should refuse operation as otherwise
+                 * there'd be ambiguity about what we just read. */
+
+                if (memchr(buf, 0, n))
+                        return -EBADMSG;
+        } else
+                *ret_size = n;
+
+        buf[n] = 0;
+        *ret_contents = TAKE_PTR(buf);
+
+        return 0;
 }
 
 int read_full_stream_full(
@@ -279,7 +429,8 @@ int read_full_stream_full(
 
         assert(f);
         assert(ret_contents);
-        assert(!(flags & READ_FULL_FILE_UNBASE64) || ret_size);
+        assert(!FLAGS_SET(flags, READ_FULL_FILE_UNBASE64 | READ_FULL_FILE_UNHEX));
+        assert(!(flags & (READ_FULL_FILE_UNBASE64 | READ_FULL_FILE_UNHEX)) || ret_size);
 
         n_next = LINE_MAX; /* Start size */
 
@@ -296,9 +447,9 @@ int read_full_stream_full(
                         if (st.st_size > READ_FULL_BYTES_MAX)
                                 return -E2BIG;
 
-                        /* Start with the right file size, but be prepared for files from /proc which generally report a file
-                         * size of 0. Note that we increase the size to read here by one, so that the first read attempt
-                         * already makes us notice the EOF. */
+                        /* Start with the right file size. Note that we increase the size
+                         * to read here by one, so that the first read attempt already
+                         * makes us notice the EOF. */
                         if (st.st_size > 0)
                                 n_next = st.st_size + 1;
 
@@ -320,6 +471,7 @@ int read_full_stream_full(
                         }
                         memcpy_safe(t, buf, n);
                         explicit_bzero_safe(buf, n);
+                        buf = mfree(buf);
                 } else {
                         t = realloc(buf, n_next + 1);
                         if (!t)
@@ -335,7 +487,7 @@ int read_full_stream_full(
                         l += k;
 
                 if (ferror(f)) {
-                        r = errno > 0 ? -errno : -EIO;
+                        r = errno_or_else(EIO);
                         goto finalize;
                 }
 
@@ -356,9 +508,12 @@ int read_full_stream_full(
                 n_next = MIN(n * 2, READ_FULL_BYTES_MAX);
         }
 
-        if (flags & READ_FULL_FILE_UNBASE64) {
+        if (flags & (READ_FULL_FILE_UNBASE64 | READ_FULL_FILE_UNHEX)) {
                 buf[l++] = 0;
-                r = unbase64mem_full(buf, l, flags & READ_FULL_FILE_SECURE, (void **) ret_contents, ret_size);
+                if (flags & READ_FULL_FILE_UNBASE64)
+                        r = unbase64mem_full(buf, l, flags & READ_FULL_FILE_SECURE, (void **) ret_contents, ret_size);
+                else
+                        r = unhexmem_full(buf, l, flags & READ_FULL_FILE_SECURE, (void **) ret_contents, ret_size);
                 goto finalize;
         }
 
@@ -390,15 +545,14 @@ finalize:
 
 int read_full_file_full(const char *filename, ReadFullFileFlags flags, char **contents, size_t *size) {
         _cleanup_fclose_ FILE *f = NULL;
+        int r;
 
         assert(filename);
         assert(contents);
 
-        f = fopen(filename, "re");
-        if (!f)
-                return -errno;
-
-        (void) __fsetlocking(f, FSETLOCKING_BYCALLER);
+        r = fopen_unlocked(filename, "re", &f);
+        if (r < 0)
+                return r;
 
         return read_full_stream_full(f, filename, flags, contents, size);
 }
@@ -453,7 +607,7 @@ int get_proc_field(const char *filename, const char *pattern, const char *termin
         assert(pattern);
         assert(field);
 
-        r = read_full_file(filename, &status, NULL);
+        r = read_full_virtual_file(filename, &status, NULL);
         if (r < 0)
                 return r;
 
@@ -540,10 +694,7 @@ static int search_and_fopen_internal(const char *path, const char *mode, const c
                 _cleanup_free_ char *p = NULL;
                 FILE *f;
 
-                if (root)
-                        p = strjoin(root, *i, "/", path);
-                else
-                        p = strjoin(*i, "/", path);
+                p = path_join(root, *i, path);
                 if (!p)
                         return -ENOMEM;
 
@@ -615,7 +766,7 @@ int fflush_and_check(FILE *f) {
         fflush(f);
 
         if (ferror(f))
-                return errno > 0 ? -errno : -EIO;
+                return errno_or_else(EIO);
 
         return 0;
 }
@@ -730,7 +881,7 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(FILE*, funlockfile);
 int read_line_full(FILE *f, size_t limit, ReadLineFlags flags, char **ret) {
         size_t n = 0, allocated = 0, count = 0;
         _cleanup_free_ char *buffer = NULL;
-        int r;
+        int r, tty = -1;
 
         assert(f);
 
@@ -805,6 +956,17 @@ int read_line_full(FILE *f, size_t limit, ReadLineFlags flags, char **ret) {
                         count++;
 
                         if (eol != EOL_NONE) {
+                                /* If we are on a tty, we can't wait for more input. But we expect only
+                                 * \n as the single EOL marker, so there is no need to wait. We check
+                                 * this condition last to avoid isatty() check if not necessary. */
+
+                                if (tty < 0)
+                                        tty = isatty(fileno(f));
+                                if (tty > 0)
+                                        break;
+                        }
+
+                        if (eol != EOL_NONE) {
                                 previous_eol |= eol;
                                 continue;
                         }
@@ -842,7 +1004,7 @@ int safe_fgetc(FILE *f, char *ret) {
         k = fgetc(f);
         if (k == EOF) {
                 if (ferror(f))
-                        return errno > 0 ? -errno : -EIO;
+                        return errno_or_else(EIO);
 
                 if (ret)
                         *ret = 0;
@@ -873,10 +1035,10 @@ int warn_file_is_world_accessible(const char *filename, struct stat *st, const c
 
         if (unit)
                 log_syntax(unit, LOG_WARNING, filename, line, 0,
-                           "%s has %04o mode that is too permissive, please adjust the access mode.",
+                           "%s has %04o mode that is too permissive, please adjust the ownership and access mode.",
                            filename, st->st_mode & 07777);
         else
-                log_warning("%s has %04o mode that is too permissive, please adjust the access mode.",
+                log_warning("%s has %04o mode that is too permissive, please adjust the ownership and access mode.",
                             filename, st->st_mode & 07777);
         return 0;
 }

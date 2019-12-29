@@ -3,7 +3,6 @@
 #include <getopt.h>
 #include <sys/epoll.h>
 #include <sys/prctl.h>
-#include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -24,11 +23,11 @@
 #include "terminal-util.h"
 #include "util.h"
 
-static char** arg_listen = NULL;
+static char **arg_listen = NULL;
 static bool arg_accept = false;
 static int arg_socket_type = SOCK_STREAM;
-static char** arg_args = NULL;
-static char** arg_setenv = NULL;
+static char **arg_args = NULL;
+static char **arg_setenv = NULL;
 static char **arg_fdnames = NULL;
 static bool arg_inetd = false;
 
@@ -49,8 +48,7 @@ static int add_epoll(int epoll_fd, int fd) {
 
 static int open_sockets(int *epoll_fd, bool accept) {
         char **address;
-        int n, fd, r;
-        int count = 0;
+        int n, fd, r, count = 0;
 
         n = sd_listen_fds(true);
         if (n < 0)
@@ -69,13 +67,18 @@ static int open_sockets(int *epoll_fd, bool accept) {
 
         /* Close logging and all other descriptors */
         if (arg_listen) {
-                int except[3 + n];
+                _cleanup_free_ int *except = NULL;
+                int i;
 
-                for (fd = 0; fd < SD_LISTEN_FDS_START + n; fd++)
-                        except[fd] = fd;
+                except = new(int, n);
+                if (!except)
+                        return log_oom();
+
+                for (i = 0; i < n; i++)
+                        except[i] = SD_LISTEN_FDS_START + i;
 
                 log_close();
-                r = close_all_fds(except, 3 + n);
+                r = close_all_fds(except, n);
                 if (r < 0)
                         return log_error_errno(r, "Failed to close all file descriptors: %m");
         }
@@ -86,7 +89,7 @@ static int open_sockets(int *epoll_fd, bool accept) {
          */
 
         STRV_FOREACH(address, arg_listen) {
-                fd = make_socket_fd(LOG_DEBUG, *address, arg_socket_type, (arg_accept*SOCK_CLOEXEC));
+                fd = make_socket_fd(LOG_DEBUG, *address, arg_socket_type, (arg_accept * SOCK_CLOEXEC));
                 if (fd < 0) {
                         log_open();
                         return log_error_errno(fd, "Failed to open '%s': %m", *address);
@@ -117,7 +120,7 @@ static int open_sockets(int *epoll_fd, bool accept) {
         return count;
 }
 
-static int exec_process(const char* name, char **argv, char **env, int start_fd, size_t n_fds) {
+static int exec_process(const char *name, char **argv, char **env, int start_fd, size_t n_fds) {
 
         _cleanup_strv_free_ char **envp = NULL;
         _cleanup_free_ char *joined = NULL;
@@ -151,7 +154,7 @@ static int exec_process(const char* name, char **argv, char **env, int start_fd,
                         _cleanup_free_ char *p;
                         const char *n;
 
-                        p = strappend(*s, "=");
+                        p = strjoin(*s, "=");
                         if (!p)
                                 return log_oom();
 
@@ -199,10 +202,10 @@ static int exec_process(const char* name, char **argv, char **env, int start_fd,
                         start_fd = SD_LISTEN_FDS_START;
                 }
 
-                if (asprintf((char**)(envp + n_env++), "LISTEN_FDS=%zu", n_fds) < 0)
+                if (asprintf((char **) (envp + n_env++), "LISTEN_FDS=%zu", n_fds) < 0)
                         return log_oom();
 
-                if (asprintf((char**)(envp + n_env++), "LISTEN_PID=" PID_FMT, getpid_cached()) < 0)
+                if (asprintf((char **) (envp + n_env++), "LISTEN_PID=" PID_FMT, getpid_cached()) < 0)
                         return log_oom();
 
                 if (arg_fdnames) {
@@ -226,7 +229,7 @@ static int exec_process(const char* name, char **argv, char **env, int start_fd,
                         if (!names)
                                 return log_oom();
 
-                        e = strappend("LISTEN_FDNAMES=", names);
+                        e = strjoin("LISTEN_FDNAMES=", names);
                         if (!e)
                                 return log_oom();
 
@@ -244,7 +247,7 @@ static int exec_process(const char* name, char **argv, char **env, int start_fd,
         return log_error_errno(errno, "Failed to execp %s (%s): %m", name, joined);
 }
 
-static int fork_and_exec_process(const char* child, char** argv, char **env, int fd) {
+static int fork_and_exec_process(const char *child, char **argv, char **env, int fd) {
         _cleanup_free_ char *joined = NULL;
         pid_t child_pid;
         int r;
@@ -253,7 +256,9 @@ static int fork_and_exec_process(const char* child, char** argv, char **env, int
         if (!joined)
                 return log_oom();
 
-        r = safe_fork("(activate)", FORK_RESET_SIGNALS|FORK_DEATHSIG|FORK_RLIMIT_NOFILE_SAFE|FORK_LOG, &child_pid);
+        r = safe_fork("(activate)",
+                      FORK_RESET_SIGNALS | FORK_DEATHSIG | FORK_RLIMIT_NOFILE_SAFE | FORK_LOG,
+                      &child_pid);
         if (r < 0)
                 return r;
         if (r == 0) {
@@ -266,7 +271,7 @@ static int fork_and_exec_process(const char* child, char** argv, char **env, int
         return 0;
 }
 
-static int do_accept(const char* name, char **argv, char **envp, int fd) {
+static int do_accept(const char *name, char **argv, char **envp, int fd) {
         _cleanup_free_ char *local = NULL, *peer = NULL;
         _cleanup_close_ int fd_accepted = -1;
 
@@ -294,7 +299,7 @@ static void sigchld_hdl(int sig) {
                 int r;
 
                 si.si_pid = 0;
-                r = waitid(P_ALL, 0, &si, WEXITED|WNOHANG);
+                r = waitid(P_ALL, 0, &si, WEXITED | WNOHANG);
                 if (r < 0) {
                         if (errno != ECHILD)
                                 log_error_errno(errno, "Failed to reap children: %m");
@@ -309,7 +314,7 @@ static void sigchld_hdl(int sig) {
 
 static int install_chld_handler(void) {
         static const struct sigaction act = {
-                .sa_flags = SA_NOCLDSTOP|SA_RESTART,
+                .sa_flags = SA_NOCLDSTOP | SA_RESTART,
                 .sa_handler = sigchld_hdl,
         };
 
@@ -327,9 +332,9 @@ static int help(void) {
         if (r < 0)
                 return log_oom();
 
-        printf("%s [OPTIONS...]\n\n"
-               "Listen on sockets and launch child on connection.\n\n"
-               "Options:\n"
+        printf("%s [OPTIONS...]\n"
+               "\n%sListen on sockets and launch child on connection.%s\n"
+               "\nOptions:\n"
                "  -h --help                  Show this help and exit\n"
                "     --version               Print version string and exit\n"
                "  -l --listen=ADDR           Listen for raw connections at ADDR\n"
@@ -342,6 +347,7 @@ static int help(void) {
                "\nNote: file descriptors from sd_listen_fds() will be passed through.\n"
                "\nSee the %s for details.\n"
                , program_invocation_short_name
+               , ansi_highlight(), ansi_normal()
                , link
         );
 
@@ -376,7 +382,7 @@ static int parse_argv(int argc, char *argv[]) {
         assert(argv);
 
         while ((c = getopt_long(argc, argv, "+hl:aE:d", options, NULL)) >= 0)
-                switch(c) {
+                switch (c) {
                 case 'h':
                         return help();
 
@@ -472,6 +478,7 @@ int main(int argc, char **argv, char **envp) {
         int r, n;
         int epoll_fd = -1;
 
+        log_show_color(true);
         log_parse_environment();
         log_open();
 

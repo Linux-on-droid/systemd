@@ -5,9 +5,9 @@ title: What settings are currently available for transient units?
 # What settings are currently available for transient units?
 
 Our intention is to make all settings that are available as unit file settings
-also available for transient units, through the D-Bus API. At the moment, some
-unit types (device, swap, target) are not supported at all via unit types,
-but most others are pretty well supported, with some notable omissions.
+also available for transient units, through the D-Bus API. At the moment,
+device, swap, and target units are not supported at all as transient units, but
+others are pretty well supported.
 
 The lists below contain all settings currently available in unit files. The
 ones currently available in transient units are prefixed with `✓`.
@@ -44,15 +44,14 @@ Most generic unit settings are available for transient units.
 ✓ JobRunningTimeoutSec=
 ✓ JobTimeoutAction=
 ✓ JobTimeoutRebootArgument=
-✓ StartLimitIntervalSec=SECONDS
-✓ StartLimitBurst=UNSIGNED
-✓ StartLimitAction=ACTION
+✓ StartLimitIntervalSec=
+✓ StartLimitBurst=
+✓ StartLimitAction=
 ✓ FailureAction=
 ✓ SuccessAction=
 ✓ FailureActionExitStatus=
 ✓ SuccessActionExitStatus=
-✓ AddRef=
-✓ RebootArgument=STRING
+✓ RebootArgument=
 ✓ ConditionPathExists=
 ✓ ConditionPathExistsGlob=
 ✓ ConditionPathIsDirectory=
@@ -185,6 +184,7 @@ All execution-related settings are available for transient units.
 ✓ PrivateMounts=
 ✓ ProtectKernelTunables=
 ✓ ProtectKernelModules=
+✓ ProtectKernelLogs=
 ✓ ProtectControlGroups=
 ✓ PrivateNetwork=
 ✓ PrivateUsers=
@@ -226,8 +226,12 @@ All cgroup/resource control settings are available for transient units
 ✓ StartupCPUShares=
 ✓ CPUQuota=
 ✓ CPUQuotaPeriodSec=
+✓ AllowedCPUs=
+✓ AllowedMemoryNodes=
 ✓ MemoryAccounting=
+✓ DefaultMemoryMin=
 ✓ MemoryMin=
+✓ DefaultMemoryLow=
 ✓ MemoryLow=
 ✓ MemoryHigh=
 ✓ MemoryMax=
@@ -252,6 +256,7 @@ All cgroup/resource control settings are available for transient units
 ✓ TasksAccounting=
 ✓ TasksMax=
 ✓ Delegate=
+✓ DisableControllers=
 ✓ IPAccounting=
 ✓ IPAddressAllow=
 ✓ IPAddressDeny=
@@ -266,6 +271,7 @@ All process killing settings are available for transient units:
 ✓ SendSIGHUP=
 ✓ KillMode=
 ✓ KillSignal=
+✓ RestartKillSignal=
 ✓ FinalKillSignal=
 ✓ WatchdogSignal=
 ```
@@ -276,6 +282,7 @@ Most service unit settings are available for transient units.
 
 ```
 ✓ PIDFile=
+✓ ExecCondition=
 ✓ ExecStartPre=
 ✓ ExecStart=
 ✓ ExecStartPost=
@@ -285,6 +292,7 @@ Most service unit settings are available for transient units.
 ✓ RestartSec=
 ✓ TimeoutStartSec=
 ✓ TimeoutStopSec=
+✓ TimeoutAbortSec=
 ✓ TimeoutSec=
 ✓ RuntimeMaxSec=
 ✓ WatchdogSec=
@@ -303,6 +311,7 @@ Most service unit settings are available for transient units.
   Sockets=
 ✓ USBFunctionDescriptors=
 ✓ USBFunctionStrings=
+✓ OOMPolicy=
 ```
 
 ## Mount Unit Settings
@@ -341,7 +350,7 @@ Most timer unit settings are available to transient units.
 ✓ OnCalendar=
 ✓ OnClockChange=
 ✓ OnStartupSec=
-✓ OnTimezoneChange
+✓ OnTimezoneChange=
 ✓ OnUnitActiveSec=
 ✓ OnUnitInactiveSec=
 ✓ Persistent=
@@ -363,6 +372,7 @@ Scope units are fully supported as transient units (in fact they only exist as
 such).
 
 ```
+✓ RuntimeMaxSec=
 ✓ TimeoutStopSec=
 ```
 

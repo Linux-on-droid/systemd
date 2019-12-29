@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
 #include <fcntl.h>
-#include <pwd.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <linux/vt.h>
@@ -17,6 +16,7 @@
 #include "cgroup-util.h"
 #include "conf-parser.h"
 #include "device-util.h"
+#include "errno-util.h"
 #include "fd-util.h"
 #include "limits-util.h"
 #include "logind.h"
@@ -54,7 +54,6 @@ void manager_reset_config(Manager *m) {
         m->idle_action = HANDLE_IGNORE;
 
         m->runtime_dir_size = physical_memory_scale(10U, 100U); /* 10% */
-        m->user_tasks_max = system_tasks_max_scale(DEFAULT_USER_TASKS_MAX_PERCENTAGE, 100U); /* 33% */
         m->sessions_max = 8192;
         m->inhibitors_max = 8192;
 
@@ -74,7 +73,7 @@ int manager_parse_config_file(Manager *m) {
                                         CONFIG_PARSE_WARN, m);
 }
 
-int manager_add_device(Manager *m, const char *sysfs, bool master, Device **_device) {
+int manager_add_device(Manager *m, const char *sysfs, bool master, Device **ret_device) {
         Device *d;
 
         assert(m);
@@ -90,13 +89,13 @@ int manager_add_device(Manager *m, const char *sysfs, bool master, Device **_dev
                         return -ENOMEM;
         }
 
-        if (_device)
-                *_device = d;
+        if (ret_device)
+                *ret_device = d;
 
         return 0;
 }
 
-int manager_add_seat(Manager *m, const char *id, Seat **_seat) {
+int manager_add_seat(Manager *m, const char *id, Seat **ret_seat) {
         Seat *s;
         int r;
 
@@ -110,13 +109,13 @@ int manager_add_seat(Manager *m, const char *id, Seat **_seat) {
                         return r;
         }
 
-        if (_seat)
-                *_seat = s;
+        if (ret_seat)
+                *ret_seat = s;
 
         return 0;
 }
 
-int manager_add_session(Manager *m, const char *id, Session **_session) {
+int manager_add_session(Manager *m, const char *id, Session **ret_session) {
         Session *s;
         int r;
 
@@ -130,8 +129,8 @@ int manager_add_session(Manager *m, const char *id, Session **_session) {
                         return r;
         }
 
-        if (_session)
-                *_session = s;
+        if (ret_session)
+                *ret_session = s;
 
         return 0;
 }
@@ -142,7 +141,7 @@ int manager_add_user(
                 gid_t gid,
                 const char *name,
                 const char *home,
-                User **_user) {
+                User **ret_user) {
 
         User *u;
         int r;
@@ -157,8 +156,8 @@ int manager_add_user(
                         return r;
         }
 
-        if (_user)
-                *_user = u;
+        if (ret_user)
+                *ret_user = u;
 
         return 0;
 }
@@ -166,7 +165,7 @@ int manager_add_user(
 int manager_add_user_by_name(
                 Manager *m,
                 const char *name,
-                User **_user) {
+                User **ret_user) {
 
         const char *home = NULL;
         uid_t uid;
@@ -180,10 +179,10 @@ int manager_add_user_by_name(
         if (r < 0)
                 return r;
 
-        return manager_add_user(m, uid, gid, name, home, _user);
+        return manager_add_user(m, uid, gid, name, home, ret_user);
 }
 
-int manager_add_user_by_uid(Manager *m, uid_t uid, User **_user) {
+int manager_add_user_by_uid(Manager *m, uid_t uid, User **ret_user) {
         struct passwd *p;
 
         assert(m);
@@ -191,36 +190,32 @@ int manager_add_user_by_uid(Manager *m, uid_t uid, User **_user) {
         errno = 0;
         p = getpwuid(uid);
         if (!p)
-                return errno > 0 ? -errno : -ENOENT;
+                return errno_or_else(ENOENT);
 
-        return manager_add_user(m, uid, p->pw_gid, p->pw_name, p->pw_dir, _user);
+        return manager_add_user(m, uid, p->pw_gid, p->pw_name, p->pw_dir, ret_user);
 }
 
-int manager_add_inhibitor(Manager *m, const char* id, Inhibitor **_inhibitor) {
+int manager_add_inhibitor(Manager *m, const char* id, Inhibitor **ret) {
         Inhibitor *i;
+        int r;
 
         assert(m);
         assert(id);
 
         i = hashmap_get(m->inhibitors, id);
-        if (i) {
-                if (_inhibitor)
-                        *_inhibitor = i;
-
-                return 0;
+        if (!i) {
+                r = inhibitor_new(&i, m, id);
+                if (r < 0)
+                        return r;
         }
 
-        i = inhibitor_new(m, id);
-        if (!i)
-                return -ENOMEM;
-
-        if (_inhibitor)
-                *_inhibitor = i;
+        if (ret)
+                *ret = i;
 
         return 0;
 }
 
-int manager_add_button(Manager *m, const char *name, Button **_button) {
+int manager_add_button(Manager *m, const char *name, Button **ret_button) {
         Button *b;
 
         assert(m);
@@ -233,8 +228,8 @@ int manager_add_button(Manager *m, const char *name, Button **_button) {
                         return -ENOMEM;
         }
 
-        if (_button)
-                *_button = b;
+        if (ret_button)
+                *ret_button = b;
 
         return 0;
 }
@@ -357,28 +352,19 @@ int manager_get_session_by_pid(Manager *m, pid_t pid, Session **ret) {
         s = hashmap_get(m->sessions_by_leader, PID_TO_PTR(pid));
         if (!s) {
                 r = cg_pid_get_unit(pid, &unit);
-                if (r < 0)
-                        goto not_found;
-
-                s = hashmap_get(m->session_units, unit);
-                if (!s)
-                        goto not_found;
+                if (r >= 0)
+                        s = hashmap_get(m->session_units, unit);
         }
 
         if (ret)
                 *ret = s;
 
-        return 1;
-
-not_found:
-        if (ret)
-                *ret = NULL;
-        return 0;
+        return !!s;
 }
 
 int manager_get_user_by_pid(Manager *m, pid_t pid, User **ret) {
         _cleanup_free_ char *unit = NULL;
-        User *u;
+        User *u = NULL;
         int r;
 
         assert(m);
@@ -387,23 +373,13 @@ int manager_get_user_by_pid(Manager *m, pid_t pid, User **ret) {
                 return -EINVAL;
 
         r = cg_pid_get_slice(pid, &unit);
-        if (r < 0)
-                goto not_found;
-
-        u = hashmap_get(m->user_units, unit);
-        if (!u)
-                goto not_found;
+        if (r >= 0)
+                u = hashmap_get(m->user_units, unit);
 
         if (ret)
                 *ret = u;
 
-        return 1;
-
-not_found:
-        if (ret)
-                *ret = NULL;
-
-        return 0;
+        return !!u;
 }
 
 int manager_get_idle_hint(Manager *m, dual_timestamp *t) {
@@ -693,8 +669,7 @@ bool manager_all_buttons_ignored(Manager *m) {
                 return false;
         if (m->handle_lid_switch != HANDLE_IGNORE)
                 return false;
-        if (m->handle_lid_switch_ep != _HANDLE_ACTION_INVALID &&
-            m->handle_lid_switch_ep != HANDLE_IGNORE)
+        if (!IN_SET(m->handle_lid_switch_ep, _HANDLE_ACTION_INVALID, HANDLE_IGNORE))
                 return false;
         if (m->handle_lid_switch_docked != HANDLE_IGNORE)
                 return false;

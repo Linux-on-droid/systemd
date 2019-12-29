@@ -23,24 +23,157 @@
 
   <refsynopsisdiv>
     <cmdsynopsis>
-      <command>timedatectl <arg choice="opt" rep="repeat">OPTIONS</arg> <arg choice="req">COMMAND</arg></command>
+      <command>timedatectl</command>
+      <arg choice="opt" rep="repeat">OPTIONS</arg>
+      <arg choice="req">COMMAND</arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
   <refsect1>
     <title>Description</title>
 
-    <para><command>timedatectl</command> may be used to query and
-    change the system clock and its settings.</para>
+    <para><command>timedatectl</command> may be used to query and change the system clock and its settings,
+    and enable or disable time synchronization services.</para>
 
     <para>Use
     <citerefentry><refentrytitle>systemd-firstboot</refentrytitle><manvolnum>1</manvolnum></citerefentry>
     to initialize the system time zone for mounted (but not booted)
     system images.</para>
 
-    <para><command>timedatectl</command> may be used to show the current status of
+    <para><command>timedatectl</command> may be used to show the current status of time synchronization
+    services, for example
     <citerefentry><refentrytitle>systemd-timesyncd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
     </para>
+
+  </refsect1>
+
+  <refsect1>
+    <title>Commands</title>
+
+    <para>The following commands are understood:</para>
+
+    <variablelist>
+      <varlistentry>
+        <term><command>status</command></term>
+
+        <listitem><para>Show current settings of the system clock and RTC, including whether network time
+        synchronization is active. If no command is specified, this is the implied default.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>show</command></term>
+
+        <listitem><para>Show the same information as <option>status</option>, but in machine readable form.
+        This command is intended to be used whenever computer-parsable output is required.
+        Use <option>status</option> if you are looking for formatted human-readable output.</para>
+        <para>By default, empty properties are suppressed. Use <option>--all</option> to show those too.
+        To select specific properties to show, use <option>--property=</option>.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>set-time [TIME]</command></term>
+
+        <listitem><para>Set the system clock to the specified time.
+        This will also update the RTC time accordingly. The time may
+        be specified in the format "2012-10-30
+        18:17:16".</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>set-timezone [TIMEZONE]</command></term>
+
+        <listitem><para>Set the system time zone to the specified
+        value. Available timezones can be listed with
+        <command>list-timezones</command>. If the RTC is configured to
+        be in the local time, this will also update the RTC time. This
+        call will alter the <filename>/etc/localtime</filename>
+        symlink. See
+        <citerefentry><refentrytitle>localtime</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+        for more information.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>list-timezones</command></term>
+
+        <listitem><para>List available time zones, one per line.
+        Entries from the list can be set as the system timezone with
+        <command>set-timezone</command>.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>set-local-rtc [BOOL]</command></term>
+
+        <listitem><para>Takes a boolean argument. If
+        <literal>0</literal>, the system is configured to maintain the
+        RTC in universal time. If <literal>1</literal>, it will
+        maintain the RTC in local time instead. Note that maintaining
+        the RTC in the local timezone is not fully supported and will
+        create various problems with time zone changes and daylight
+        saving adjustments. If at all possible, keep the RTC in UTC
+        mode. Note that invoking this will also synchronize the RTC
+        from the system clock, unless
+        <option>--adjust-system-clock</option> is passed (see above).
+        This command will change the 3rd line of
+        <filename>/etc/adjtime</filename>, as documented in
+        <citerefentry project='man-pages'><refentrytitle>hwclock</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>set-ntp [BOOL]</command></term>
+
+        <listitem><para>Takes a boolean argument. Controls whether network time synchronization is active and
+        enabled (if available). If the argument is true, this enables and starts the first existing network
+        synchronization service. If the argument is false, then this disables and stops the known network
+        synchronization services. The way that the list of services is built is described below.</para>
+        </listitem>
+      </varlistentry>
+
+    </variablelist>
+
+    <refsect2>
+      <title>systemd-timesyncd Commands</title>
+
+      <para>The following commands are specific to
+      <citerefentry><refentrytitle>systemd-timesyncd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+      </para>
+
+      <variablelist>
+        <varlistentry>
+          <term><command>timesync-status</command></term>
+
+          <listitem><para>Show current status of
+          <citerefentry><refentrytitle>systemd-timesyncd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
+          If <option>--monitor</option> is specified, then this will monitor the status updates.</para></listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><command>show-timesync</command></term>
+
+          <listitem><para>Show the same information as <option>timesync-status</option>, but in machine readable form.
+          This command is intended to be used whenever computer-parsable output is required.
+          Use <option>timesync-status</option> if you are looking for formatted human-readable output.</para>
+          <para>By default, empty properties are suppressed. Use <option>--all</option> to show those too.
+          To select specific properties to show, use <option>--property=</option>.</para></listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><command>ntp-servers <replaceable>INTERFACE</replaceable> <replaceable>SERVER</replaceable>…</command></term>
+
+          <listitem><para>Set the interface specific NTP servers. This command can be used only when the
+          interface is managed by <command>systemd-networkd</command>.</para></listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><command>revert <replaceable>INTERFACE</replaceable></command></term>
+
+          <listitem><para>Revert the interface specific NTP servers. This command can be used only when
+          the interface is managed by <command>systemd-networkd</command>.</para></listitem>
+        </varlistentry>
+      </variablelist>
+
+    </refsect2>
 
   </refsect1>
 
@@ -115,129 +248,9 @@
   </refsect1>
 
   <refsect1>
-    <title>Commands</title>
-
-    <para>The following commands are understood:</para>
-
-    <variablelist>
-      <varlistentry>
-        <term><command>status</command></term>
-
-        <listitem><para>Show current settings of the system clock and RTC,
-        including whether network time synchronization through
-        <filename>systemd-timesyncd.service</filename> is active. Even if it is
-        inactive, a different service might still synchronize the clock.
-        If no command is specified, this is the implied default.
-        </para></listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><command>show</command></term>
-
-        <listitem><para>Show the same information as <option>status</option>, but in machine readable form.
-        This command is intended to be used whenever computer-parsable output is required.
-        Use <option>status</option> if you are looking for formatted human-readable output.</para>
-        <para>By default, empty properties are suppressed. Use <option>--all</option> to show those too.
-        To select specific properties to show, use <option>--property=</option>.</para></listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><command>set-time [TIME]</command></term>
-
-        <listitem><para>Set the system clock to the specified time.
-        This will also update the RTC time accordingly. The time may
-        be specified in the format "2012-10-30
-        18:17:16".</para></listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><command>set-timezone [TIMEZONE]</command></term>
-
-        <listitem><para>Set the system time zone to the specified
-        value. Available timezones can be listed with
-        <command>list-timezones</command>. If the RTC is configured to
-        be in the local time, this will also update the RTC time. This
-        call will alter the <filename>/etc/localtime</filename>
-        symlink. See
-        <citerefentry><refentrytitle>localtime</refentrytitle><manvolnum>5</manvolnum></citerefentry>
-        for more information.</para></listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><command>list-timezones</command></term>
-
-        <listitem><para>List available time zones, one per line.
-        Entries from the list can be set as the system timezone with
-        <command>set-timezone</command>.</para></listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><command>set-local-rtc [BOOL]</command></term>
-
-        <listitem><para>Takes a boolean argument. If
-        <literal>0</literal>, the system is configured to maintain the
-        RTC in universal time. If <literal>1</literal>, it will
-        maintain the RTC in local time instead. Note that maintaining
-        the RTC in the local timezone is not fully supported and will
-        create various problems with time zone changes and daylight
-        saving adjustments. If at all possible, keep the RTC in UTC
-        mode. Note that invoking this will also synchronize the RTC
-        from the system clock, unless
-        <option>--adjust-system-clock</option> is passed (see above).
-        This command will change the 3rd line of
-        <filename>/etc/adjtime</filename>, as documented in
-        <citerefentry project='man-pages'><refentrytitle>hwclock</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
-        </para></listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term><command>set-ntp [BOOL]</command></term>
-
-        <listitem><para>Takes a boolean argument. Controls whether network time synchronization is active
-        and enabled (if available). If the argument is true, this enables and starts the first existed
-        service listed in the environment variable <varname>$SYSTEMD_TIMEDATED_NTP_SERVICES</varname>
-        of <filename>systemd-timedated.service</filename>. If the argument is false, then this disables and
-        stops the all services listed in <varname>$SYSTEMD_TIMEDATED_NTP_SERVICES</varname>.</para></listitem>
-      </varlistentry>
-
-    </variablelist>
-
-    <refsect2>
-      <title>systemd-timesyncd Commands</title>
-
-      <para>The following commands are specific to
-      <citerefentry><refentrytitle>systemd-timesyncd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
-      </para>
-
-      <variablelist>
-        <varlistentry>
-          <term><command>timesync-status</command></term>
-
-          <listitem><para>Show current status of
-          <citerefentry><refentrytitle>systemd-timesyncd.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>.
-          If <option>--monitor</option> is specified, then this will monitor the status updates.</para></listitem>
-        </varlistentry>
-
-        <varlistentry>
-          <term><command>show-timesync</command></term>
-
-          <listitem><para>Show the same information as <option>timesync-status</option>, but in machine readable form.
-          This command is intended to be used whenever computer-parsable output is required.
-          Use <option>timesync-status</option> if you are looking for formatted human-readable output.</para>
-          <para>By default, empty properties are suppressed. Use <option>--all</option> to show those too.
-          To select specific properties to show, use <option>--property=</option>.</para></listitem>
-        </varlistentry>
-      </variablelist>
-
-    </refsect2>
-
-  </refsect1>
-
-  <refsect1>
     <title>Exit status</title>
 
-    <para>On success, 0 is returned, a non-zero failure
-    code otherwise.</para>
+    <para>On success, 0 is returned, a non-zero failure code otherwise.</para>
   </refsect1>
 
   <xi:include href="less-variables.xml" />

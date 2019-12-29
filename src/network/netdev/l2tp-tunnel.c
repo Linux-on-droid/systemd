@@ -1,15 +1,12 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 
-#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <linux/l2tp.h>
 #include <linux/genetlink.h>
-
-#include "sd-netlink.h"
 
 #include "conf-parser.h"
 #include "hashmap.h"
 #include "l2tp-tunnel.h"
-#include "missing.h"
 #include "netlink-util.h"
 #include "networkd-address.h"
 #include "networkd-manager.h"

@@ -2,25 +2,26 @@
 
 #include <errno.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "bus-util.h"
 #include "manager.h"
 #include "rm-rf.h"
-#include "test-helper.h"
+#include "strv.h"
 #include "tests.h"
+#include "service.h"
 
 int main(int argc, char *argv[]) {
         _cleanup_(rm_rf_physical_and_freep) char *runtime_dir = NULL;
         _cleanup_(sd_bus_error_free) sd_bus_error err = SD_BUS_ERROR_NULL;
         _cleanup_(manager_freep) Manager *m = NULL;
-        Unit *a = NULL, *b = NULL, *c = NULL, *d = NULL, *e = NULL, *g = NULL, *h = NULL, *unit_with_multiple_dashes = NULL;
+        Unit *a = NULL, *b = NULL, *c = NULL, *d = NULL, *e = NULL, *g = NULL,
+             *h = NULL, *i = NULL, *a_conj = NULL, *unit_with_multiple_dashes = NULL;
         Job *j;
         int r;
 
         test_setup_logging(LOG_DEBUG);
 
-        r = enter_cgroup_subroot();
+        r = enter_cgroup_subroot(NULL);
         if (r == -ENOMEDIUM)
                 return log_tests_skipped("cgroupfs not available");
 
@@ -28,7 +29,7 @@ int main(int argc, char *argv[]) {
         assert_se(set_unit_path(get_testdata_dir()) >= 0);
         assert_se(runtime_dir = setup_fake_runtime_dir());
         r = manager_new(UNIT_FILE_USER, MANAGER_TEST_RUN_BASIC, &m);
-        if (MANAGER_SKIP_TEST(r))
+        if (manager_errno_skip_test(r))
                 return log_tests_skipped_errno(r, "manager_new");
         assert_se(r >= 0);
         assert_se(manager_startup(m, NULL, NULL) >= 0);
@@ -92,6 +93,30 @@ int main(int argc, char *argv[]) {
 
         printf("Test10: (Unmergeable job type of auxiliary job, fail)\n");
         assert_se(manager_add_job(m, JOB_START, h, JOB_FAIL, NULL, NULL, &j) == 0);
+        manager_dump_jobs(m, stdout, "\t");
+
+        printf("Load5:\n");
+        manager_clear_jobs(m);
+        assert_se(manager_load_startable_unit_or_warn(m, "i.service", NULL, &i) >= 0);
+        SERVICE(a)->state = SERVICE_RUNNING;
+        SERVICE(d)->state = SERVICE_RUNNING;
+        manager_dump_units(m, stdout, "\t");
+
+        printf("Test11: (Start/stop job ordering, execution cycle)\n");
+        assert_se(manager_add_job(m, JOB_START, i, JOB_FAIL, NULL, NULL, &j) == 0);
+        assert_se(unit_has_job_type(a, JOB_STOP));
+        assert_se(unit_has_job_type(d, JOB_STOP));
+        assert_se(unit_has_job_type(b, JOB_START));
+        manager_dump_jobs(m, stdout, "\t");
+
+        printf("Load6:\n");
+        manager_clear_jobs(m);
+        assert_se(manager_load_startable_unit_or_warn(m, "a-conj.service", NULL, &a_conj) >= 0);
+        SERVICE(a)->state = SERVICE_DEAD;
+        manager_dump_units(m, stdout, "\t");
+
+        printf("Test12: (Trivial cycle, Unfixable)\n");
+        assert_se(manager_add_job(m, JOB_START, a_conj, JOB_REPLACE, NULL, NULL, &j) == -EDEADLK);
         manager_dump_jobs(m, stdout, "\t");
 
         assert_se(!hashmap_get(a->dependencies[UNIT_PROPAGATES_RELOAD_TO], b));

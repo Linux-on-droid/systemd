@@ -115,6 +115,20 @@ void address_free(Address *address) {
         free(address);
 }
 
+static uint32_t address_prefix(const Address *a) {
+        assert(a);
+
+        /* make sure we don't try to shift by 32.
+         * See ISO/IEC 9899:TC3 § 6.5.7.3. */
+        if (a->prefixlen == 0)
+                return 0;
+
+        if (a->in_addr_peer.in.s_addr != 0)
+                return be32toh(a->in_addr_peer.in.s_addr) >> (32 - a->prefixlen);
+        else
+                return be32toh(a->in_addr.in.s_addr) >> (32 - a->prefixlen);
+}
+
 static void address_hash_func(const Address *a, struct siphash *state) {
         assert(a);
 
@@ -125,16 +139,8 @@ static void address_hash_func(const Address *a, struct siphash *state) {
                 siphash24_compress(&a->prefixlen, sizeof(a->prefixlen), state);
 
                 /* peer prefix */
-                if (a->prefixlen != 0) {
-                        uint32_t prefix;
-
-                        if (a->in_addr_peer.in.s_addr != 0)
-                                prefix = be32toh(a->in_addr_peer.in.s_addr) >> (32 - a->prefixlen);
-                        else
-                                prefix = be32toh(a->in_addr.in.s_addr) >> (32 - a->prefixlen);
-
-                        siphash24_compress(&prefix, sizeof(prefix), state);
-                }
+                uint32_t prefix = address_prefix(a);
+                siphash24_compress(&prefix, sizeof(prefix), state);
 
                 _fallthrough_;
         case AF_INET6:
@@ -162,26 +168,11 @@ static int address_compare_func(const Address *a1, const Address *a2) {
                 if (r != 0)
                         return r;
 
-                /* compare the peer prefixes */
-                if (a1->prefixlen != 0) {
-                        /* make sure we don't try to shift by 32.
-                         * See ISO/IEC 9899:TC3 § 6.5.7.3. */
-                        uint32_t b1, b2;
-
-                        if (a1->in_addr_peer.in.s_addr != 0)
-                                b1 = be32toh(a1->in_addr_peer.in.s_addr) >> (32 - a1->prefixlen);
-                        else
-                                b1 = be32toh(a1->in_addr.in.s_addr) >> (32 - a1->prefixlen);
-
-                        if (a2->in_addr_peer.in.s_addr != 0)
-                                b2 = be32toh(a2->in_addr_peer.in.s_addr) >> (32 - a1->prefixlen);
-                        else
-                                b2 = be32toh(a2->in_addr.in.s_addr) >> (32 - a1->prefixlen);
-
-                        r = CMP(b1, b2);
-                        if (r != 0)
-                                return r;
-                }
+                uint32_t prefix1 = address_prefix(a1);
+                uint32_t prefix2 = address_prefix(a2);
+                r = CMP(prefix1, prefix2);
+                if (r != 0)
+                        return r;
 
                 _fallthrough_;
         case AF_INET6:
@@ -260,6 +251,8 @@ static int address_add_internal(Link *link, Set **addresses,
         r = set_put(*addresses, address);
         if (r < 0)
                 return r;
+        if (r == 0)
+                return -EEXIST;
 
         address->link = link;
 
@@ -490,7 +483,7 @@ int address_remove(
 }
 
 static int address_acquire(Link *link, Address *original, Address **ret) {
-        union in_addr_union in_addr = {};
+        union in_addr_union in_addr = IN_ADDR_NULL;
         struct in_addr broadcast = {};
         _cleanup_(address_freep) Address *na = NULL;
         int r;
@@ -665,7 +658,7 @@ int address_configure(
                 return log_link_error_errno(link, r, "Could not add address: %m");
         }
 
-        return 0;
+        return 1;
 }
 
 int config_parse_broadcast(
@@ -787,8 +780,8 @@ int config_parse_address(const char *unit,
         else
                 n->in_addr_peer = buffer;
 
-        if (n->family == AF_INET && n->broadcast.s_addr == 0)
-                n->broadcast.s_addr = n->in_addr.in.s_addr | htonl(0xfffffffflu >> n->prefixlen);
+        if (n->family == AF_INET && n->broadcast.s_addr == 0 && n->prefixlen <= 30)
+                n->broadcast.s_addr = n->in_addr.in.s_addr | htobe32(0xfffffffflu >> n->prefixlen);
 
         n = NULL;
 
@@ -971,10 +964,7 @@ int config_parse_address_scope(const char *unit,
 bool address_is_ready(const Address *a) {
         assert(a);
 
-        if (a->family == AF_INET6)
-                return !(a->flags & IFA_F_TENTATIVE);
-        else
-                return !(a->flags & (IFA_F_TENTATIVE | IFA_F_DEPRECATED));
+        return !(a->flags & IFA_F_TENTATIVE);
 }
 
 int address_section_verify(Address *address) {

@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 
 #include "alloc-util.h"
@@ -18,7 +17,7 @@
 #include "fs-util.h"
 #include "log.h"
 #include "macro.h"
-#include "missing.h"
+#include "missing_network.h"
 #include "nulstr-util.h"
 #include "parse-util.h"
 #include "path-util.h"
@@ -138,7 +137,8 @@ static int next_assignment(
 
         /* Warn about unknown non-extension fields. */
         if (!(flags & CONFIG_PARSE_RELAXED) && !startswith(lvalue, "X-"))
-                log_syntax(unit, LOG_WARNING, filename, line, 0, "Unknown lvalue '%s' in section '%s', ignoring", lvalue, section);
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Unknown key name '%s' in section '%s', ignoring.", lvalue, section);
 
         return 0;
 }
@@ -239,7 +239,6 @@ static int parse_line(
         }
 
         if (sections && !*section) {
-
                 if (!(flags & CONFIG_PARSE_RELAXED) && !*section_ignored)
                         log_syntax(unit, LOG_WARNING, filename, line, 0, "Assignment outside of section. Ignoring.");
 
@@ -247,10 +246,12 @@ static int parse_line(
         }
 
         e = strchr(l, '=');
-        if (!e) {
-                log_syntax(unit, LOG_WARNING, filename, line, 0, "Missing '='.");
-                return -EINVAL;
-        }
+        if (!e)
+                return log_syntax(unit, LOG_WARNING, filename, line, 0,
+                                  "Missing '=', ignoring line.");
+        if (e == l)
+                return log_syntax(unit, LOG_WARNING, filename, line, 0,
+                                  "Missing key name before '=', ignoring line.");
 
         *e = 0;
         e++;
@@ -322,7 +323,8 @@ int config_parse(const char *unit,
                         return r;
                 }
 
-                if (strchr(COMMENTS, *skip_leading_chars(buf, WHITESPACE)))
+                l = skip_leading_chars(buf, WHITESPACE);
+                if (*l != '\0' && strchr(COMMENTS, *l))
                         continue;
 
                 l = buf;
@@ -757,7 +759,7 @@ int config_parse_strv(
         for (;;) {
                 char *word = NULL;
 
-                r = extract_first_word(&rvalue, &word, NULL, EXTRACT_QUOTES|EXTRACT_RETAIN_ESCAPE);
+                r = extract_first_word(&rvalue, &word, NULL, EXTRACT_UNQUOTE|EXTRACT_RETAIN_ESCAPE);
                 if (r == 0)
                         break;
                 if (r == -ENOMEM)

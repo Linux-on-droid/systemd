@@ -36,10 +36,19 @@ All tools:
 * `$SD_EVENT_PROFILE_DELAYS=1` — if set, the sd-event event loop implementation
   will print latency information at runtime.
 
-* `$SYSTEMD_PROC_CMDLINE` — if set, may contain a string that is used as kernel
-  command line instead of the actual one readable from /proc/cmdline. This is
-  useful for debugging, in order to test generators and other code against
-  specific kernel command lines.
+* `$SYSTEMD_PROC_CMDLINE` — if set, the contents are used as the kernel command
+  line instead of the actual one in /proc/cmdline. This is useful for
+  debugging, in order to test generators and other code against specific kernel
+  command lines.
+
+* `$SYSTEMD_FSTAB` — if set, use this path instead of /etc/fstab. Only useful
+  for debugging.
+
+* `$SYSTEMD_CRYPTTAB` — if set, use this path instead of /etc/crypttab. Only
+  useful for debugging. Currently only supported by systemd-cryptsetup-generator.
+
+* `$SYSTEMD_EFI_OPTIONS` — if set, used instead of the string in the
+  SystemdOptions EFI variable. Analogous to `$SYSTEMD_PROC_CMDLINE`.
 
 * `$SYSTEMD_IN_INITRD` — takes a boolean. If set, overrides initrd detection.
   This is useful for debugging and testing initrd-only programs in the main
@@ -58,6 +67,10 @@ All tools:
   this only controls use of Unicode emoji glyphs, and has no effect on other
   Unicode glyphs.
 
+* `$RUNTIME_DIRECTORY` — various tools use this variable to locate the
+  appropriate path under /run. This variable is also set by the manager when
+  RuntimeDirectory= is used, see systemd.exec(5).
+
 systemctl:
 
 * `$SYSTEMCTL_FORCE_BUS=1` — if set, do not connect to PID1's private D-Bus
@@ -70,8 +83,8 @@ systemctl:
 
 systemd-nspawn:
 
-* `$UNIFIED_CGROUP_HIERARCHY=1` — if set, force nspawn into unified cgroup
-  hierarchy mode.
+* `$SYSTEMD_NSPAWN_UNIFIED_HIERARCHY=1` — if set, force nspawn into unified
+  cgroup hierarchy mode.
 
 * `$SYSTEMD_NSPAWN_API_VFS_WRITABLE=1` — if set, make /sys and /proc/sys and
   friends writable in the container. If set to "network", leave only
@@ -217,8 +230,14 @@ systemd itself:
 
 systemd-remount-fs:
 
-* `$SYSTEMD_REMOUNT_ROOT_RW=1` — if set and and no entry for the root directory
+* `$SYSTEMD_REMOUNT_ROOT_RW=1` — if set and no entry for the root directory
   exists in /etc/fstab (this file always takes precedence), then the root
   directory is remounted writable. This is primarily used by
   systemd-gpt-auto-generator to ensure the root partition is mounted writable
   in accordance to the GPT partition flags.
+
+systemd-firstboot and localectl:
+
+* `SYSTEMD_LIST_NON_UTF8_LOCALES=1` – if set non-UTF-8 locales are listed among
+  the installed ones. By default non-UTF-8 locales are suppressed from the
+  selection, since we are living in the 21st century.

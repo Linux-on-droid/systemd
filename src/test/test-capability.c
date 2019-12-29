@@ -2,7 +2,6 @@
 
 #include <netinet/in.h>
 #include <pwd.h>
-#include <sys/capability.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -15,8 +14,8 @@
 #include "macro.h"
 #include "missing_prctl.h"
 #include "parse-util.h"
+#include "string-util.h"
 #include "tests.h"
-#include "util.h"
 
 static uid_t test_uid = -1;
 static gid_t test_gid = -1;
@@ -99,7 +98,7 @@ static int setup_tests(bool *run_ambient) {
 
         nobody = getpwnam(NOBODY_USER_NAME);
         if (!nobody)
-                return log_error_errno(errno, "Could not find nobody user: %m");
+                return log_error_errno(SYNTHETIC_ERRNO(ENOENT), "Could not find nobody user: %m");
 
         test_uid = nobody->pw_uid;
         test_gid = nobody->pw_gid;

@@ -105,6 +105,15 @@
         _Pragma("GCC diagnostic push");                                 \
         _Pragma("GCC diagnostic ignored \"-Wincompatible-pointer-types\"")
 
+#if HAVE_WSTRINGOP_TRUNCATION
+#  define DISABLE_WARNING_STRINGOP_TRUNCATION                           \
+        _Pragma("GCC diagnostic push");                                 \
+        _Pragma("GCC diagnostic ignored \"-Wstringop-truncation\"")
+#else
+#  define DISABLE_WARNING_STRINGOP_TRUNCATION                           \
+        _Pragma("GCC diagnostic push")
+#endif
+
 #define REENABLE_WARNING                                                \
         _Pragma("GCC diagnostic pop")
 
@@ -298,29 +307,30 @@ static inline unsigned long ALIGN_POWER2(unsigned long u) {
 
 extern void __coverity_panic__(void);
 
-static inline int __coverity_check__(int condition) {
+static inline void __coverity_check__(int condition) {
+        if (!condition)
+                __coverity_panic__();
+}
+
+static inline int __coverity_check_and_return__(int condition) {
         return condition;
 }
 
-#define assert_message_se(expr, message)                                \
-        do {                                                            \
-                if (__coverity_check__(!(expr)))                        \
-                        __coverity_panic__();                           \
-        } while (false)
+#define assert_message_se(expr, message) __coverity_check__(!!(expr))
 
-#define assert_log(expr, message) __coverity_check__(!!(expr))
+#define assert_log(expr, message) __coverity_check_and_return__(!!(expr))
 
 #else  /* ! __COVERITY__ */
 
 #define assert_message_se(expr, message)                                \
         do {                                                            \
                 if (_unlikely_(!(expr)))                                \
-                        log_assert_failed(message, __FILE__, __LINE__, __PRETTY_FUNCTION__); \
+                        log_assert_failed(message, PROJECT_FILE, __LINE__, __PRETTY_FUNCTION__); \
         } while (false)
 
 #define assert_log(expr, message) ((_likely_(expr))                     \
         ? (true)                                                        \
-        : (log_assert_failed_return(message, __FILE__, __LINE__, __PRETTY_FUNCTION__), false))
+        : (log_assert_failed_return(message, PROJECT_FILE, __LINE__, __PRETTY_FUNCTION__), false))
 
 #endif  /* __COVERITY__ */
 
@@ -335,18 +345,16 @@ static inline int __coverity_check__(int condition) {
 #endif
 
 #define assert_not_reached(t)                                           \
-        do {                                                            \
-                log_assert_failed_unreachable(t, __FILE__, __LINE__, __PRETTY_FUNCTION__); \
-        } while (false)
+        log_assert_failed_unreachable(t, PROJECT_FILE, __LINE__, __PRETTY_FUNCTION__)
 
 #if defined(static_assert)
 #define assert_cc(expr)                                                 \
-        static_assert(expr, #expr);
+        static_assert(expr, #expr)
 #else
 #define assert_cc(expr)                                                 \
         struct CONCATENATE(_assert_struct_, __COUNTER__) {              \
                 char x[(expr) ? 0 : -1];                                \
-        };
+        }
 #endif
 
 #define assert_return(expr, r)                                          \
@@ -455,7 +463,8 @@ static inline int __coverity_check__(int condition) {
                  * type for the array, in the hope that checkers such as ubsan don't complain that the initializers for \
                  * the array are not representable by the base type. Ideally we'd use typeof(x) as base type, but that  \
                  * doesn't work, as we want to use this on bitfields and gcc refuses typeof() on bitfields.) */         \
-                assert_cc((sizeof((long double[]){__VA_ARGS__})/sizeof(long double)) <= 20); \
+                static const long double __assert_in_set[] _unused_ = { __VA_ARGS__ }; \
+                assert_cc(ELEMENTSOF(__assert_in_set) <= 20); \
                 switch(x) {                     \
                 FOR_EACH_MAKE_CASE(__VA_ARGS__) \
                         _found = true;          \

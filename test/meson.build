@@ -2,11 +2,22 @@
 
 test_data_files = '''
         a.service
+        a-conj.service
         b.service
         basic.target
         c.service
         d.service
         daughter.service
+        dml.slice
+        dml-passthrough.slice
+        dml-passthrough-empty.service
+        dml-passthrough-set-dml.service
+        dml-passthrough-set-ml.service
+        dml-override.slice
+        dml-override-empty.service
+        dml-discard.slice
+        dml-discard-empty.service
+        dml-discard-set-ml.service
         e.service
         end.service
         f.service
@@ -15,7 +26,8 @@ test_data_files = '''
         h.service
         hello-after-sleep.target
         hello.service
-        hwdb/10-bad.hwdb
+        hwdb.d/10-bad.hwdb
+        i.service
         journal-data/journal-1.txt
         journal-data/journal-2.txt
         nomem.slice
@@ -44,6 +56,8 @@ test_data_files = '''
         test-execute/exec-capabilityboundingset-merge.service
         test-execute/exec-capabilityboundingset-reset.service
         test-execute/exec-capabilityboundingset-simple.service
+        test-execute/exec-condition-failed.service
+        test-execute/exec-condition-skip.service
         test-execute/exec-cpuaffinity1.service
         test-execute/exec-cpuaffinity2.service
         test-execute/exec-cpuaffinity3.service
@@ -95,6 +109,8 @@ test_data_files = '''
         test-execute/exec-privatetmp-no.service
         test-execute/exec-privatetmp-yes.service
         test-execute/exec-protecthome-tmpfs-vs-protectsystem-strict.service
+        test-execute/exec-protectkernellogs-yes-capabilities.service
+        test-execute/exec-protectkernellogs-no-capabilities.service
         test-execute/exec-protectkernelmodules-no-capabilities.service
         test-execute/exec-protectkernelmodules-yes-capabilities.service
         test-execute/exec-protectkernelmodules-yes-mount-propagation.service

@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: LGPL-2.1+ */
 #pragma once
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "macro.h"
 
 static inline void _reset_errno_(int *saved_errno) {
@@ -26,6 +29,22 @@ static inline int negative_errno(void) {
          * be 0 and thus the caller's error-handling might not be triggered. */
         assert_return(errno > 0, -EINVAL);
         return -errno;
+}
+
+static inline const char *strerror_safe(int error) {
+        /* 'safe' here does NOT mean thread safety. */
+        return strerror(abs(error));
+}
+
+static inline int errno_or_else(int fallback) {
+        /* To be used when invoking library calls where errno handling is not defined clearly: we return
+         * errno if it is set, and the specified error otherwise. The idea is that the caller initializes
+         * errno to zero before doing an API call, and then uses this helper to retrieve a somewhat useful
+         * error code */
+        if (errno > 0)
+                return -errno;
+
+        return -abs(fallback);
 }
 
 /* Hint #1: ENETUNREACH happens if we try to connect to "non-existing" special IP addresses, such as ::5.
@@ -66,4 +85,19 @@ static inline bool ERRNO_IS_RESOURCE(int r) {
                       EMFILE,
                       ENFILE,
                       ENOMEM);
+}
+
+/* Three different errors for "operation/system call/ioctl not supported" */
+static inline bool ERRNO_IS_NOT_SUPPORTED(int r) {
+        return IN_SET(abs(r),
+                      EOPNOTSUPP,
+                      ENOTTY,
+                      ENOSYS);
+}
+
+/* Two different errors for access problems */
+static inline bool ERRNO_IS_PRIVILEGE(int r) {
+        return IN_SET(abs(r),
+                      EACCES,
+                      EPERM);
 }

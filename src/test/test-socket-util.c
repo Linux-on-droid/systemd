@@ -66,7 +66,7 @@ static void test_socket_address_parse_one(const char *in, int ret, int family, c
 }
 
 #define SUN_PATH_LEN (sizeof(((struct sockaddr_un){}).sun_path))
-assert_cc(sizeof(((struct sockaddr_un){}).sun_path) == 108);
+assert_cc(SUN_PATH_LEN == 108);
 
 static void test_socket_address_parse(void) {
         log_info("/* %s */", __func__);
@@ -126,6 +126,7 @@ static void test_socket_address_parse(void) {
 static void test_socket_print_unix_one(const char *in, size_t len_in, const char *expected) {
         _cleanup_free_ char *out = NULL, *c = NULL;
 
+        assert(len_in <= SUN_PATH_LEN);
         SocketAddress a = { .sockaddr = { .un = { .sun_family = AF_UNIX } },
                             .size = offsetof(struct sockaddr_un, sun_path) + len_in,
                             .type = SOCK_STREAM,
@@ -151,8 +152,6 @@ static void test_socket_print_unix(void) {
         test_socket_print_unix_one("\0_________________________there's 108 characters in this string_____________________________________________", 108,
                                    "@_________________________there\\'s 108 characters in this string_____________________________________________");
         test_socket_print_unix_one("////////////////////////////////////////////////////////////////////////////////////////////////////////////", 108,
-                                   "////////////////////////////////////////////////////////////////////////////////////////////////////////////");
-        test_socket_print_unix_one("////////////////////////////////////////////////////////////////////////////////////////////////////////////", 109,
                                    "////////////////////////////////////////////////////////////////////////////////////////////////////////////");
         test_socket_print_unix_one("\0\a\b\n\255", 6, "@\\a\\b\\n\\255\\000");
 }
@@ -810,6 +809,67 @@ static void test_send_emptydata(void) {
         assert_se(fd == -999);
 }
 
+static void test_flush_accept(void) {
+        _cleanup_close_ int listen_stream = -1, listen_dgram = -1, listen_seqpacket = 1, connect_stream = -1, connect_dgram = -1, connect_seqpacket = -1;
+        static const union sockaddr_union sa = { .un.sun_family = AF_UNIX };
+        union sockaddr_union lsa;
+        socklen_t l;
+
+        listen_stream = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+        assert_se(listen_stream >= 0);
+
+        listen_dgram = socket(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+        assert_se(listen_dgram >= 0);
+
+        listen_seqpacket = socket(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+        assert_se(listen_seqpacket >= 0);
+
+        assert_se(flush_accept(listen_stream) < 0);
+        assert_se(flush_accept(listen_dgram) < 0);
+        assert_se(flush_accept(listen_seqpacket) < 0);
+
+        assert_se(bind(listen_stream, &sa.sa, sizeof(sa_family_t)) >= 0);
+        assert_se(bind(listen_dgram, &sa.sa, sizeof(sa_family_t)) >= 0);
+        assert_se(bind(listen_seqpacket, &sa.sa, sizeof(sa_family_t)) >= 0);
+
+        assert_se(flush_accept(listen_stream) < 0);
+        assert_se(flush_accept(listen_dgram) < 0);
+        assert_se(flush_accept(listen_seqpacket) < 0);
+
+        assert_se(listen(listen_stream, SOMAXCONN) >= 0);
+        assert_se(listen(listen_dgram, SOMAXCONN) < 0);
+        assert_se(listen(listen_seqpacket, SOMAXCONN) >= 0);
+
+        assert_se(flush_accept(listen_stream) >= 0);
+        assert_se(flush_accept(listen_dgram) < 0);
+        assert_se(flush_accept(listen_seqpacket) >= 0);
+
+        connect_stream = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+        assert_se(connect_stream >= 0);
+
+        connect_dgram = socket(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+        assert_se(connect_dgram >= 0);
+
+        connect_seqpacket = socket(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+        assert_se(connect_seqpacket >= 0);
+
+        l = sizeof(lsa);
+        assert_se(getsockname(listen_stream, &lsa.sa, &l) >= 0);
+        assert_se(connect(connect_stream, &lsa.sa, l) >= 0);
+
+        l = sizeof(lsa);
+        assert_se(getsockname(listen_dgram, &lsa.sa, &l) >= 0);
+        assert_se(connect(connect_dgram, &lsa.sa, l) >= 0);
+
+        l = sizeof(lsa);
+        assert_se(getsockname(listen_seqpacket, &lsa.sa, &l) >= 0);
+        assert_se(connect(connect_seqpacket, &lsa.sa, l) >= 0);
+
+        assert_se(flush_accept(listen_stream) >= 0);
+        assert_se(flush_accept(listen_dgram) < 0);
+        assert_se(flush_accept(listen_seqpacket) >= 0);
+}
+
 int main(int argc, char *argv[]) {
         test_setup_logging(LOG_DEBUG);
 
@@ -843,6 +903,7 @@ int main(int argc, char *argv[]) {
         test_receive_nopassfd();
         test_send_nodata_nofd();
         test_send_emptydata();
+        test_flush_accept();
 
         return 0;
 }

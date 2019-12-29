@@ -13,6 +13,8 @@ sources = files('''
         netdev/macvlan.h
         netdev/netdev.c
         netdev/netdev.h
+        netdev/nlmon.c
+        netdev/nlmon.h
         netdev/tunnel.c
         netdev/tunnel.h
         netdev/tuntap.c
@@ -39,6 +41,10 @@ sources = files('''
         netdev/fou-tunnel.h
         netdev/l2tp-tunnel.c
         netdev/l2tp-tunnel.h
+        netdev/macsec.c
+        netdev/macsec.h
+        netdev/xfrm.c
+        netdev/xfrm.h
         networkd-address-label.c
         networkd-address-label.h
         networkd-address-pool.c
@@ -47,21 +53,34 @@ sources = files('''
         networkd-address.h
         networkd-brvlan.c
         networkd-brvlan.h
+        networkd-can.c
+        networkd-can.h
         networkd-conf.c
         networkd-conf.h
+        networkd-dhcp-common.c
+        networkd-dhcp-common.h
+        networkd-dhcp-server.c
+        networkd-dhcp-server.h
         networkd-dhcp4.c
+        networkd-dhcp4.h
         networkd-dhcp6.c
+        networkd-dhcp6.h
         networkd-fdb.c
         networkd-fdb.h
         networkd-ipv4ll.c
+        networkd-ipv4ll.h
         networkd-ipv6-proxy-ndp.c
         networkd-ipv6-proxy-ndp.h
         networkd-link-bus.c
+        networkd-link-bus.h
         networkd-link.c
         networkd-link.h
+        networkd-lldp-rx.c
+        networkd-lldp-rx.h
         networkd-lldp-tx.c
         networkd-lldp-tx.h
         networkd-manager-bus.c
+        networkd-manager-bus.h
         networkd-manager.c
         networkd-manager.h
         networkd-ndisc.c
@@ -71,14 +90,27 @@ sources = files('''
         networkd-radv.c
         networkd-radv.h
         networkd-network-bus.c
+        networkd-network-bus.h
         networkd-network.c
         networkd-network.h
+        networkd-nexthop.c
+        networkd-nexthop.h
         networkd-route.c
         networkd-route.h
         networkd-routing-policy-rule.c
         networkd-routing-policy-rule.h
+        networkd-speed-meter.c
+        networkd-speed-meter.h
         networkd-util.c
         networkd-util.h
+        networkd-wifi.c
+        networkd-wifi.h
+        tc/netem.c
+        tc/netem.h
+        tc/qdisc.c
+        tc/qdisc.h
+        tc/tc-util.c
+        tc/tc-util.h
 '''.split())
 
 systemd_networkd_sources = files('networkd.c')
@@ -93,7 +125,13 @@ systemd_networkd_wait_online_sources = files('''
 
 networkctl_sources = files('networkctl.c')
 
-network_include_dir = include_directories('.')
+network_generator_sources = files('''
+        generator/main.c
+        generator/network-generator.c
+        generator/network-generator.h
+'''.split())
+
+network_include_dir = [includes, include_directories(['.', 'netdev', 'tc'])]
 
 if conf.get('ENABLE_NETWORKD') == 1
         networkd_gperf_c = custom_target(
@@ -121,13 +159,15 @@ if conf.get('ENABLE_NETWORKD') == 1
                 networkd_gperf_c,
                 networkd_network_gperf_c,
                 netdev_gperf_c,
-                include_directories : includes,
+                include_directories : network_include_dir,
                 link_with : [libshared])
 
         install_data('org.freedesktop.network1.conf',
                      install_dir : dbuspolicydir)
         install_data('org.freedesktop.network1.service',
                      install_dir : dbussystemservicedir)
+        install_data('org.freedesktop.network1.policy',
+                     install_dir : polkitpolicydir)
         if install_polkit
                 install_data('systemd-networkd.rules',
                              install_dir : polkitrulesdir)
@@ -147,7 +187,9 @@ if conf.get('ENABLE_NETWORKD') == 1
       libudev_static,
       libsystemd_network,
       libshared],
-     [threads]],
+     [threads],
+     [],
+     network_include_dir],
 
     [['src/network/fuzz-network-parser.c',
       'src/fuzz/fuzz.h'],
@@ -155,7 +197,9 @@ if conf.get('ENABLE_NETWORKD') == 1
       libudev_static,
       libsystemd_network,
       libshared],
-     [threads]]
+     [threads],
+     [],
+     network_include_dir],
     ]
 
         tests += [
@@ -163,23 +207,23 @@ if conf.get('ENABLE_NETWORKD') == 1
      [libnetworkd_core,
       libsystemd_network,
       libudev],
-     []],
+     [], '', '', [], network_include_dir],
 
     [['src/network/test-network.c'],
      [libnetworkd_core,
       libudev_static,
       libsystemd_network,
       libshared],
-     [threads]],
+     [threads],
+     '', '', [], network_include_dir],
 
     [['src/network/test-routing-policy-rule.c'],
      [libnetworkd_core,
       libsystemd_network,
       libudev],
-     []],
+     [], '', '', [], network_include_dir],
 
     [['src/network/test-network-tables.c',
-      'src/network/test-network-tables.c',
       test_tables_h],
      [libnetworkd_core,
       libudev_static,
@@ -189,5 +233,11 @@ if conf.get('ENABLE_NETWORKD') == 1
      [threads],
      '', '', [],
      [network_include_dir] + libudev_core_includes],
+
+    [['src/network/generator/test-network-generator.c',
+      'src/network/generator/network-generator.c',
+      'src/network/generator/network-generator.h'],
+     [libshared],
+     [], '', '', [], network_include_dir],
   ]
 endif

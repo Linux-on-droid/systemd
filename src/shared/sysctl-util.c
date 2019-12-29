@@ -3,7 +3,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "fd-util.h"
@@ -58,6 +57,21 @@ int sysctl_write(const char *property, const char *value) {
                 return -errno;
 
         return 0;
+}
+
+int sysctl_writef(const char *property, const char *format, ...) {
+        _cleanup_free_ char *v = NULL;
+        va_list ap;
+        int r;
+
+        va_start(ap, format);
+        r = vasprintf(&v, format, ap);
+        va_end(ap);
+
+        if (r < 0)
+                return -ENOMEM;
+
+        return sysctl_write(property, v);
 }
 
 int sysctl_write_ip_property(int af, const char *ifname, const char *property, const char *value) {

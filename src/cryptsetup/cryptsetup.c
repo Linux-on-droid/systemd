@@ -2,7 +2,6 @@
 
 #include <errno.h>
 #include <mntent.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -16,6 +15,7 @@
 #include "device-util.h"
 #include "escape.h"
 #include "fileio.h"
+#include "fstab-util.h"
 #include "log.h"
 #include "main-func.h"
 #include "mount-util.h"
@@ -35,9 +35,7 @@
 static const char *arg_type = NULL; /* ANY_LUKS, CRYPT_LUKS1, CRYPT_LUKS2, CRYPT_TCRYPT or CRYPT_PLAIN */
 static char *arg_cipher = NULL;
 static unsigned arg_key_size = 0;
-#if HAVE_LIBCRYPTSETUP_SECTOR_SIZE
 static unsigned arg_sector_size = CRYPT_SECTOR_SIZE;
-#endif
 static int arg_key_slot = CRYPT_ANY_SLOT;
 static unsigned arg_keyfile_size = 0;
 static uint64_t arg_keyfile_offset = 0;
@@ -51,9 +49,7 @@ static bool arg_same_cpu_crypt = false;
 static bool arg_submit_from_crypt_cpus = false;
 static bool arg_tcrypt_hidden = false;
 static bool arg_tcrypt_system = false;
-#ifdef CRYPT_TCRYPT_VERA_MODES
 static bool arg_tcrypt_veracrypt = false;
-#endif
 static char **arg_tcrypt_keyfiles = NULL;
 static uint64_t arg_offset = 0;
 static uint64_t arg_skip = 0;
@@ -81,7 +77,10 @@ static int parse_one_option(const char *option) {
         assert(option);
 
         /* Handled outside of this tool */
-        if (STR_IN_SET(option, "noauto", "auto", "nofail", "fail", "_netdev"))
+        if (STR_IN_SET(option, "noauto", "auto", "nofail", "fail", "_netdev", "keyfile-timeout"))
+                return 0;
+
+        if (startswith(option, "keyfile-timeout="))
                 return 0;
 
         if ((val = startswith(option, "cipher="))) {
@@ -106,7 +105,6 @@ static int parse_one_option(const char *option) {
 
         } else if ((val = startswith(option, "sector-size="))) {
 
-#if HAVE_LIBCRYPTSETUP_SECTOR_SIZE
                 r = safe_atou(val, &arg_sector_size);
                 if (r < 0) {
                         log_error_errno(r, "Failed to parse %s, ignoring: %m", option);
@@ -122,10 +120,6 @@ static int parse_one_option(const char *option) {
                         log_error("sector-size= is outside of %u and %u, ignoring.", CRYPT_SECTOR_SIZE, CRYPT_MAX_SECTOR_SIZE);
                         return 0;
                 }
-#else
-                log_error("sector-size= is not supported, compiled with old libcryptsetup.");
-                return 0;
-#endif
 
         } else if ((val = startswith(option, "key-slot="))) {
 
@@ -154,21 +148,12 @@ static int parse_one_option(const char *option) {
                 }
 
         } else if ((val = startswith(option, "keyfile-offset="))) {
-                uint64_t off;
 
-                r = safe_atou64(val, &off);
+                r = safe_atou64(val, &arg_keyfile_offset);
                 if (r < 0) {
                         log_error_errno(r, "Failed to parse %s, ignoring: %m", option);
                         return 0;
                 }
-
-                if ((size_t) off != off) {
-                        /* https://gitlab.com/cryptsetup/cryptsetup/issues/359 */
-                        log_error("keyfile-offset= value would truncated to %zu, ignoring.", (size_t) off);
-                        return 0;
-                }
-
-                arg_keyfile_offset = off;
 
         } else if ((val = startswith(option, "hash="))) {
                 r = free_and_strdup(&arg_hash, val);
@@ -219,13 +204,8 @@ static int parse_one_option(const char *option) {
                 arg_type = CRYPT_TCRYPT;
                 arg_tcrypt_system = true;
         } else if (streq(option, "tcrypt-veracrypt")) {
-#ifdef CRYPT_TCRYPT_VERA_MODES
                 arg_type = CRYPT_TCRYPT;
                 arg_tcrypt_veracrypt = true;
-#else
-                return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
-                                       "This version of cryptsetup does not support tcrypt-veracrypt; refusing.");
-#endif
         } else if (STR_IN_SET(option, "plain", "swap", "tmp"))
                 arg_type = CRYPT_PLAIN;
         else if ((val = startswith(option, "timeout="))) {
@@ -248,7 +228,7 @@ static int parse_one_option(const char *option) {
                 if (r < 0)
                         return log_error_errno(r, "Failed to parse %s: %m", option);
 
-        } else if (!streq(option, "none"))
+        } else
                 log_warning("Encountered unknown /etc/crypttab option '%s', ignoring.", option);
 
         return 0;
@@ -273,10 +253,10 @@ static int parse_options(const char *options) {
         }
 
         /* sanity-check options */
-        if (arg_type != NULL && !streq(arg_type, CRYPT_PLAIN)) {
-                if (arg_offset)
+        if (arg_type && !streq(arg_type, CRYPT_PLAIN)) {
+                if (arg_offset != 0)
                       log_warning("offset= ignored with type %s", arg_type);
-                if (arg_skip)
+                if (arg_skip != 0)
                       log_warning("skip= ignored with type %s", arg_type);
         }
 
@@ -323,7 +303,7 @@ static char *disk_mount_point(const char *label) {
         if (asprintf(&device, "/dev/mapper/%s", label) < 0)
                 return NULL;
 
-        f = setmntent("/etc/fstab", "re");
+        f = setmntent(fstab_path(), "re");
         if (!f)
                 return NULL;
 
@@ -450,10 +430,8 @@ static int attach_tcrypt(
         if (arg_tcrypt_system)
                 params.flags |= CRYPT_TCRYPT_SYSTEM_HEADER;
 
-#ifdef CRYPT_TCRYPT_VERA_MODES
         if (arg_tcrypt_veracrypt)
                 params.flags |= CRYPT_TCRYPT_VERA_MODES;
-#endif
 
         if (key_file) {
                 r = read_one_line_file(key_file, &passphrase);
@@ -484,12 +462,13 @@ static int attach_tcrypt(
         return 0;
 }
 
-static int attach_luks_or_plain(struct crypt_device *cd,
-                                const char *name,
-                                const char *key_file,
-                                const char *data_device,
-                                char **passwords,
-                                uint32_t flags) {
+static int attach_luks_or_plain(
+                struct crypt_device *cd,
+                const char *name,
+                const char *key_file,
+                char **passwords,
+                uint32_t flags) {
+
         int r = 0;
         bool pass_volume_key = false;
 
@@ -497,22 +476,11 @@ static int attach_luks_or_plain(struct crypt_device *cd,
         assert(name);
         assert(key_file || passwords);
 
-        if (!arg_type || STR_IN_SET(arg_type, ANY_LUKS, CRYPT_LUKS1)) {
-                r = crypt_load(cd, CRYPT_LUKS, NULL);
-                if (r < 0)
-                        return log_error_errno(r, "Failed to load LUKS superblock on device %s: %m", crypt_get_device_name(cd));
-
-                if (data_device)
-                        r = crypt_set_data_device(cd, data_device);
-        }
-
-        if ((!arg_type && r < 0) || streq_ptr(arg_type, CRYPT_PLAIN)) {
+        if ((!arg_type && !crypt_get_type(cd)) || streq_ptr(arg_type, CRYPT_PLAIN)) {
                 struct crypt_params_plain params = {
                         .offset = arg_offset,
                         .skip = arg_skip,
-#if HAVE_LIBCRYPTSETUP_SECTOR_SIZE
                         .sector_size = arg_sector_size,
-#endif
                 };
                 const char *cipher, *cipher_mode;
                 _cleanup_free_ char *truncated_cipher = NULL;
@@ -544,15 +512,15 @@ static int attach_luks_or_plain(struct crypt_device *cd,
                 /* for CRYPT_PLAIN limit reads from keyfile to key length, and ignore keyfile-size */
                 arg_keyfile_size = arg_key_size;
 
-                /* In contrast to what the name crypt_setup() might suggest this doesn't actually format
+                /* In contrast to what the name crypt_format() might suggest this doesn't actually format
                  * anything, it just configures encryption parameters when used for plain mode. */
                 r = crypt_format(cd, CRYPT_PLAIN, cipher, cipher_mode, NULL, NULL, arg_keyfile_size, &params);
+                if (r < 0)
+                        return log_error_errno(r, "Loading of cryptographic parameters failed: %m");
 
                 /* hash == NULL implies the user passed "plain" */
                 pass_volume_key = (params.hash == NULL);
         }
-        if (r < 0)
-                return log_error_errno(r, "Loading of cryptographic parameters failed: %m");
 
         log_info("Set cipher %s, mode %s, key size %i bits for device %s.",
                  crypt_get_cipher(cd),
@@ -561,7 +529,7 @@ static int attach_luks_or_plain(struct crypt_device *cd,
                  crypt_get_device_name(cd));
 
         if (key_file) {
-                r = crypt_activate_by_keyfile_offset(cd, name, arg_key_slot, key_file, arg_keyfile_size, arg_keyfile_offset, flags);
+                r = crypt_activate_by_keyfile_device_offset(cd, name, arg_key_slot, key_file, arg_keyfile_size, arg_keyfile_offset, flags);
                 if (r == -EPERM) {
                         log_error_errno(r, "Failed to activate with key file '%s'. (Key data incorrect?)", key_file);
                         return -EAGAIN; /* Log actual error, but return EAGAIN */
@@ -572,6 +540,7 @@ static int attach_luks_or_plain(struct crypt_device *cd,
                 }
                 if (r < 0)
                         return log_error_errno(r, "Failed to activate with key file '%s': %m", key_file);
+
         } else {
                 char **p;
 
@@ -630,6 +599,12 @@ static uint32_t determine_flags(void) {
         if (arg_submit_from_crypt_cpus)
                 flags |= CRYPT_ACTIVATE_SUBMIT_FROM_CRYPT_CPUS;
 
+#ifdef CRYPT_ACTIVATE_SERIALIZE_MEMORY_HARD_PBKDF
+        /* Try to decrease the risk of OOM event if memory hard key derivation function is in use */
+        /* https://gitlab.com/cryptsetup/cryptsetup/issues/446/ */
+        flags |= CRYPT_ACTIVATE_SERIALIZE_MEMORY_HARD_PBKDF;
+#endif
+
         return flags;
 }
 
@@ -647,6 +622,11 @@ static int run(int argc, char *argv[]) {
 
         log_setup_service();
 
+        crypt_set_log_callback(NULL, cryptsetup_log_glue, NULL);
+        if (DEBUG_LOGGING)
+                /* libcryptsetup won't even consider debug messages by default */
+                crypt_set_debug_level(CRYPT_DEBUG_ALL);
+
         umask(0022);
 
         if (streq(argv[1], "attach")) {
@@ -661,25 +641,21 @@ static int run(int argc, char *argv[]) {
                 if (argc < 4)
                         return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "attach requires at least two arguments.");
 
-                if (argc >= 5 &&
-                    argv[4][0] &&
-                    !streq(argv[4], "-") &&
-                    !streq(argv[4], "none")) {
-
-                        if (!path_is_absolute(argv[4]))
-                                log_warning("Password file path '%s' is not absolute. Ignoring.", argv[4]);
-                        else
+                if (argc >= 5 && !STR_IN_SET(argv[4], "", "-", "none")) {
+                        if (path_is_absolute(argv[4]))
                                 key_file = argv[4];
+                        else
+                                log_warning("Password file path '%s' is not absolute. Ignoring.", argv[4]);
                 }
 
-                if (argc >= 6 && argv[5][0] && !streq(argv[5], "-")) {
+                if (argc >= 6 && !STR_IN_SET(argv[5], "", "-", "none")) {
                         r = parse_options(argv[5]);
                         if (r < 0)
                                 return r;
                 }
 
                 /* A delicious drop of snake oil */
-                mlockall(MCL_FUTURE);
+                (void) mlockall(MCL_FUTURE);
 
                 if (arg_header) {
                         log_debug("LUKS header: %s", arg_header);
@@ -715,6 +691,29 @@ static int run(int argc, char *argv[]) {
                                 log_warning("Key file %s is world-readable. This is not a good idea!", key_file);
                 }
 
+                if (!arg_type || STR_IN_SET(arg_type, ANY_LUKS, CRYPT_LUKS1)) {
+                        r = crypt_load(cd, CRYPT_LUKS, NULL);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to load LUKS superblock on device %s: %m", crypt_get_device_name(cd));
+
+                        if (arg_header) {
+                                r = crypt_set_data_device(cd, argv[3]);
+                                if (r < 0)
+                                        return log_error_errno(r, "Failed to set LUKS data device %s: %m", argv[3]);
+                        }
+
+                        /* Tokens are available in LUKS2 only, but it is ok to call (and fail) with LUKS1. */
+                        if (!key_file) {
+                                r = crypt_activate_by_token(cd, argv[2], CRYPT_ANY_TOKEN, NULL, flags);
+                                if (r >= 0) {
+                                        log_debug("Volume %s activated with LUKS token id %i.", argv[2], r);
+                                        return 0;
+                                }
+
+                                log_debug_errno(r, "Token activation unsuccessful for device %s: %m", crypt_get_device_name(cd));
+                        }
+                }
+
                 for (tries = 0; arg_tries == 0 || tries < arg_tries; tries++) {
                         _cleanup_strv_free_erase_ char **passwords = NULL;
 
@@ -729,12 +728,7 @@ static int run(int argc, char *argv[]) {
                         if (streq_ptr(arg_type, CRYPT_TCRYPT))
                                 r = attach_tcrypt(cd, argv[2], key_file, passwords, flags);
                         else
-                                r = attach_luks_or_plain(cd,
-                                                         argv[2],
-                                                         key_file,
-                                                         arg_header ? argv[3] : NULL,
-                                                         passwords,
-                                                         flags);
+                                r = attach_luks_or_plain(cd, argv[2], key_file, passwords, flags);
                         if (r >= 0)
                                 break;
                         if (r != -EAGAIN)
