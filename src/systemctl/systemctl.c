@@ -32,6 +32,7 @@
 #include "cpu-set-util.h"
 #include "dirent-util.h"
 #include "dropin.h"
+#include "efi-loader.h"
 #include "efivars.h"
 #include "env-util.h"
 #include "escape.h"
@@ -3514,8 +3515,13 @@ static int load_kexec_kernel(void) {
                 return log_error_errno(errno, KEXEC" is not available: %m");
 
         r = boot_entries_load_config_auto(NULL, NULL, &config);
-        if (r == -ENOKEY) /* The call doesn't log about ENOKEY, let's do so here. */
-                return log_error_errno(r, "Cannot find the ESP partition mount point.");
+        if (r == -ENOKEY)
+                /* The call doesn't log about ENOKEY, let's do so here. */
+                return log_error_errno(r,
+                                       "No kexec kernel loaded and autodetection failed.\n%s",
+                                       is_efi_boot()
+                                       ? "Cannot automatically load kernel: ESP partition mount point not found."
+                                       : "Automatic loading works only on systems booted with EFI.");
         if (r < 0)
                 return r;
 
@@ -5931,7 +5937,7 @@ static int cat(int argc, char *argv[], void *userdata) {
         char **name;
         sd_bus *bus;
         bool first = true;
-        int r;
+        int r, rc = 0;
 
         /* Include all units by default — i.e. continue as if the --all
          * option was used */
@@ -5976,8 +5982,12 @@ static int cat(int argc, char *argv[], void *userdata) {
                 }
                 if (r < 0)
                         return r;
-                if (r == 0)
-                        return -ENOENT;
+                if (r == 0) {
+                        /* Skip units which have no on-disk counterpart, but
+                         * propagate the error to the user */
+                        rc = -ENOENT;
+                        continue;
+                }
 
                 if (first)
                         first = false;
@@ -6003,7 +6013,7 @@ static int cat(int argc, char *argv[], void *userdata) {
                         return r;
         }
 
-        return 0;
+        return rc;
 }
 
 static int set_property(int argc, char *argv[], void *userdata) {
@@ -7853,7 +7863,7 @@ static int systemctl_help(void) {
                "  isolate UNIT                        Start one unit and stop all others\n"
                "  kill UNIT...                        Send signal to processes of a unit\n"
                "  clean UNIT...                       Clean runtime, cache, state, logs or\n"
-               "                                      or configuration of unit\n"
+               "                                      configuration of unit\n"
                "  is-active PATTERN...                Check whether units are active\n"
                "  is-failed PATTERN...                Check whether units are failed\n"
                "  status [PATTERN...|PID...]          Show runtime status of one or more units\n"
@@ -7950,6 +7960,9 @@ static int systemctl_help(void) {
                "     --what=RESOURCES    Which types of resources to remove\n"
                "     --now               Start or stop unit after enabling or disabling it\n"
                "     --dry-run           Only print what would be done\n"
+               "                         Currently supported by verbs: halt, poweroff, reboot,\n"
+               "                             kexec, suspend, hibernate, suspend-then-hibernate,\n"
+               "                             hybrid-sleep, default, rescue, emergency, and exit.\n"
                "  -q --quiet             Suppress output\n"
                "     --wait              For (re)start, wait until service stopped again\n"
                "                         For is-system-running, wait until startup is completed\n"
