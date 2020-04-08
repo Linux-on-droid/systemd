@@ -42,6 +42,8 @@ mount-remove-unused-mount_is_auto-and-mount_is_automount.patch
 core-set-fs.file-max-sysctl-to-LONG_MAX-rather-than-ULONG.patch
 execute-remove-one-redundant-comparison-check.patch
 core-change-ownership-mode-of-the-execution-directories-a.patch
+bus-util-treat-org.freedesktop.DBus.Error.ServiceUnknown-.patch
+resolve-fix-memleak.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
