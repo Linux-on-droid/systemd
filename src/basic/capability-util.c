@@ -86,20 +86,17 @@ unsigned long cap_last_cap(void) {
 int capability_update_inherited_set(cap_t caps, uint64_t set) {
         unsigned long i;
 
-        /* Add capabilities in the set to the inherited caps. Do not apply
-         * them yet. */
+        /* Add capabilities in the set to the inherited caps, drops capabilities not in the set.
+         * Do not apply them yet. */
 
         for (i = 0; i <= cap_last_cap(); i++) {
+                cap_flag_value_t flag = set & (UINT64_C(1) << i) ? CAP_SET : CAP_CLEAR;
+                cap_value_t v;
 
-                if (set & (UINT64_C(1) << i)) {
-                        cap_value_t v;
+                v = (cap_value_t) i;
 
-                        v = (cap_value_t) i;
-
-                        /* Make the capability inheritable. */
-                        if (cap_set_flag(caps, CAP_INHERITABLE, 1, &v, CAP_SET) < 0)
-                                return -errno;
-                }
+                if (cap_set_flag(caps, CAP_INHERITABLE, 1, &v, flag) < 0)
+                        return -errno;
         }
 
         return 0;
@@ -110,7 +107,13 @@ int capability_ambient_set_apply(uint64_t set, bool also_inherit) {
         unsigned long i;
         int r;
 
-        /* Add the capabilities to the ambient set. */
+        /* Add the capabilities to the ambient set (an possibly also the inheritable set) */
+
+        /* Check that we can use PR_CAP_AMBIENT or quit early. */
+        if (!ambient_capabilities_supported())
+                return (set & all_capabilities()) == 0 ?
+                        0 : -EOPNOTSUPP; /* if actually no ambient caps are to be set, be silent,
+                                          * otherwise fail recognizably */
 
         if (also_inherit) {
                 caps = cap_get_proc();
@@ -132,6 +135,17 @@ int capability_ambient_set_apply(uint64_t set, bool also_inherit) {
                         /* Add the capability to the ambient set. */
                         if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0, 0) < 0)
                                 return -errno;
+                } else {
+
+                        /* Drop the capability so we don't inherit capabilities we didn't ask for. */
+                        r = prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_IS_SET, i, 0, 0);
+                        if (r < 0)
+                                return -errno;
+
+                        if (r)
+                                if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_LOWER, i, 0, 0) < 0)
+                                        return -errno;
+
                 }
         }
 

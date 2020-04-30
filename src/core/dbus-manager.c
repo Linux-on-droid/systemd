@@ -9,6 +9,7 @@
 #include "architecture.h"
 #include "build.h"
 #include "bus-common-errors.h"
+#include "bus-util.h"
 #include "dbus-cgroup.h"
 #include "dbus-execute.h"
 #include "dbus-job.h"
@@ -1642,7 +1643,7 @@ static int method_lookup_dynamic_user_by_name(sd_bus_message *message, void *use
 
         if (!MANAGER_IS_SYSTEM(m))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_NOT_SUPPORTED, "Dynamic users are only supported in the system instance.");
-        if (!valid_user_group_name(name))
+        if (!valid_user_group_name(name, VALID_USER_RELAX))
                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "User name invalid: %s", name);
 
         r = dynamic_user_lookup_name(m, name, &uid);
@@ -1663,7 +1664,7 @@ static int method_lookup_dynamic_user_by_uid(sd_bus_message *message, void *user
         assert(message);
         assert(m);
 
-        assert_cc(sizeof(uid) == sizeof(uint32_t));
+        assert_cc(sizeof(uid_t) == sizeof(uint32_t));
         r = sd_bus_message_read_basic(message, 'u', &uid);
         if (r < 0)
                 return r;
@@ -1712,7 +1713,7 @@ static int method_get_dynamic_users(sd_bus_message *message, void *userdata, sd_
                 if (r == -EAGAIN) /* not realized yet? */
                         continue;
                 if (r < 0)
-                        return sd_bus_error_setf(error, SD_BUS_ERROR_FAILED, "Failed to lookup a dynamic user.");
+                        return sd_bus_error_setf(error, SD_BUS_ERROR_FAILED, "Failed to look up a dynamic user.");
 
                 r = sd_bus_message_append(reply, "(us)", uid, d->name);
                 if (r < 0)

@@ -217,8 +217,7 @@
             this notification message has been sent. If this option is used, <varname>NotifyAccess=</varname> (see
             below) should be set to open access to the notification socket provided by systemd. If
             <varname>NotifyAccess=</varname> is missing or set to <option>none</option>, it will be forcibly set to
-            <option>main</option>. Note that currently <varname>Type=</varname><option>notify</option> will not work if
-            used in combination with <varname>PrivateNetwork=</varname><option>yes</option>.</para></listitem>
+            <option>main</option></para></listitem>.
 
             <listitem><para>Behavior of <option>idle</option> is very similar to <option>simple</option>; however,
             actual execution of the service program is delayed until all active jobs are dispatched. This may be used
@@ -424,6 +423,9 @@
         <varname>ExecStart=</varname>, or <varname>ExecStartPost=</varname> fail (and are not prefixed with
         <literal>-</literal>, see above) or time out before the service is fully up, execution continues with commands
         specified in <varname>ExecStopPost=</varname>, the commands in <varname>ExecStop=</varname> are skipped.</para>
+
+        <para>Note that the execution of <varname>ExecStartPost=</varname> is taken into account for the purpose of
+        <varname>Before=</varname>/<varname>After=</varname> ordering constraints.</para>
         </listitem>
       </varlistentry>
 
@@ -535,7 +537,10 @@
         service, as well as the main process' exit code and status, set in the <varname>$SERVICE_RESULT</varname>,
         <varname>$EXIT_CODE</varname> and <varname>$EXIT_STATUS</varname> environment variables, see
         <citerefentry><refentrytitle>systemd.exec</refentrytitle><manvolnum>5</manvolnum></citerefentry> for
-        details.</para></listitem>
+        details.</para>
+
+        <para>Note that the execution of <varname>ExecStopPost=</varname> is taken into account for the purpose of
+        <varname>Before=</varname>/<varname>After=</varname> ordering constraints.</para></listitem>
       </varlistentry>
 
       <varlistentry>

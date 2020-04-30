@@ -366,6 +366,10 @@ tests += [
          [],
          []],
 
+        [['src/test/test-socket-netlink.c'],
+         [],
+         []],
+
         [['src/test/test-in-addr-util.c'],
          [],
          []],
@@ -1117,6 +1121,10 @@ tests += [
 tests += [
         [['src/login/test-login-shared.c'],
          [],
+         []],
+
+        [['src/analyze/test-verify.c', 'src/analyze/analyze-verify.c', 'src/analyze/analyze-verify.h'],
+         [libcore, libshared],
          []],
 
         [['src/login/test-inhibit.c'],

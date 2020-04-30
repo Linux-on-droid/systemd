@@ -1,3 +1,148 @@
+systemd (245.5-2) unstable; urgency=medium
+
+  * Cherry-pick various fixes from upstream master
+    - network: add a flag to ignore gateway provided by DHCP server
+    - userdb: when doing client-side NSS look-ups optionally avoid shadow
+      look-ups
+    - nss-systemd: don't synthesize root/nobody when iterating
+    - core: make sure we don't get confused when setting TERM for a tty fd
+    - core: make sure to restore the control command id, too
+  * Install 60-block.rules in udev-udeb and initramfs-tools.
+    The block device rules were split out from 60-persistent-storage.rules
+    into its own rules file in v220. Those rules ensure that change events
+    are emitted and the udev db is updated after metadata changes.
+    Thanks to Pascal Hambourg (Closes: #958397)
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 27 Apr 2020 17:38:44 +0200
+
+systemd (245.5-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 245.5
+  * Rebase patches
+
+  [ Dan Streetman ]
+  * Follow symlinks when finding link files to copy into initramfs.
+    If the /{etc,lib}/systemd/network directory itself is a symlink, the find
+    command will not actually find any of the files in the dir it links to.
+    Use the find -L param to follow symlinks.
+    (LP: #1868892)
+  * Remove Ubuntu-specific ondemand.service.
+    New processors handle scaling/throttling in internal firmware
+    (e.g. intel_pstate), and do not require OS config.
+    Additionally, nobody else does this, not even Debian.
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 18 Apr 2020 20:41:18 +0200
+
+systemd (245.4-4) unstable; urgency=medium
+
+  * Drop Conflicts: virtualbox-guest-utils from systemd-timesyncd.
+    Otherwise this could lead to virtualbox-guest-utils being uninstalled on
+    upgrades which is not intended. (Closes: #956436)
+  * pid1: automatically generate systemd-remount-fs.service deps, plus enable
+    systemd-pstore from sysinit.target
+  * Fix systemd-pstore.service enablement symlink on upgrades.
+    It is now started via sysinit.target. Also clean up the symlink on
+    purge.
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 13 Apr 2020 11:34:31 +0200
+
+systemd (245.4-3) unstable; urgency=medium
+
+  [ Dan Streetman ]
+  * d/rules: in dh_auto_test, include meson param --print-errorlogs.
+    Also, don't cat testlog.txt; it's noisy and not very helpful.
+    Upstream request:
+    https://github.com/systemd/systemd/pull/14338#issuecomment-603432989
+
+  [ Michael Biebl ]
+  * pid1: by default make user units inherit their umask from the user manager
+    (Closes: #945000)
+  * user-util: rework how we validate user names.
+    This reworks the user validation infrastructure. There are now two
+    modes. In regular mode we are strict and test against a strict set of
+    valid chars. And in "relaxed" mode we just filter out some really
+    obvious, dangerous stuff. i.e. strict is whitelisting what is OK, but
+    "relaxed" is blacklisting what is really not OK.
+    The idea is that we use strict mode whenever we allocate a new user,
+    while "relaxed" mode is used when we process users registered elsewhere.
+    (Closes: #955541)
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 10 Apr 2020 11:55:15 +0200
+
+systemd (245.4-2) unstable; urgency=medium
+
+  [ Balint Reczey ]
+  * Ship systemd-timesyncd in a separate package.
+    The new systemd-timesyncd package conflicting with other NTP-related
+    packages resolves the problems arising when running systemd-timesyncd
+    and other NTP servers on the same system.
+    (LP: #1849156, Closes: #805927, #947936)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 04 Apr 2020 08:59:50 +0200
+
+systemd (245.4-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 245.4
+    - Allow names starting with a digit (Closes: #954174)
+    - Recognize davfs as network file system (Closes: #954755)
+  * Enable systemd-pstore.service by default on new installs and upgrades
+    (Closes: #952767)
+  * Revert "Enable seccomp support on riscv64"
+    This requires further changes to the source code and a newer, not yet
+    officially released, libseccomp. Since this complicates backports revert
+    this change for the time being.
+
+  [ Dan Streetman ]
+  * d/t/logind: use grep -s when checking /sys/power/state.
+    Some kernels in Ubuntu (e.g. linux-kvm) do not enable CONFIG_PM, which
+    results in stderr output when the logind test tries to grep the power
+    state file, causing the test to fail.  The test already handles skipping
+    the test if suspend isn't supported, so just use -s to suppress grep
+    from printing to stderr if the file doesn't exist.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 02 Apr 2020 11:58:18 +0200
+
+systemd (245.2-1) unstable; urgency=medium
+
+  * New upstream version 245.2
+  * Rebase patches
+  * Enable seccomp support on riscv64 (Closes: #954077)
+  * Drop migration code for the switch from DynamicUser=yes to no.
+    This code is no longer needed as it only affected systems between 239-1
+    and 239-5, i.e. it never affected a stable release.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 18 Mar 2020 23:32:08 +0100
+
+systemd (245-2) unstable; urgency=medium
+
+  * Revert "job: Don't mark as redundant if deps are relevant"
+    This change negatively affects plymouth which was no longer properly
+    stopped after the system has completed booting. The running plymouth
+    daemon can trigger a VT switch (to tty1). (Closes: #953670)
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 12 Mar 2020 13:55:26 +0100
+
+systemd (245-1) unstable; urgency=medium
+
+  [ Balint Reczey ]
+  * New upstream version 245
+  * Refresh patches
+  * Update symbols
+
+  [ Michael Biebl ]
+  * Disable repart, userdb, homed, fdisk, pwquality, p11kit feature.
+    Those are new features which drag in new dependencies and need further
+    review first.
+  * analyze: Fix table time output
+  * execute: Fix migration from DynamicUser=yes to no
+  * Drop manual clean up of /var/lib/private/systemd/timesync.
+    This is now done properly by systemd itself when a service switches from
+    DynamicUser=yes to no.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 11 Mar 2020 13:33:37 +0100
+
 systemd (244.3-1~bpo10+1) buster-backports; urgency=medium
 
   * Rebuild for buster-backports

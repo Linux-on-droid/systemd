@@ -67,6 +67,12 @@ CONFFLAGS = \
 	-Dfirstboot=false \
 	-Dxkbcommon=false \
 	-Dwheel-group=false \
+	-Drepart=false \
+	-Duserdb=false \
+	-Dhomed=false \
+	-Dfdisk=false \
+	-Dpwquality=false \
+	-Dp11kit=false \
 	-Dntp-servers="$(DEFAULT_NTP_SERVERS)" \
 	-Ddns-servers='' \
 	-Dlink-udev-shared=false \
@@ -268,7 +274,6 @@ ifeq ($(DEB_VENDOR),Ubuntu)
 	install -D --mode=644 debian/extra/systemd.py debian/systemd/usr/share/apport/package-hooks/systemd.py
 	install --mode=644 debian/extra/rules-ubuntu/*.rules debian/udev/lib/udev/rules.d/
 	cp -a debian/extra/units-ubuntu/* debian/systemd/lib/systemd/system/
-	install --mode=755 debian/extra/set-cpufreq debian/systemd/lib/systemd/
 endif
 
 override_dh_missing:
@@ -276,6 +281,12 @@ override_dh_missing:
 
 override_dh_installinit:
 	dh_installinit --no-start
+
+override_dh_systemd_enable:
+	dh_systemd_enable -psystemd-timesyncd
+
+override_dh_systemd_start:
+	dh_systemd_start -psystemd-timesyncd
 
 PROJECT_VERSION ?= $(shell awk '/(PROJECT|PACKAGE)_VERSION/ {print $$3}' build-deb/config.h | tr -d \")
 
@@ -298,10 +309,8 @@ override_dh_auto_test:
 ifeq (, $(filter nocheck, $(DEB_BUILD_OPTIONS)))
 	echo "01234567890123456789012345678901" > build-deb/machine-id
 	# some tests hang under fakeroot, so disable fakeroot
-	env -u LD_PRELOAD SYSTEMD_MACHINE_ID_PATH=$(CURDIR)/build-deb/machine-id meson test -C build-deb $(TEST_TIMEOUT_MULTIPLIER) || ( \
-		cat build-deb/meson-logs/testlog.txt; \
-		exit 1)
+	env -u LD_PRELOAD SYSTEMD_MACHINE_ID_PATH=$(CURDIR)/build-deb/machine-id meson test -C build-deb --print-errorlogs $(TEST_TIMEOUT_MULTIPLIER)
 endif
 
 %:
-	dh $@ --without autoreconf,systemd --buildsystem=meson
+	dh $@ --without autoreconf --buildsystem=meson

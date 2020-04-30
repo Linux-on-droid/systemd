@@ -28,16 +28,15 @@ if [ "$1" = "triggered" ]; then
     exit 0
 fi
 
-# Enable getty, remote-fs.target and timesyncd by default on new installs
+# Enable getty and remote-fs.target by default on new installs
 if [ -z "$2" ]; then
     systemctl enable getty@tty1.service || true
     systemctl enable remote-fs.target || true
-    systemctl enable systemd-timesyncd.service || true
 fi
 
-# Enable ondemand by default on new installs
-if [ -e /lib/systemd/system/ondemand.service ] && [ -z "$2" ]; then
-    systemctl enable ondemand.service || true
+# Enable systemd-pstore by default on new installs and upgrades, see #952767
+if dpkg --compare-versions "$2" lt "245.4-4~"; then
+    systemctl enable systemd-pstore.service || true
 fi
 
 # Do a one-time migration of the local time setting
@@ -92,41 +91,21 @@ systemd-machine-id-setup
 # Setup system users and groups
 addgroup --quiet --system systemd-journal
 
-# Enable persistent journal, in auto-mode, by default on new installs and upgrades
-if dpkg --compare-versions "$2" lt "244.1-2~"; then
-    mkdir -p /var/log/journal
-    # Applying ACLs requires a mounted /proc and systemd-tmpfiles will fail if /proc is not
-    # available. Skip systemd-tmpfiles in this case. This should be fine, as this typically
-    # means we are inside a chroot and systemd is not currently active. The permissions will
-    # be applied on the next boot.
-    if mountpoint -q /proc; then
-        systemd-tmpfiles --create --prefix /var/log/journal
-    fi
-fi
-
-# We need to stop running services before we call adduser
-RESTART=""
-if dpkg --compare-versions "$2" lt-nl "239-6"; then
-    for s in systemd-networkd systemd-timesyncd systemd-resolved ; do
-        if _systemctl -q is-active $s; then
-            _systemctl stop $s
-            RESTART="$s $RESTART"
-        fi
-    done
-fi
-
-adduser --quiet --system --group --no-create-home --home /run/systemd \
-    --gecos "systemd Time Synchronization" systemd-timesync
 adduser --quiet --system --group --no-create-home --home /run/systemd \
     --gecos "systemd Network Management" systemd-network
 adduser --quiet --system --group --no-create-home --home /run/systemd \
     --gecos "systemd Resolver" systemd-resolve
 
-# Remove old state directory of systemd-timesyncd
-if dpkg --compare-versions "$2" lt-nl "240-3~"; then
-    if [ -L /var/lib/systemd/timesync ] ; then
-        rm /var/lib/systemd/timesync
-        rm -rf /var/lib/private/systemd/timesync
+# Enable persistent journal, in auto-mode, by default on new installs and upgrades
+if dpkg --compare-versions "$2" lt "244.1-2~"; then
+    mkdir -p /var/log/journal
+    # Applying ACLs requires a mounted /proc and systemd-tmpfiles will fail if
+    # /proc is not available. Skip systemd-tmpfiles in this case. This should
+    # be fine, as this typically means we are inside a chroot and systemd is
+    # not currently active. The permissions will be applied on the next boot.
+    # https://github.com/systemd/systemd/issues/14745
+    if mountpoint -q /proc; then
+        systemd-tmpfiles --create --prefix /var/log/journal
     fi
 fi
 
@@ -139,16 +118,7 @@ if [ -n "$2" ]; then
     # https://github.com/systemd/systemd/issues/1163
     _systemctl try-restart systemd-networkd.service || true
     _systemctl try-restart systemd-resolved.service || true
-    _systemctl try-restart systemd-timesyncd.service || true
     _systemctl try-restart systemd-journald.service || true
-fi
-
-# Restart services which we stopped earlier
-# This needs to run after daemon-rexec
-if dpkg --compare-versions "$2" lt-nl "239-6"; then
-    for s in $RESTART ; do
-        _systemctl start $s
-    done
 fi
 
 if dpkg --compare-versions "$2" lt-nl "235-3~"; then
@@ -168,6 +138,17 @@ if dpkg --compare-versions "$2" lt-nl "239-12~"; then
     if getent group nobody >/dev/null; then
         delgroup --system nobody || true
     fi
+fi
+
+if dpkg --compare-versions "$2" lt-nl "245.4-4~"; then
+    # systemd-pstore.service is now enabled via sysinit.target
+    rm -f /etc/systemd/system/systemd-remount-fs.service.wants/systemd-pstore.service
+    rmdir --ignore-fail-on-non-empty /etc/systemd/system/systemd-remount-fs.service.wants 2> /dev/null || true
+fi
+
+if dpkg --compare-versions "$2" lt-nl "245.4-5~"; then
+    # Clean up removed ondemand service
+    rm -f /etc/systemd/system/multi-user.target.wants/ondemand.service
 fi
 
 #DEBHELPER#
