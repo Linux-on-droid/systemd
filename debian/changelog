@@ -1,3 +1,66 @@
+systemd (245.7-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * New upstream version 245.7
+    - resolve: enable RES_TRUSTAD towards the 127.0.0.53 stub resolver
+      (Closes: #965371)
+    - basic/cap-list: parse/print numerical capabilities
+      (Closes: #964926)
+  * Rebase patches
+
+  [ Dan Streetman ]
+  * Add libzstd-dev and zstd as build and test deps.
+    https://github.com/systemd/systemd/pull/15422
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 27 Jul 2020 23:24:47 +0200
+
+systemd (245.6-3) unstable; urgency=medium
+
+  [ Dan Streetman ]
+  * d/t/upstream: capture new merged 'system.journal' from tests.
+    https://github.com/systemd/systemd/pull/15281
+  * d/t/upstream: use --directory or --file param for journalctl.
+    Properly tell journalctl if the journal to parse is a dir or file.
+  * d/t/storage: check for ext2 or ext4 fs when using crypttab 'tmp' option.
+    https://github.com/systemd/systemd/pull/15853
+
+  [ Martin Pitt ]
+  * debian/tests/localed-locale: Fix for environments without en_US.UTF-8.
+    Unconditionally back up/restore locale configuration files and generate
+    en_US.UTF-8. Previously the test failed in environments which have some
+    locale other than en_US.UTF-8 in /etc/default/locale.
+    Also fix the assertion of /etc/locale.conf not being present after
+    localectl. This only applies to Debian/Ubuntu tests, not upstream ones.
+
+  [ Dimitri John Ledkov ]
+  * Enable EFI/bootctl on armhf.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 14 Jul 2020 18:16:57 +0200
+
+systemd (245.6-2) unstable; urgency=medium
+
+  [ Dan Streetman ]
+  * 40-vm-hotadd.rules: check offline before onlining memory/cpus.
+    The kernel will return EINVAL if the memory or cpu is already online,
+    which is harmless, but adds a confusing error to the log. Avoid the error
+    message by only onlining if the memory or cpu is currently offline.
+    (LP: #1876018)
+
+  [ Michael Biebl ]
+  * d/t/boot-and-services: use canonical name for NetworkManager service
+  * Fix build with libmicrohttpd 0.9.71.
+    The return type of callbacks was changed from int to an enum.
+
+  [ Youfu Zhang ]
+  * fsckd: avoid useless CR displayed on console (LP: #1692353)
+
+  [ Balint Reczey ]
+  * dhclient-exit-hooks.d/timesyncd: Act only when systemd-timesyncd is available.
+    Otherwise the hook script might trigger an error if the
+    systemd-timesyncd package is uninstalled but not purged. (LP: #1873031)
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 05 Jul 2020 11:44:39 +0200
+
 systemd (245.6-1~bpo10+1) buster-backports; urgency=medium
 
   * Rebuild for buster-backports
