@@ -1,3 +1,84 @@
+systemd (246.4-1) unstable; urgency=medium
+
+  * New upstream version 246.4
+  * Rebase patches
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 02 Sep 2020 13:30:52 +0200
+
+systemd (246.3-1) unstable; urgency=medium
+
+  * New upstream version 246.3
+  * Rebase patches
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 29 Aug 2020 18:39:32 +0200
+
+systemd (246.2-2) unstable; urgency=medium
+
+  [ Balint Reczey ]
+  * debian/systemd.postinst: Restart systemd-networkd.socket on incompatible
+    change.
+    PassCredentials=yes is replaced with PassPacketInfo=yes and extra padding is
+    dropped, too.
+    (Closes: #968589, LP: #1891716)
+
+  [ Michael Biebl ]
+  * Fix restart of systemd-networkd.socket.
+    We can't restart the socket while systemd-networkd.service is still
+    active. Instead we stop the socket and ensure, that a try-restart of
+    systemd-networkd.service also starts the socket.
+  * seccomp: Add support for riscv64 (Closes: #954312)
+  * Support missing conditions/asserts everywhere (Closes: #968612)
+  * path: Skip directories when finalising $PATH search (Closes: #969006)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 29 Aug 2020 16:24:49 +0200
+
+systemd (246.2-1) unstable; urgency=medium
+
+  * New upstream version 246.2
+  * Remove resolvconf.conf drop-in, resolved integration moved to resolvconf
+    package
+  * Rebase patches
+  * Add versioned Breaks against resolvconf (<< 1.83~) to systemd.
+    The PathExists= directive was changed in v246 to match the documented
+    behaviour but now causes resolvconf-pull-resolved.service to be
+    continuously triggered by resolvconf-pull-resolved.path.
+    This requires a fix in the resolvconf package, see #968015.
+    (Closes: #967906)
+  * Keep journal files compatible with older versions.
+    Disable the KEYED-HASH journal feature by default and keep LZ4 (instead
+    of ZSTD) as default compression for new journal files. Otherwise journal
+    files are incompatible and can't be read by older journalctl
+    implementations.
+    This patch can be dropped in bullseye+1, as journalctl from bullseye
+    will then be able to read journal files with those features.
+    (Closes: #968055)
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 17 Aug 2020 22:28:09 +0200
+
+systemd (246.1-1) unstable; urgency=medium
+
+  * New upstream version 246.1
+  * Rebase patches
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 16 Aug 2020 13:14:46 +0200
+
+systemd (246-2) unstable; urgency=medium
+
+  * Upload to unstable
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 03 Aug 2020 09:46:27 +0200
+
+systemd (246-1) experimental; urgency=medium
+
+  * New upstream version 246
+  * Rebase patches
+  * Update symbols file for libsystemd0
+  * Bump libapparmor-dev Build-Depends to (>= 2.13)
+  * Disable libfido2 support.
+    This is only used by homed which we don't enable.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 30 Jul 2020 22:22:24 +0200
+
 systemd (245.7-1~bpo10+1) buster-backports; urgency=medium
 
   * Rebuild for buster-backports

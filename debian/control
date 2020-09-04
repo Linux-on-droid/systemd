@@ -24,7 +24,7 @@ Build-Depends: debhelper-compat (= 13),
                gnu-efi [amd64 i386 arm64 armhf],
                libcap-dev (>= 1:2.24-9~),
                libpam0g-dev,
-               libapparmor-dev (>= 2.9.0-3+exp2) <!stage1>,
+               libapparmor-dev (>= 2.13) <!stage1>,
                libidn2-dev <!stage1>,
                libiptc-dev <!stage1>,
                libaudit-dev <!stage1>,
@@ -82,6 +82,7 @@ Conflicts: consolekit,
 Breaks: systemd-shim (<< 10-4~),
         python-dbusmock (<< 0.18),
         python3-dbusmock (<< 0.18),
+        resolvconf (<< 1.83~),
 Description: system and service manager
  systemd is a system and service manager for Linux. It provides aggressive
  parallelization capabilities, uses socket and D-Bus activation for starting
