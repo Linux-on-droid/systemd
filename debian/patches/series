@@ -53,6 +53,7 @@ sd-bus-introduce-API-for-re-enqueuing-incoming-messages.patch
 polkit-when-authorizing-via-PK-let-s-re-resolve-callback-.patch
 Fix-typo-in-function-name.patch
 basic-cap-list-parse-print-numerical-capabilities.patch
+missing-Add-new-Linux-capabilities.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
