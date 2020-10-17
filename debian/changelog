@@ -1,3 +1,9 @@
+systemd (246.6-2~bpo10+1) buster-backports; urgency=medium
+
+  * Rebuild for buster-backports
+
+ -- Michael Biebl <biebl@debian.org>  Sun, 18 Oct 2020 00:01:17 +0200
+
 systemd (246.6-2) unstable; urgency=medium
 
   * XDG autostart improvements
