@@ -1,3 +1,13 @@
+systemd (241-7~deb10u5) buster; urgency=medium
+
+  * basic/cap-list: parse/print numerical capabilities (Closes: #964926)
+  * missing: add new Linux capabilities.
+    Linux kernel v5.8 adds two new capabilities. Make sure we can recognize
+    them even when built with an older kernel.
+  * networkd: do not generate MAC for bridge device (Closes: #963488)
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 24 Oct 2020 20:44:48 +0200
+
 systemd (241-7~deb10u4) buster; urgency=medium
 
   * polkit: when authorizing via PolicyKit re-resolve callback/userdata
