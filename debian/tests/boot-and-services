@@ -147,7 +147,6 @@ class ServicesTest(unittest.TestCase):
         os.close(os.open('/tmp/newfile.test',
                          os.O_CREAT | os.O_EXCL | os.O_WRONLY))
         subprocess.check_call(['systemctl', 'start', 'systemd-tmpfiles-clean'])
-        wait_unit_stop('systemd-tmpfiles-clean')
         self.assertTrue(os.path.exists('/tmp/newfile.test'))
 
     # Helper methods
