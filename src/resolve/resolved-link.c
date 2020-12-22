@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <linux/if.h>
 #include <unistd.h>
@@ -818,14 +818,16 @@ int link_address_new(Link *l, LinkAddress **ret, int family, const union in_addr
         assert(l);
         assert(in_addr);
 
-        a = new0(LinkAddress, 1);
+        a = new(LinkAddress, 1);
         if (!a)
                 return -ENOMEM;
 
-        a->family = family;
-        a->in_addr = *in_addr;
+        *a = (LinkAddress) {
+                .family = family,
+                .in_addr = *in_addr,
+                .link = l,
+        };
 
-        a->link = l;
         LIST_PREPEND(addresses, l->addresses, a);
         l->n_addresses++;
 
@@ -1250,11 +1252,10 @@ int link_save_user(Link *l) {
 
         if (!set_isempty(l->dnssec_negative_trust_anchors)) {
                 bool space = false;
-                Iterator i;
                 char *nta;
 
                 fputs("NTAS=", f);
-                SET_FOREACH(nta, l->dnssec_negative_trust_anchors, i) {
+                SET_FOREACH(nta, l->dnssec_negative_trust_anchors) {
 
                         if (space)
                                 fputc(' ', f);
@@ -1405,4 +1406,27 @@ void link_remove_user(Link *l) {
         assert(l->state_file);
 
         (void) unlink(l->state_file);
+}
+
+bool link_negative_trust_anchor_lookup(Link *l, const char *name) {
+        int r;
+
+        assert(l);
+        assert(name);
+
+        /* Checks whether the specified domain (or any of its parent domains) are listed as per-link NTA. */
+
+        for (;;) {
+                if (set_contains(l->dnssec_negative_trust_anchors, name))
+                        return true;
+
+                /* And now, let's look at the parent, and check that too */
+                r = dns_name_parent(&name);
+                if (r < 0)
+                        return r;
+                if (r == 0)
+                        break;
+        }
+
+        return false;
 }

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <netinet/tcp.h>
 
@@ -386,54 +386,27 @@ static int dns_scope_socket(
         }
 
         if (s->link) {
-                be32_t ifindex_be = htobe32(ifindex);
-
-                if (sa.sa.sa_family == AF_INET) {
-                        r = setsockopt(fd, IPPROTO_IP, IP_UNICAST_IF, &ifindex_be, sizeof(ifindex_be));
-                        if (r < 0)
-                                return -errno;
-                } else if (sa.sa.sa_family == AF_INET6) {
-                        r = setsockopt(fd, IPPROTO_IPV6, IPV6_UNICAST_IF, &ifindex_be, sizeof(ifindex_be));
-                        if (r < 0)
-                                return -errno;
-                }
+                r = socket_set_unicast_if(fd, sa.sa.sa_family, ifindex);
+                if (r < 0)
+                        return r;
         }
 
         if (s->protocol == DNS_PROTOCOL_LLMNR) {
                 /* RFC 4795, section 2.5 requires the TTL to be set to 1 */
-
-                if (sa.sa.sa_family == AF_INET) {
-                        r = setsockopt_int(fd, IPPROTO_IP, IP_TTL, true);
-                        if (r < 0)
-                                return r;
-                } else if (sa.sa.sa_family == AF_INET6) {
-                        r = setsockopt_int(fd, IPPROTO_IPV6, IPV6_UNICAST_HOPS, true);
-                        if (r < 0)
-                                return r;
-                }
+                r = socket_set_ttl(fd, sa.sa.sa_family, 1);
+                if (r < 0)
+                        return r;
         }
 
         if (type == SOCK_DGRAM) {
                 /* Set IP_RECVERR or IPV6_RECVERR to get ICMP error feedback. See discussion in #10345. */
+                r = socket_set_recverr(fd, sa.sa.sa_family, true);
+                if (r < 0)
+                        return r;
 
-                if (sa.sa.sa_family == AF_INET) {
-                        r = setsockopt_int(fd, IPPROTO_IP, IP_RECVERR, true);
-                        if (r < 0)
-                                return r;
-
-                        r = setsockopt_int(fd, IPPROTO_IP, IP_PKTINFO, true);
-                        if (r < 0)
-                                return r;
-
-                } else if (sa.sa.sa_family == AF_INET6) {
-                        r = setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVERR, true);
-                        if (r < 0)
-                                return r;
-
-                        r = setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, true);
-                        if (r < 0)
-                                return r;
-                }
+                r = socket_set_recvpktinfo(fd, sa.sa.sa_family, true);
+                if (r < 0)
+                        return r;
         }
 
         if (ret_socket_address)
@@ -505,9 +478,8 @@ DnsScopeMatch dns_scope_good_domain(
         if ((SD_RESOLVED_FLAGS_MAKE(s->protocol, s->family, 0) & flags) == 0)
                 return DNS_SCOPE_NO;
 
-        /* Never resolve any loopback hostname or IP address via DNS,
-         * LLMNR or mDNS. Instead, always rely on synthesized RRs for
-         * these. */
+        /* Never resolve any loopback hostname or IP address via DNS, LLMNR or mDNS. Instead, always rely on
+         * synthesized RRs for these. */
         if (is_localhost(domain) ||
             dns_name_endswith(domain, "127.in-addr.arpa") > 0 ||
             dns_name_equal(domain, "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa") > 0)
@@ -521,6 +493,15 @@ DnsScopeMatch dns_scope_good_domain(
 
         /* Never respond to some of the domains listed in RFC6761 */
         if (dns_name_endswith(domain, "invalid") > 0)
+                return DNS_SCOPE_NO;
+
+        /* Never go to network for the _gateway domain, it's something special, synthesized locally. Note
+         * that we don't use is_gateway_hostname() here, since that has support for the legacy "gateway"
+         * hostname (without the prefix underscore), which we don't want to filter on all protocols. i.e. we
+         * don't want to filter "gateway" on classic DNS, since there might very well be such a host inside
+         * some search domain, and we shouldn't block that. We do filter it in LLMNR however (and on mDNS by
+         * side-effect, since it's a single-label name which mDNS doesn't accept anyway). */
+        if (dns_name_equal(domain, "_gateway") > 0)
                 return DNS_SCOPE_NO;
 
         switch (s->protocol) {
@@ -615,7 +596,8 @@ DnsScopeMatch dns_scope_good_domain(
                         return DNS_SCOPE_MAYBE;
 
                 if ((dns_name_is_single_label(domain) && /* only resolve single label names via LLMNR */
-                     !is_gateway_hostname(domain) && /* don't resolve "gateway" with LLMNR, let nss-myhostname handle this */
+                     !is_gateway_hostname(domain) && /* don't resolve "_gateway" with LLMNR, let local synthesizing logic handle that */
+                     dns_name_equal(domain, "local") == 0 && /* don't resolve "local" with LLMNR, it's the top-level domain of mDNS after all, see above */
                      manager_is_own_hostname(s->manager, domain) <= 0))  /* never resolve the local hostname via LLMNR */
                         return DNS_SCOPE_YES_BASE + 1; /* Return +1, as we consider ourselves authoritative
                                                         * for single-label names, i.e. one label. This is
@@ -1059,12 +1041,13 @@ int dns_scope_notify_conflict(DnsScope *scope, DnsResourceRecord *rr) {
         random_bytes(&jitter, sizeof(jitter));
         jitter %= LLMNR_JITTER_INTERVAL_USEC;
 
-        r = sd_event_add_time(scope->manager->event,
-                              &scope->conflict_event_source,
-                              clock_boottime_or_monotonic(),
-                              now(clock_boottime_or_monotonic()) + jitter,
-                              LLMNR_JITTER_INTERVAL_USEC,
-                              on_conflict_dispatch, scope);
+        r = sd_event_add_time_relative(
+                        scope->manager->event,
+                        &scope->conflict_event_source,
+                        clock_boottime_or_monotonic(),
+                        jitter,
+                        LLMNR_JITTER_INTERVAL_USEC,
+                        on_conflict_dispatch, scope);
         if (r < 0)
                 return log_debug_errno(r, "Failed to add conflict dispatch event: %m");
 
@@ -1182,12 +1165,16 @@ bool dns_scope_name_wants_search_domain(DnsScope *s, const char *name) {
 bool dns_scope_network_good(DnsScope *s) {
         /* Checks whether the network is in good state for lookups on this scope. For mDNS/LLMNR/Classic DNS scopes
          * bound to links this is easy, as they don't even exist if the link isn't in a suitable state. For the global
-         * DNS scope we check whether there are any links that are up and have an address. */
+         * DNS scope we check whether there are any links that are up and have an address.
+         *
+         * Note that Linux routing is complex and even systems that superficially have no IPv4 address might
+         * be able to route IPv4 (and similar for IPv6), hence let's make a check here independent of address
+         * family. */
 
         if (s->link)
                 return true;
 
-        return manager_routable(s->manager, AF_UNSPEC);
+        return manager_routable(s->manager);
 }
 
 int dns_scope_ifindex(DnsScope *s) {
@@ -1217,7 +1204,6 @@ int dns_scope_announce(DnsScope *scope, bool goodbye) {
         DnsTransaction *t;
         DnsZoneItem *z, *i;
         unsigned size = 0;
-        Iterator iterator;
         char *service_type;
         int r;
 
@@ -1237,7 +1223,7 @@ int dns_scope_announce(DnsScope *scope, bool goodbye) {
                 return 0; /* we reach this point only if changing hostname didn't help */
 
         /* Calculate answer's size. */
-        HASHMAP_FOREACH(z, scope->zone.by_key, iterator) {
+        HASHMAP_FOREACH(z, scope->zone.by_key) {
                 if (z->state != DNS_ZONE_ITEM_ESTABLISHED)
                         continue;
 
@@ -1269,7 +1255,7 @@ int dns_scope_announce(DnsScope *scope, bool goodbye) {
                 return log_oom();
 
         /* Second iteration, actually add RRs to the answer. */
-        HASHMAP_FOREACH(z, scope->zone.by_key, iterator)
+        HASHMAP_FOREACH(z, scope->zone.by_key)
                 LIST_FOREACH (by_key, i, z) {
                         DnsAnswerFlags flags;
 
@@ -1287,7 +1273,7 @@ int dns_scope_announce(DnsScope *scope, bool goodbye) {
                 }
 
         /* Since all the active services are in the zone make them discoverable now. */
-        SET_FOREACH(service_type, types, iterator) {
+        SET_FOREACH(service_type, types) {
                 _cleanup_(dns_resource_record_unrefp) DnsResourceRecord *rr;
 
                 rr = dns_resource_record_new_full(DNS_CLASS_IN, DNS_TYPE_PTR,
@@ -1318,18 +1304,13 @@ int dns_scope_announce(DnsScope *scope, bool goodbye) {
         /* In section 8.3 of RFC6762: "The Multicast DNS responder MUST send at least two unsolicited
          * responses, one second apart." */
         if (!scope->announced) {
-                usec_t ts;
-
                 scope->announced = true;
 
-                assert_se(sd_event_now(scope->manager->event, clock_boottime_or_monotonic(), &ts) >= 0);
-                ts += MDNS_ANNOUNCE_DELAY;
-
-                r = sd_event_add_time(
+                r = sd_event_add_time_relative(
                                 scope->manager->event,
                                 &scope->announce_event_source,
                                 clock_boottime_or_monotonic(),
-                                ts,
+                                MDNS_ANNOUNCE_DELAY,
                                 MDNS_JITTER_RANGE_USEC,
                                 on_announcement_timeout, scope);
                 if (r < 0)
@@ -1342,7 +1323,6 @@ int dns_scope_announce(DnsScope *scope, bool goodbye) {
 }
 
 int dns_scope_add_dnssd_services(DnsScope *scope) {
-        Iterator i;
         DnssdService *service;
         DnssdTxtData *txt_data;
         int r;
@@ -1354,7 +1334,7 @@ int dns_scope_add_dnssd_services(DnsScope *scope) {
 
         scope->announced = false;
 
-        HASHMAP_FOREACH(service, scope->manager->dnssd_services, i) {
+        HASHMAP_FOREACH(service, scope->manager->dnssd_services) {
                 service->withdrawn = false;
 
                 r = dns_zone_put(&scope->zone, scope, service->ptr_rr, false);
@@ -1377,7 +1357,6 @@ int dns_scope_add_dnssd_services(DnsScope *scope) {
 
 int dns_scope_remove_dnssd_services(DnsScope *scope) {
         _cleanup_(dns_resource_key_unrefp) DnsResourceKey *key = NULL;
-        Iterator i;
         DnssdService *service;
         DnssdTxtData *txt_data;
         int r;
@@ -1393,7 +1372,7 @@ int dns_scope_remove_dnssd_services(DnsScope *scope) {
         if (r < 0)
                 return r;
 
-        HASHMAP_FOREACH(service, scope->manager->dnssd_services, i) {
+        HASHMAP_FOREACH(service, scope->manager->dnssd_services) {
                 dns_zone_remove_rr(&scope->zone, service->ptr_rr);
                 dns_zone_remove_rr(&scope->zone, service->srv_rr);
                 LIST_FOREACH(items, txt_data, service->txt_data_items)

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include "sd-netlink.h"
@@ -107,5 +107,7 @@ LinkAddress *link_address_free(LinkAddress *a);
 int link_address_update_rtnl(LinkAddress *a, sd_netlink_message *m);
 bool link_address_relevant(LinkAddress *l, bool local_multicast);
 void link_address_add_rrs(LinkAddress *a, bool force_remove);
+
+bool link_negative_trust_anchor_lookup(Link *l, const char *name);
 
 DEFINE_TRIVIAL_CLEANUP_FUNC(Link*, link_free);

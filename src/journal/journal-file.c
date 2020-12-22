@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1978,7 +1978,6 @@ static int post_change_thunk(sd_event_source *timer, uint64_t usec, void *userda
 }
 
 static void schedule_post_change(JournalFile *f) {
-        uint64_t now;
         int r;
 
         assert(f);
@@ -1992,13 +1991,7 @@ static void schedule_post_change(JournalFile *f) {
         if (r > 0)
                 return;
 
-        r = sd_event_now(sd_event_source_get_event(f->post_change_timer), CLOCK_MONOTONIC, &now);
-        if (r < 0) {
-                log_debug_errno(r, "Failed to get clock's now for scheduling ftruncate: %m");
-                goto fail;
-        }
-
-        r = sd_event_source_set_time(f->post_change_timer, now + f->post_change_timer_period);
+        r = sd_event_source_set_time_relative(f->post_change_timer, f->post_change_timer_period);
         if (r < 0) {
                 log_debug_errno(r, "Failed to set time for scheduling ftruncate: %m");
                 goto fail;
@@ -2752,12 +2745,14 @@ int journal_file_compare_locations(JournalFile *af, JournalFile *bf) {
         assert(af->location_type == LOCATION_SEEK);
         assert(bf->location_type == LOCATION_SEEK);
 
-        /* If contents and timestamps match, these entries are
-         * identical, even if the seqnum does not match */
+        /* If contents, timestamps and seqnum match, these entries are
+         * identical*/
         if (sd_id128_equal(af->current_boot_id, bf->current_boot_id) &&
             af->current_monotonic == bf->current_monotonic &&
             af->current_realtime == bf->current_realtime &&
-            af->current_xor_hash == bf->current_xor_hash)
+            af->current_xor_hash == bf->current_xor_hash &&
+            sd_id128_equal(af->header->seqnum_id, bf->header->seqnum_id) &&
+            af->current_seqnum == bf->current_seqnum)
                 return 0;
 
         if (sd_id128_equal(af->header->seqnum_id, bf->header->seqnum_id)) {

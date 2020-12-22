@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1+ */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
 #include <stdbool.h>
@@ -241,6 +241,8 @@ struct Manager {
         usec_t watchdog[_WATCHDOG_TYPE_MAX];
         usec_t watchdog_overridden[_WATCHDOG_TYPE_MAX];
 
+        bool runtime_watchdog_running; /* Whether the runtime HW watchdog was started, so we know if we still need to get the real timeout from the hardware */
+
         dual_timestamp timestamps[_MANAGER_TIMESTAMP_MAX];
 
         /* Data specific to the device subsystem */
@@ -424,6 +426,7 @@ struct Manager {
 
         /* Prefixes of e.g. RuntimeDirectory= */
         char *prefix[_EXEC_DIRECTORY_TYPE_MAX];
+        char *received_credentials;
 
         /* Used in the SIGCHLD and sd_notify() message invocation logic to avoid that we dispatch the same event
          * multiple times on the same unit. */
@@ -433,6 +436,8 @@ struct Manager {
         bool honor_device_enumeration;
 
         VarlinkServer *varlink_server;
+        /* Only systemd-oomd should be using this to subscribe to changes in ManagedOOM settings */
+        Varlink *managed_oom_varlink_request;
 };
 
 static inline usec_t manager_default_timeout_abort_usec(Manager *m) {
@@ -559,6 +564,7 @@ ManagerTimestamp manager_timestamp_initrd_mangle(ManagerTimestamp s);
 usec_t manager_get_watchdog(Manager *m, WatchdogType t);
 void manager_set_watchdog(Manager *m, WatchdogType t, usec_t timeout);
 int manager_override_watchdog(Manager *m, WatchdogType t, usec_t timeout);
+void manager_retry_runtime_watchdog(Manager *m);
 
 const char* oom_policy_to_string(OOMPolicy i) _const_;
 OOMPolicy oom_policy_from_string(const char *s) _pure_;
