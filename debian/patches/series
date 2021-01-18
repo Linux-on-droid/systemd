@@ -55,6 +55,7 @@ Fix-typo-in-function-name.patch
 basic-cap-list-parse-print-numerical-capabilities.patch
 missing-Add-new-Linux-capabilities.patch
 networkd-do-not-generate-MAC-for-bridge-device.patch
+journal-do-not-trigger-assertion-when-journal_file_close-.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
