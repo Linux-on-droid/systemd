@@ -1,6 +1,8 @@
 sd-device-keep-escaped-strings-in-DEVLINK-property.patch
 test-fix-fd_is_mount_point-check.patch
 test-use-modern-qemu-numa-arguments.patch
+Add-helper-for-case-independent-string-equality-checks.patch
+localed-Run-locale-gen-if-available-to-generate-missing-l.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
@@ -20,3 +22,5 @@ debian/deny-list-upstream-test-02-ppc64el.patch
 debian/udev-drop-SystemCallArchitectures-native-from-systemd-ude.patch
 debian/Keep-journal-files-compatible-with-older-versions.patch
 debian/Move-sysusers.d-sysctl.d-binfmt.d-modules-load.d-back-to-.patch
+debian/systemctl-do-not-shutdown-immediately-on-scheduled-shutdo.patch
+debian/test-disable-DnsmasqClientTest.test_resolved_etc_hosts-in.patch
