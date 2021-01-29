@@ -1,3 +1,18 @@
+systemd (241-7~deb10u6) buster; urgency=medium
+
+  * journal: do not trigger assertion when journal_file_close() get NULL
+    (Closes: #975561)
+  * test-bpf: skip test when run inside containers.
+    The test reliably fails inside LXC and Docker when run on a new enough
+    kernel. It's unclear whether this is a kernel, LXC/Docker or systemd
+    issue and apparently there is no real interest to get this fixed, so
+    let's skip this test.
+  * autopkgtest: mark networkd-test.py as flaky.
+    See https://github.com/systemd/systemd/issues/18357
+    and https://github.com/systemd/systemd/issues/18196
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 29 Jan 2021 15:16:06 +0100
+
 systemd (241-7~deb10u5) buster; urgency=medium
 
   * basic/cap-list: parse/print numerical capabilities (Closes: #964926)
