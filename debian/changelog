@@ -1,3 +1,17 @@
+systemd (241-7~deb10u7) buster; urgency=medium
+
+  * core: make sure to restore the control command id, too.
+    Fixes a segfault in systemd that can be triggered when both
+    daemon-reload and a service restart happen concurrently. (Closes: #984495)
+  * seccomp: allow turning off of seccomp filtering via env var.
+    Since glibc 2.33 faccessat() is implemented via faccessat2(), which
+    is breaking running containers that use such a version of glibc under
+    systemd-nspawn in Buster.
+    Turning off seccomp filtering via the SYSTEMD_SECCOMP env var makes it
+    possible to run such new containers. (Closes: #984573)
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 18 Mar 2021 20:59:14 +0100
+
 systemd (241-7~deb10u6) buster; urgency=medium
 
   * journal: do not trigger assertion when journal_file_close() get NULL
