@@ -126,3 +126,4 @@ debian/Let-graphical-session-pre.target-be-manually-started.patch
 debian/Add-env-variable-for-machine-ID-path.patch
 pam-systemd-use-secure_getenv-rather-than-getenv.patch
 string-util-add-delete_trailing_chars-and-skip_leadi.patch
+basic-unit-name-do-not-use-strdupa-on-a-path.patch
