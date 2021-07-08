@@ -1,3 +1,11 @@
+systemd (232-25+deb9u13) stretch-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * string-util: add delete_trailing_chars() and skip_leading_chars() helpers
+  * basic/unit-name: do not use strdupa() on a path (CVE-2021-33910)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Thu, 08 Jul 2021 15:07:45 +0200
+
 systemd (232-25+deb9u12) stretch; urgency=medium
 
   * networkd: Do not stop ndisc client in case of conf error.
