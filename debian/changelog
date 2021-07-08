@@ -1,3 +1,10 @@
+systemd (241-7~deb10u8) buster-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * basic/unit-name: do not use strdupa() on a path (CVE-2021-33910)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Thu, 08 Jul 2021 15:03:45 +0200
+
 systemd (241-7~deb10u7) buster; urgency=medium
 
   * core: make sure to restore the control command id, too.
