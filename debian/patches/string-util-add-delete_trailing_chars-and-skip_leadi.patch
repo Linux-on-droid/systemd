@@ -1,0 +1,104 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Thu, 9 Nov 2017 11:12:47 +0100
+Subject: string-util: add delete_trailing_chars() and skip_leading_chars()
+ helpers
+Origin: https://github.com/systemd/systemd/commit/7546145e26e4feecf0994d84e888d7da9c47424b
+
+And let's port over a couple of users to the new APIs.
+
+[Salvatore Bonaccorso: Backport the needing bits to address CVE-2021-33910]
+---
+ src/basic/string-util.c         | 31 +++++++++++++++++++++-
+ src/basic/string-util.h         | 12 +++++++++
+ src/basic/unit-name.c           |  9 ++-----
+ src/core/cgroup.c               |  8 +++---
+ src/libudev/libudev-private.h   |  1 -
+ src/libudev/libudev-util.c      | 11 --------
+ src/test/test-string-util.c     | 46 ++++++++++++++++++++++++++++++---
+ src/udev/udev-rules.c           |  2 +-
+ src/udev/udevadm-test-builtin.c |  2 +-
+ src/udev/udevadm-test.c         |  2 +-
+ 10 files changed, 92 insertions(+), 32 deletions(-)
+
+diff --git a/src/basic/string-util.c b/src/basic/string-util.c
+index 6fb4134ae930..be2613ca9eb2 100644
+--- a/src/basic/string-util.c
++++ b/src/basic/string-util.c
+@@ -309,6 +318,26 @@ char *delete_chars(char *s, const char *bad) {
+         return s;
+ }
+ 
++char *delete_trailing_chars(char *s, const char *bad) {
++        char *p, *c = s;
++
++        /* Drops all specified bad characters, at the end of the string */
++
++        if (!s)
++                return NULL;
++
++        if (!bad)
++                bad = WHITESPACE;
++
++        for (p = s; *p; p++)
++                if (!strchr(bad, *p))
++                        c = p + 1;
++
++        *c = 0;
++
++        return s;
++}
++
+ char *truncate_nl(char *s) {
+         assert(s);
+ 
+diff --git a/src/basic/string-util.h b/src/basic/string-util.h
+index 4c94b182c1b5..d2040ebd12c0 100644
+--- a/src/basic/string-util.h
++++ b/src/basic/string-util.h
+@@ -133,8 +133,20 @@ char *strjoin_real(const char *x, ...) _sentinel_;
+ 
+ char *strstrip(char *s);
+ char *delete_chars(char *s, const char *bad);
++char *delete_trailing_chars(char *s, const char *bad);
+ char *truncate_nl(char *s);
+ 
++static inline char *skip_leading_chars(const char *s, const char *bad) {
++
++        if (!s)
++                return NULL;
++
++        if (!bad)
++                bad = WHITESPACE;
++
++        return (char*) s + strspn(s, bad);
++}
++
+ char ascii_tolower(char x);
+ char *ascii_strlower(char *s);
+ char *ascii_strlower_n(char *s, size_t n);
+diff --git a/src/basic/unit-name.c b/src/basic/unit-name.c
+index ba9928375ee4..27ce432197b0 100644
+--- a/src/basic/unit-name.c
++++ b/src/basic/unit-name.c
+@@ -382,19 +382,14 @@ int unit_name_path_escape(const char *f, char **ret) {
+         if (STR_IN_SET(p, "/", ""))
+                 s = strdup("-");
+         else {
+-                char *e;
+-
+                 if (!path_is_safe(p))
+                         return -EINVAL;
+ 
+                 /* Truncate trailing slashes */
+-                e = endswith(p, "/");
+-                if (e)
+-                        *e = 0;
++                delete_trailing_chars(p, "/");
+ 
+                 /* Truncate leading slashes */
+-                if (p[0] == '/')
+-                        p++;
++                p = skip_leading_chars(p, "/");
+ 
+                 s = unit_name_escape(p);
+         }
