@@ -1,0 +1,66 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Tue, 23 Nov 2021 15:55:45 +0100
+Subject: shared/rm_rf: refactor rm_rf_children_inner() to shorten code a bit
+
+(cherry picked from commit 3bac86abfa1b1720180840ffb9d06b3d54841c11)
+(cherry picked from commit 47741ff9eae6311a03e4d3d837128191826a4a3a)
+(cherry picked from commit 89395b63f04f1acc0db533c32637ea20379f97c0)
+(cherry picked from commit 3976f244990aa1210ebe018647f32ab060e1c3d3)
+(cherry picked from commit 988e43630bb7592947c75fe530a6f7dfebc00c4f)
+---
+ src/basic/rm-rf.c | 27 +++++++++------------------
+ 1 file changed, 9 insertions(+), 18 deletions(-)
+
+diff --git a/src/basic/rm-rf.c b/src/basic/rm-rf.c
+index a78aa4f..343a097 100644
+--- a/src/basic/rm-rf.c
++++ b/src/basic/rm-rf.c
+@@ -123,7 +123,7 @@ static int rm_rf_children_inner(
+                 const struct stat *root_dev) {
+ 
+         struct stat st;
+-        int r;
++        int r, q = 0;
+ 
+         assert(fd >= 0);
+         assert(fname);
+@@ -141,7 +141,6 @@ static int rm_rf_children_inner(
+ 
+         if (is_dir) {
+                 _cleanup_close_ int subdir_fd = -1;
+-                int q;
+ 
+                 /* if root_dev is set, remove subdirectories only if device is same */
+                 if (root_dev && st.st_dev != root_dev->st_dev)
+@@ -177,23 +176,15 @@ static int rm_rf_children_inner(
+                  * again for each directory */
+                 q = rm_rf_children(TAKE_FD(subdir_fd), flags | REMOVE_PHYSICAL, root_dev);
+ 
+-                r = unlinkat_harder(fd, fname, AT_REMOVEDIR, flags);
+-                if (r < 0)
+-                        return r;
+-                if (q < 0)
+-                        return q;
+-
+-                return 1;
+-
+-        } else if (!(flags & REMOVE_ONLY_DIRECTORIES)) {
+-                r = unlinkat_harder(fd, fname, 0, flags);
+-                if (r < 0)
+-                        return r;
+-
+-                return 1;
+-        }
++        } else if (flags & REMOVE_ONLY_DIRECTORIES)
++                return 0;
+ 
+-        return 0;
++        r = unlinkat_harder(fd, fname, is_dir ? AT_REMOVEDIR : 0, flags);
++        if (r < 0)
++                return r;
++        if (q < 0)
++                return q;
++        return 1;
+ }
+ 
+ int rm_rf_children(

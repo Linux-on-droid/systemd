@@ -1,0 +1,27 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Tue, 23 Nov 2021 15:05:58 +0100
+Subject: tmpfiles: 'st' may have been used uninitialized
+
+(cherry picked from commit 160dadc0350c77d612aa9d5569f57d9bc84c3dca)
+(cherry picked from commit 7563de501246dccf5a9ea229933481aa1e7bd5c9)
+(cherry picked from commit f54b97b1d05052bfee824ecc03ae9f07f6c37be8)
+(cherry picked from commit ab927db9a7698ee1eceae14ecef7ab43ee3f104e)
+---
+ src/basic/rm-rf.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/basic/rm-rf.c b/src/basic/rm-rf.c
+index cf671c2..a78aa4f 100644
+--- a/src/basic/rm-rf.c
++++ b/src/basic/rm-rf.c
+@@ -128,7 +128,9 @@ static int rm_rf_children_inner(
+         assert(fd >= 0);
+         assert(fname);
+ 
+-        if (is_dir < 0 || (is_dir > 0 && (root_dev || (flags & REMOVE_SUBVOLUME)))) {
++        if (is_dir < 0 ||
++            root_dev ||
++            (is_dir > 0 && (root_dev || (flags & REMOVE_SUBVOLUME)))) {
+ 
+                 r = fstatat_harder(fd, fname, &st, AT_SYMLINK_NOFOLLOW, flags);
+                 if (r < 0)

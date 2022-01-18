@@ -1,0 +1,106 @@
+From: Lennart Poettering <lennart@poettering.net>
+Date: Fri, 26 Feb 2021 17:39:55 +0100
+Subject: btrfs-util: add helper that abstracts "might be btrfs subvol?" check
+
+Let#s not hardcode inode nr 256 everywhere, but abstract this check
+slightly.
+
+(cherry picked from commit 674b04ff1b6deab17f5d36c036c0275ba94e1ebc)
+(cherry picked from commit 190c6bcfc3518bec964ab740085ac88ccc86dcc7)
+---
+ src/basic/btrfs-util.c     |  6 +++---
+ src/basic/btrfs-util.h     | 10 ++++++++++
+ src/basic/rm-rf.c          |  2 +-
+ src/import/export-tar.c    |  2 +-
+ src/shared/machine-image.c |  3 +--
+ 5 files changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/src/basic/btrfs-util.c b/src/basic/btrfs-util.c
+index 2634659..f0df51a 100644
+--- a/src/basic/btrfs-util.c
++++ b/src/basic/btrfs-util.c
+@@ -91,7 +91,7 @@ int btrfs_is_subvol_fd(int fd) {
+         if (fstat(fd, &st) < 0)
+                 return -errno;
+ 
+-        if (!S_ISDIR(st.st_mode) || st.st_ino != 256)
++        if (!btrfs_might_be_subvol(&st))
+                 return 0;
+ 
+         return btrfs_is_filesystem(fd);
+@@ -194,7 +194,7 @@ int btrfs_subvol_set_read_only_fd(int fd, bool b) {
+         if (fstat(fd, &st) < 0)
+                 return -errno;
+ 
+-        if (!S_ISDIR(st.st_mode) || st.st_ino != 256)
++        if (!btrfs_might_be_subvol(&st))
+                 return -EINVAL;
+ 
+         if (ioctl(fd, BTRFS_IOC_SUBVOL_GETFLAGS, &flags) < 0)
+@@ -229,7 +229,7 @@ int btrfs_subvol_get_read_only_fd(int fd) {
+         if (fstat(fd, &st) < 0)
+                 return -errno;
+ 
+-        if (!S_ISDIR(st.st_mode) || st.st_ino != 256)
++        if (!btrfs_might_be_subvol(&st))
+                 return -EINVAL;
+ 
+         if (ioctl(fd, BTRFS_IOC_SUBVOL_GETFLAGS, &flags) < 0)
+diff --git a/src/basic/btrfs-util.h b/src/basic/btrfs-util.h
+index c8b44f6..0f569b6 100644
+--- a/src/basic/btrfs-util.h
++++ b/src/basic/btrfs-util.h
+@@ -127,3 +127,13 @@ static inline int btrfs_log_dev_root(int level, int ret, const char *p) {
+                               "File system behind %s is reported by btrfs to be backed by pseudo-device /dev/root, which is not a valid userspace accessible device node. "
+                               "Cannot determine correct backing block device.", p);
+ }
++
++static inline bool btrfs_might_be_subvol(const struct stat *st) {
++        if (!st)
++                return false;
++
++        /* Returns true if this 'struct stat' looks like it could refer to a btrfs subvolume. To make a final
++         * decision, needs to be combined with an fstatfs() check to see if this is actually btrfs. */
++
++        return S_ISDIR(st->st_mode) && st->st_ino == 256;
++}
+diff --git a/src/basic/rm-rf.c b/src/basic/rm-rf.c
+index b0d682f..4c39ce8 100644
+--- a/src/basic/rm-rf.c
++++ b/src/basic/rm-rf.c
+@@ -147,7 +147,7 @@ int rm_rf_children(int fd, RemoveFlags flags, struct stat *root_dev) {
+                         if (r > 0)
+                                 continue;
+ 
+-                        if ((flags & REMOVE_SUBVOLUME) && st.st_ino == 256) {
++                        if ((flags & REMOVE_SUBVOLUME) && btrfs_might_be_subvol(&st)) {
+ 
+                                 /* This could be a subvolume, try to remove it */
+ 
+diff --git a/src/import/export-tar.c b/src/import/export-tar.c
+index b8b650f..1e6b2c1 100644
+--- a/src/import/export-tar.c
++++ b/src/import/export-tar.c
+@@ -283,7 +283,7 @@ int tar_export_start(TarExport *e, const char *path, int fd, ImportCompressType
+ 
+         e->quota_referenced = (uint64_t) -1;
+ 
+-        if (e->st.st_ino == 256) { /* might be a btrfs subvolume? */
++        if (btrfs_might_be_subvol(&e->st)) {
+                 BtrfsQuotaInfo q;
+ 
+                 r = btrfs_subvol_get_subtree_quota_fd(sfd, 0, &q);
+diff --git a/src/shared/machine-image.c b/src/shared/machine-image.c
+index 671a56b..c7cf5e9 100644
+--- a/src/shared/machine-image.c
++++ b/src/shared/machine-image.c
+@@ -248,8 +248,7 @@ static int image_make(
+                 if (fd < 0)
+                         return -errno;
+ 
+-                /* btrfs subvolumes have inode 256 */
+-                if (st->st_ino == 256) {
++                if (btrfs_might_be_subvol(st)) {
+ 
+                         r = btrfs_is_filesystem(fd);
+                         if (r < 0)

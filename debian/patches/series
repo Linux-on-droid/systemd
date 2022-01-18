@@ -11,6 +11,14 @@ unit-name-generate-a-clear-error-code-when-convertin.patch
 basic-unit-name-do-not-use-strdupa-on-a-path.patch
 basic-unit-name-adjust-comments.patch
 udevadm-trigger-do-not-return-immediately-on-EACCES.patch
+btrfs-util-add-helper-that-abstracts-might-be-btrfs-subvo.patch
+rm-rf-fstatat-might-fail-if-containing-dir-has-limited-ac.patch
+rm-rf-refactor-rm_rf_children-split-out-body-of-directory.patch
+rm-rf-optionally-fsync-after-removing-directory-tree.patch
+tmpfiles-st-may-have-been-used-uninitialized.patch
+shared-rm_rf-refactor-rm_rf_children_inner-to-shorten-cod.patch
+shared-rm_rf-refactor-rm_rf-to-shorten-code-a-bit.patch
+shared-rm-rf-loop-over-nested-directories-instead-of-inst.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
