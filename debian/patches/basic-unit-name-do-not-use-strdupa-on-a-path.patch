@@ -1,5 +1,4 @@
-From bae2f0d1109a8c75a7fb89ae6b8d1b6ef8dfab16 Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?Zbigniew=20J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
 Date: Wed, 23 Jun 2021 11:46:41 +0200
 Subject: basic/unit-name: do not use strdupa() on a path
 
@@ -19,12 +18,17 @@ simplification, which in turns uses a copy of the string we can write to.
 So we can't reject paths that are too long before doing the duplication.
 Hence the most obvious solution is to switch back to strdup(), as before
 7410616cd9dbbec97cf98d75324da5cda2b2f7a2.
+
+(cherry picked from commit 441e0115646d54f080e5c3bb0ba477c892861ab9)
+(cherry picked from commit 764b74113e36ac5219a4b82a05f311b5a92136ce)
+(cherry picked from commit 4a1c5f34bd3e1daed4490e9d97918e504d19733b)
+(cherry picked from commit b00674347337b7531c92fdb65590ab253bb57538)
 ---
  src/basic/unit-name.c | 13 +++++--------
  1 file changed, 5 insertions(+), 8 deletions(-)
 
 diff --git a/src/basic/unit-name.c b/src/basic/unit-name.c
-index 284a77348316..a22763443fdd 100644
+index 5f595af..9b6cacd 100644
 --- a/src/basic/unit-name.c
 +++ b/src/basic/unit-name.c
 @@ -378,12 +378,13 @@ int unit_name_unescape(const char *f, char **ret) {
@@ -59,6 +63,3 @@ index 284a77348316..a22763443fdd 100644
          }
          if (!s)
                  return -ENOMEM;
--- 
-2.32.0
-

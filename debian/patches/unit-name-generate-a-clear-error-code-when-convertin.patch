@@ -1,19 +1,21 @@
 From: Lennart Poettering <lennart@poettering.net>
 Date: Tue, 1 Jun 2021 19:43:55 +0200
-Subject: unit-name: generate a clear error code when converting an overly long
- fs path to a unit name
-Origin: https://github.com/systemd/systemd/commit/9d5acfab20c5f1177d877d0bec18063c0a6c5929
+Subject: unit-name: generate a clear error code when converting an overly
+ long fs path to a unit name
 
-[Salvatore Bonaccorso: Backport to 247.3 for context changes in
-src/test/test-unit-name.c]
+(cherry picked from commit 9d5acfab20c5f1177d877d0bec18063c0a6c5929)
+(cherry picked from commit 1579dce2c2a162bb09afb9a8a46fd4f7e8fbf1d5)
+(cherry picked from commit 0488b743e9c6ab1e885933eebda4ba9232003a2a)
 ---
  src/basic/unit-name.c     | 6 ++++++
  src/test/test-unit-name.c | 4 ++--
  2 files changed, 8 insertions(+), 2 deletions(-)
 
+diff --git a/src/basic/unit-name.c b/src/basic/unit-name.c
+index c1529bb..5f595af 100644
 --- a/src/basic/unit-name.c
 +++ b/src/basic/unit-name.c
-@@ -528,6 +528,9 @@ int unit_name_from_path(const char *path
+@@ -528,6 +528,9 @@ int unit_name_from_path(const char *path, const char *suffix, char **ret) {
          if (!s)
                  return -ENOMEM;
  
@@ -23,7 +25,7 @@ src/test/test-unit-name.c]
          /* Refuse this if this got too long or for some other reason didn't result in a valid name */
          if (!unit_name_is_valid(s, UNIT_NAME_PLAIN))
                  return -EINVAL;
-@@ -559,6 +562,9 @@ int unit_name_from_path_instance(const c
+@@ -559,6 +562,9 @@ int unit_name_from_path_instance(const char *prefix, const char *path, const cha
          if (!s)
                  return -ENOMEM;
  
@@ -33,9 +35,11 @@ src/test/test-unit-name.c]
          /* Refuse this if this got too long or for some other reason didn't result in a valid name */
          if (!unit_name_is_valid(s, UNIT_NAME_INSTANCE))
                  return -EINVAL;
+diff --git a/src/test/test-unit-name.c b/src/test/test-unit-name.c
+index ece78aa..c0b7971 100644
 --- a/src/test/test-unit-name.c
 +++ b/src/test/test-unit-name.c
-@@ -130,7 +130,7 @@ static void test_unit_name_from_path(voi
+@@ -130,7 +130,7 @@ static void test_unit_name_from_path(void) {
          test_unit_name_from_path_one("///", ".mount", "-.mount", 0);
          test_unit_name_from_path_one("/foo/../bar", ".mount", NULL, -EINVAL);
          test_unit_name_from_path_one("/foo/./bar", ".mount", NULL, -EINVAL);
@@ -44,7 +48,7 @@ src/test/test-unit-name.c]
  }
  
  static void test_unit_name_from_path_instance_one(const char *pattern, const char *path, const char *suffix, const char *expected, int ret) {
-@@ -160,7 +160,7 @@ static void test_unit_name_from_path_ins
+@@ -160,7 +160,7 @@ static void test_unit_name_from_path_instance(void) {
          test_unit_name_from_path_instance_one("waldo", "..", ".mount", NULL, -EINVAL);
          test_unit_name_from_path_instance_one("waldo", "/foo", ".waldi", NULL, -EINVAL);
          test_unit_name_from_path_instance_one("wa--ldo", "/--", ".mount", "wa--ldo@\\x2d\\x2d.mount", 0);
