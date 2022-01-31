@@ -1,3 +1,9 @@
+systemd (250.3-2~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports
+
+ -- Michael Biebl <biebl@debian.org>  Mon, 31 Jan 2022 22:18:27 +0100
+
 systemd (250.3-2) unstable; urgency=medium
 
   [ Yu Watanabe ]
