@@ -1,3 +1,18 @@
+systemd (250.4-1) unstable; urgency=medium
+
+  [ Dimitri John Ledkov ]
+  * udev-udeb: ship modprobe.d snippet to force scsi_mod.scan=sync in d-i.
+
+  [ Luca Boccassi ]
+  * Build with dh_package_notes
+  * New upstream version 250.4
+  * Drop patches merged upstream
+  * Remove unneeded ${shlibs:Depends}
+  * autopkgtest: add libdw-dev to unit-tests job.
+  * Rebase patches on top of v250.4
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 15 Mar 2022 11:03:08 +0000
+
 systemd (250.3-2~bpo11+1) bullseye-backports; urgency=medium
 
   * Rebuild for bullseye-backports
