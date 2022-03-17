@@ -1,3 +1,10 @@
+systemd (250.4-1~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports
+  * Do not build with dh_package_notes, requires a newer binutils
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 17 Mar 2022 13:07:02 +0000
+
 systemd (250.4-1) unstable; urgency=medium
 
   [ Dimitri John Ledkov ]
