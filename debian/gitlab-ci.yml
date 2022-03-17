@@ -7,3 +7,7 @@ variables:
   # but work fine in the autopkgtest job anyway, so skip them in the build step
   # also skip the dbg packages to save time, they are not really needed
   DEB_BUILD_OPTIONS: "nocheck"
+  RELEASE: 'bullseye-backports'
+  SALSA_CI_LINTIAN_SUPPRESS_TAGS: "backports-changes-missing,newer-standards-version"
+  SALSA_CI_DISABLE_VERSION_BUMP: 'true'
+  SALSA_CI_DISABLE_PIUPARTS: 1
