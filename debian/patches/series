@@ -19,6 +19,11 @@ tmpfiles-st-may-have-been-used-uninitialized.patch
 shared-rm_rf-refactor-rm_rf_children_inner-to-shorten-cod.patch
 shared-rm_rf-refactor-rm_rf-to-shorten-code-a-bit.patch
 shared-rm-rf-loop-over-nested-directories-instead-of-inst.patch
+basic-add-make_mount_point_inode-helper.patch
+machine-basic-factor-out-helper-function-to-add-airlocked.patch
+machine-adjust-error-message-to-use-normalized-instead-of.patch
+shared-mount-util-use-namespace_fork-utils.patch
+machine-enter-target-PID-namespace-when-adding-a-live-mou.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch

@@ -1,0 +1,105 @@
+From: Luca Boccassi <bluca@debian.org>
+Date: Wed, 13 Jan 2021 23:52:00 +0000
+Subject: machine: enter target PID namespace when adding a live mount
+
+machinectl fails since 21935150a0c42b91a322105f6a9129116bfc8e2e as it's now
+mounting onto a file descriptor in a target namespace, without joining the
+target's PID namespace.
+Note that it's not enough to setns CLONE_NEWPID, but a double-fork is required
+as well, as implemented by namespace_fork().
+
+Add a test case to TEST-13-NSPAWN to cover this use case.
+
+(cherry picked from commit 98f654fdeab1e1b6df2be76e29e4ccbb6624898d)
+---
+ src/shared/mount-util.c       |  6 +++---
+ test/create-busybox-container |  3 +++
+ test/units/testsuite-13.sh    | 25 +++++++++++++++++++++++++
+ 3 files changed, 31 insertions(+), 3 deletions(-)
+
+diff --git a/src/shared/mount-util.c b/src/shared/mount-util.c
+index 368c5f0..2e374cc 100644
+--- a/src/shared/mount-util.c
++++ b/src/shared/mount-util.c
+@@ -757,7 +757,7 @@ int bind_mount_in_namespace(
+                 bool make_file_or_directory) {
+ 
+         _cleanup_close_pair_ int errno_pipe_fd[2] = { -1, -1 };
+-        _cleanup_close_ int self_mntns_fd = -1, mntns_fd = -1, root_fd = -1;
++        _cleanup_close_ int self_mntns_fd = -1, mntns_fd = -1, root_fd = -1, pidns_fd = -1;
+         char mount_slave[] = "/tmp/propagate.XXXXXX", *mount_tmp, *mount_outside, *p;
+         bool mount_slave_created = false, mount_slave_mounted = false,
+                 mount_tmp_created = false, mount_tmp_mounted = false,
+@@ -773,7 +773,7 @@ int bind_mount_in_namespace(
+         assert(src);
+         assert(dest);
+ 
+-        r = namespace_open(target, NULL, &mntns_fd, NULL, NULL, &root_fd);
++        r = namespace_open(target, &pidns_fd, &mntns_fd, NULL, NULL, &root_fd);
+         if (r < 0)
+                 return log_debug_errno(r, "Failed to retrieve FDs of the target process' namespace: %m");
+ 
+@@ -898,7 +898,7 @@ int bind_mount_in_namespace(
+         }
+ 
+         r = namespace_fork("(sd-bindmnt)", "(sd-bindmnt-inner)", NULL, 0, FORK_RESET_SIGNALS|FORK_DEATHSIG,
+-                           -1, mntns_fd, -1, -1, root_fd, &child);
++                           pidns_fd, mntns_fd, -1, -1, root_fd, &child);
+         if (r < 0)
+                 goto finish;
+         if (r == 0) {
+diff --git a/test/create-busybox-container b/test/create-busybox-container
+index 5ded429..b2b7b26 100755
+--- a/test/create-busybox-container
++++ b/test/create-busybox-container
+@@ -28,6 +28,9 @@ ln -s busybox "$root/bin/cat"
+ ln -s busybox "$root/bin/tr"
+ ln -s busybox "$root/bin/ps"
+ ln -s busybox "$root/bin/ip"
++ln -s busybox "$root/bin/seq"
++ln -s busybox "$root/bin/sleep"
++ln -s busybox "$root/bin/test"
+ 
+ mkdir -p "$root/sbin"
+ cat <<'EOF' >"$root/sbin/init"
+diff --git a/test/units/testsuite-13.sh b/test/units/testsuite-13.sh
+index 969ca4a..1844323 100755
+--- a/test/units/testsuite-13.sh
++++ b/test/units/testsuite-13.sh
+@@ -93,6 +93,29 @@ if echo test >> /run/host/os-release; then exit 1; fi
+     fi
+ }
+ 
++function check_machinectl_bind {
++    local _cmd='for i in $(seq 1 20); do if test -f /tmp/marker; then exit 0; fi; sleep 0.5; done; exit 1;'
++
++    cat <<EOF > /run/systemd/system/nspawn_machinectl_bind.service
++[Service]
++Type=notify
++ExecStart=systemd-nspawn $SUSE_OPTS -D /testsuite-13.nc-container --notify-ready=no /bin/sh -x -e -c "$_cmd"
++EOF
++
++    systemctl start nspawn_machinectl_bind.service
++
++    touch /tmp/marker
++
++    machinectl bind --mkdir testsuite-13.nc-container /tmp/marker
++
++    while systemctl show -P SubState nspawn_machinectl_bind.service | grep -q running
++    do
++        sleep 0.1
++    done
++
++    return $(systemctl show -P ExecMainStatus nspawn_machinectl_bind.service)
++}
++
+ function run {
+     if [[ "$1" = "yes" && "$is_v2_supported" = "no" ]]; then
+         printf "Unified cgroup hierarchy is not supported. Skipping.\n" >&2
+@@ -186,4 +209,6 @@ for api_vfs_writable in yes no network; do
+     run yes yes $api_vfs_writable
+ done
+ 
++check_machinectl_bind
++
+ touch /testok
