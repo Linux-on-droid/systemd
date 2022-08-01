@@ -43,6 +43,11 @@ All tools:
   debugging, in order to test generators and other code against specific kernel
   command lines.
 
+* `$SYSTEMD_OS_RELEASE` — if set, use this path instead of `/etc/os-release` or
+  `/usr/lib/os-release`. When operating under some root (e.g. `systemctl
+  --root=…`), the path is taken relative to the outside root. Only useful for
+  debugging.
+
 * `$SYSTEMD_FSTAB` — if set, use this path instead of `/etc/fstab`. Only useful
   for debugging.
 
@@ -97,9 +102,6 @@ All tools:
   systems built with libxcrypt and is ignored on systems using glibc's
   original, internal `crypt()` implementation.)
 
-* `$SYSTEMD_RDRAND=0` — if set, the RDRAND instruction will never be used,
-  even if the CPU supports it.
-
 * `$SYSTEMD_SECCOMP=0` — if set, seccomp filters will not be enforced, even if
   support for it is compiled in and available in the kernel.
 
@@ -109,7 +111,7 @@ All tools:
 
 `systemctl`:
 
-* `$SYSTEMCTL_FORCE_BUS=1` — if set, do not connect to PID1's private D-Bus
+* `$SYSTEMCTL_FORCE_BUS=1` — if set, do not connect to PID 1's private D-Bus
   listener, and instead always connect through the dbus-daemon D-bus broker.
 
 * `$SYSTEMCTL_INSTALL_CLIENT_SIDE=1` — if set, enable or disable unit files on
@@ -180,8 +182,8 @@ All tools:
   requested. The file contains the requested boot loader entry identifier. This
   file may be checked for by services run during system shutdown in order to
   request the appropriate operation from the boot loader in an alternative
-  fashion. Note that by default only boot loader entries which follow the [Boot
-  Loader Specification](https://systemd.io/BOOT_LOADER_SPECIFICATION) and are
+  fashion. Note that by default only boot loader entries which follow the
+  [Boot Loader Specification](BOOT_LOADER_SPECIFICATION.md) and are
   placed in the ESP or the Extended Boot Loader partition may be selected this
   way. However, if a directory `/run/boot-loader-entries/` exists, the entries
   are loaded from there instead. The directory should contain the usual
@@ -197,7 +199,7 @@ All tools:
   or whenever they change if it wants to integrate with `systemd-logind`'s
   APIs.
 
-`systemd-udevd`:
+`systemd-udevd` and sd-device library:
 
 * `$NET_NAMING_SCHEME=` — if set, takes a network naming scheme (i.e. one of
   "v238", "v239", "v240"…, or the special value "latest") as parameter. If
@@ -208,6 +210,10 @@ All tools:
   kernel command line option `net.naming-scheme=`, except if the value is
   prefixed with `:` in which case the kernel command line option takes
   precedence, if it is specified as well.
+
+* `$SYSTEMD_DEVICE_VERIFY_SYSFS` — if set to "0", disables verification that
+  devices sysfs path are actually backed by sysfs. Relaxing this verification
+  is useful for testing purposes.
 
 `nss-systemd`:
 
@@ -321,7 +327,7 @@ fuzzers:
 * `$SYSTEMD_FUZZ_RUNS` — The number of times execution should be repeated in
   manual invocations.
 
-Note that is may be also useful to set `$SYSTEMD_LOG_LEVEL`, since all logging
+Note that it may be also useful to set `$SYSTEMD_LOG_LEVEL`, since all logging
 is suppressed by default.
 
 `systemd-importd`:
@@ -358,11 +364,10 @@ disk images with `--image=` or similar:
   to load the embedded Verity signature data. If enabled (which is the
   default), Verity root hash information and a suitable signature is
   automatically acquired from a signature partition, following the
-  [Discoverable Partitions
-  Specification](https://systemd.io/DISCOVERABLE_PARTITIONS). If disabled any
-  such partition is ignored. Note that this only disables discovery of the root
-  hash and its signature, the Verity data partition itself is still searched in
-  the GPT image.
+  [Discoverable Partitions Specification](DISCOVERABLE_PARTITIONS.md).
+  If disabled any such partition is ignored. Note that this only disables
+  discovery of the root hash and its signature, the Verity data partition
+  itself is still searched in the GPT image.
 
 * `$SYSTEMD_DISSECT_VERITY_SIGNATURE` — takes a boolean, which controls whether
   to validate the signature of the Verity root hash if available. If enabled
@@ -435,3 +440,10 @@ SYSTEMD_HOME_DEBUG_SUFFIX=foo \
   use for LUKS home directories, overriding the built-in default mount
   options. There's one variable for each of the supported file systems for the
   LUKS home directory backend.
+
+`kernel-install`:
+
+* `$KERNEL_INSTALL_BYPASS` – If set to "1", execution of kernel-install is skipped
+  when kernel-install is invoked. This can be useful if kernel-install is invoked
+  unconditionally as a child process by another tool, such as package managers
+  running kernel-install in a postinstall script.

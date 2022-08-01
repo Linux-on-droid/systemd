@@ -63,15 +63,15 @@ enum {
         SD_DHCP6_OPTION_RECONF_ACCEPT              = 20,  /* RFC 8415 */
         SD_DHCP6_OPTION_SIP_SERVER_DOMAIN_NAME     = 21,  /* RFC 3319 */
         SD_DHCP6_OPTION_SIP_SERVER_ADDRESS         = 22,  /* RFC 3319 */
-        SD_DHCP6_OPTION_DNS_SERVERS                = 23,  /* RFC 3646 */
-        SD_DHCP6_OPTION_DOMAIN_LIST                = 24,  /* RFC 3646 */
+        SD_DHCP6_OPTION_DNS_SERVER                 = 23,  /* RFC 3646 */
+        SD_DHCP6_OPTION_DOMAIN                     = 24,  /* RFC 3646 */
         SD_DHCP6_OPTION_IA_PD                      = 25,  /* RFC 3633, RFC 8415 */
         SD_DHCP6_OPTION_IA_PD_PREFIX               = 26,  /* RFC 3633, RFC 8415 */
-        SD_DHCP6_OPTION_NIS_SERVERS                = 27,  /* RFC 3898 */
-        SD_DHCP6_OPTION_NISP_SERVERS               = 28,  /* RFC 3898 */
+        SD_DHCP6_OPTION_NIS_SERVER                 = 27,  /* RFC 3898 */
+        SD_DHCP6_OPTION_NISP_SERVER                = 28,  /* RFC 3898 */
         SD_DHCP6_OPTION_NIS_DOMAIN_NAME            = 29,  /* RFC 3898 */
         SD_DHCP6_OPTION_NISP_DOMAIN_NAME           = 30,  /* RFC 3898 */
-        SD_DHCP6_OPTION_SNTP_SERVERS               = 31,  /* RFC 4075, deprecated */
+        SD_DHCP6_OPTION_SNTP_SERVER                = 31,  /* RFC 4075, deprecated */
         SD_DHCP6_OPTION_INFORMATION_REFRESH_TIME   = 32,  /* RFC 4242, 8415, sec. 21.23 */
         SD_DHCP6_OPTION_BCMCS_SERVER_D             = 33,  /* RFC 4280 */
         SD_DHCP6_OPTION_BCMCS_SERVER_A             = 34,  /* RFC 4280 */
@@ -81,8 +81,8 @@ enum {
         SD_DHCP6_OPTION_SUBSCRIBER_ID              = 38,  /* RFC 4580 */
         SD_DHCP6_OPTION_CLIENT_FQDN                = 39,  /* RFC 4704 */
         SD_DHCP6_OPTION_PANA_AGENT                 = 40,  /* RFC 5192 */
-        SD_DHCP6_OPTION_NEW_POSIX_TIMEZONE         = 41,  /* RFC 4833 */
-        SD_DHCP6_OPTION_NEW_TZDB_TIMEZONE          = 42,  /* RFC 4833 */
+        SD_DHCP6_OPTION_POSIX_TIMEZONE             = 41,  /* RFC 4833 */
+        SD_DHCP6_OPTION_TZDB_TIMEZONE              = 42,  /* RFC 4833 */
         SD_DHCP6_OPTION_ERO                        = 43,  /* RFC 4994 */
         SD_DHCP6_OPTION_LQ_QUERY                   = 44,  /* RFC 5007 */
         SD_DHCP6_OPTION_CLIENT_DATA                = 45,  /* RFC 5007 */
@@ -251,7 +251,7 @@ int sd_dhcp6_client_set_request_vendor_class(
 int sd_dhcp6_client_set_prefix_delegation_hint(
                 sd_dhcp6_client *client,
                 uint8_t prefixlen,
-                const struct in6_addr *pd_address);
+                const struct in6_addr *pd_prefix);
 int sd_dhcp6_client_get_prefix_delegation(sd_dhcp6_client *client,
                                           int *delegation);
 int sd_dhcp6_client_set_prefix_delegation(sd_dhcp6_client *client,
@@ -260,8 +260,6 @@ int sd_dhcp6_client_get_address_request(sd_dhcp6_client *client,
                                         int *request);
 int sd_dhcp6_client_set_address_request(sd_dhcp6_client *client,
                                         int request);
-int sd_dhcp6_client_set_transaction_id(sd_dhcp6_client *client,
-                                       uint32_t transaction_id);
 int sd_dhcp6_client_add_vendor_option(sd_dhcp6_client *client,
                                       sd_dhcp6_option *v);
 

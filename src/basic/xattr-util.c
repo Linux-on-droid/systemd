@@ -70,7 +70,7 @@ int getxattr_at_malloc(
                 by_procfs = true; /* fgetxattr() is not going to work, go via /proc/ link right-away */
         }
 
-        for(;;) {
+        for (;;) {
                 _cleanup_free_ char *v = NULL;
                 ssize_t n;
 
@@ -199,7 +199,7 @@ int fd_setcrtime(int fd, usec_t usec) {
 
         assert(fd >= 0);
 
-        if (IN_SET(usec, 0, USEC_INFINITY))
+        if (!timestamp_is_set(usec))
                 usec = now(CLOCK_REALTIME);
 
         le = htole64((uint64_t) usec);

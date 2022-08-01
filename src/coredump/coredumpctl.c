@@ -91,7 +91,6 @@ static int add_match(sd_journal *j, const char *match) {
 }
 
 static int add_matches(sd_journal *j, char **matches) {
-        char **match;
         int r;
 
         r = sd_journal_add_match(j, "MESSAGE_ID=" SD_MESSAGE_COREDUMP_STR, 0);
@@ -234,7 +233,7 @@ static int parse_argv(int argc, char *argv[]) {
         assert(argv);
 
         while ((c = getopt_long(argc, argv, "hA:o:F:1D:rS:U:qn:", options, NULL)) >= 0)
-                switch(c) {
+                switch (c) {
                 case 'h':
                         return verb_help(0, NULL, NULL);
 

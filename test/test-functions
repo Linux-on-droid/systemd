@@ -60,7 +60,7 @@ get_bool() {
     fi
 }
 
-# Decide if we can (and want to) run QEMU with KVM acceleration.
+# Decide if we can (and want to) run qemu with KVM acceleration.
 # Check if nested KVM is explicitly enabled (TEST_NESTED_KVM). If not,
 # check if it's not explicitly disabled (TEST_NO_KVM) and we're not already
 # running under KVM. If these conditions are met, enable KVM (and possibly
@@ -94,7 +94,7 @@ fi
 
 PATH_TO_INIT="$ROOTLIBDIR/systemd"
 SYSTEMD_JOURNALD="${SYSTEMD_JOURNALD:-$(command -v "$BUILD_DIR/systemd-journald" || command -v "$ROOTLIBDIR/systemd-journald")}"
-SYSTEMD_JOURNAL_REMOTE="${SYSTEMD_JOURNAL_REMOTE:-$(command -v "$BUILD_DIR/systemd-journal-remote" || command -v "$ROOTLIBDIR/systemd-journal-remote")}"
+SYSTEMD_JOURNAL_REMOTE="${SYSTEMD_JOURNAL_REMOTE:-$(command -v "$BUILD_DIR/systemd-journal-remote" || command -v "$ROOTLIBDIR/systemd-journal-remote" || echo "")}"
 SYSTEMD="${SYSTEMD:-$(command -v "$BUILD_DIR/systemd" || command -v "$ROOTLIBDIR/systemd")}"
 SYSTEMD_NSPAWN="${SYSTEMD_NSPAWN:-$(command -v "$BUILD_DIR/systemd-nspawn" || command -v systemd-nspawn)}"
 JOURNALCTL="${JOURNALCTL:-$(command -v "$BUILD_DIR/journalctl" || command -v journalctl)}"
@@ -141,6 +141,7 @@ BASICTOOLS=(
     echo
     env
     false
+    flock
     getconf
     getent
     getfacl
@@ -309,7 +310,7 @@ find_qemu_bin() {
     esac
 
     if [[ ! -e "$QEMU_BIN" ]]; then
-        echo "Could not find a suitable QEMU binary" >&2
+        echo "Could not find a suitable qemu binary" >&2
         return 1
     fi
 }
@@ -333,9 +334,14 @@ qemu_min_version() {
     printf "%s\n%s\n" "$1" "$qemu_ver" | sort -V -C
 }
 
-# Return 0 if QEMU did run (then you must check the result state/logs for actual
-# success), or 1 if QEMU is not available.
+# Return 0 if qemu did run (then you must check the result state/logs for actual
+# success), or 1 if qemu is not available.
 run_qemu() {
+    # If the test provided its own initrd, use it (e.g. TEST-24)
+    if [[ -z "$INITRD" && -f "${TESTDIR:?}/initrd.img" ]]; then
+        INITRD="$TESTDIR/initrd.img"
+    fi
+
     if [ -f /etc/machine-id ]; then
         read -r MACHINE_ID </etc/machine-id
         [ -z "$INITRD" ] && [ -e "$EFI_MOUNT/$MACHINE_ID/$KERNEL_VER/initrd" ] \
@@ -479,7 +485,7 @@ run_qemu() {
         derror "Test timed out after ${QEMU_TIMEOUT}s"
         TIMED_OUT=1
     else
-        [ "$rc" != 0 ] && derror "QEMU failed with exit code $rc"
+        [ "$rc" != 0 ] && derror "qemu failed with exit code $rc"
     fi
     return 0
 }
@@ -751,17 +757,17 @@ install_valgrind() {
 
     local valgrind_bins valgrind_libs valgrind_dbg_and_supp
 
-    valgrind_bins="$(strace -e execve valgrind /bin/true 2>&1 >/dev/null | perl -lne 'print $1 if /^execve\("([^"]+)"/')"
-    image_install "$valgrind_bins"
+    readarray -t valgrind_bins < <(strace -e execve valgrind /bin/true 2>&1 >/dev/null | perl -lne 'print $1 if /^execve\("([^"]+)"/')
+    image_install "${valgrind_bins[@]}"
 
-    valgrind_libs="$(LD_DEBUG=files valgrind /bin/true 2>&1 >/dev/null | perl -lne 'print $1 if m{calling init: (/.*vgpreload_.*)}')"
-    image_install "$valgrind_libs"
+    readarray -t valgrind_libs < <(LD_DEBUG=files valgrind /bin/true 2>&1 >/dev/null | perl -lne 'print $1 if m{calling init: (/.*vgpreload_.*)}')
+    image_install "${valgrind_libs[@]}"
 
-    valgrind_dbg_and_supp="$(
+    readarray -t valgrind_dbg_and_supp < <(
         strace -e open valgrind /bin/true 2>&1 >/dev/null |
         perl -lne 'if (my ($fname) = /^open\("([^"]+).*= (?!-)\d+/) { print $fname if $fname =~ /debug|\.supp$/ }'
-    )"
-    image_install "$valgrind_dbg_and_supp"
+    )
+    image_install "${valgrind_dbg_and_supp[@]}"
 }
 
 create_valgrind_wrapper() {
@@ -771,7 +777,7 @@ create_valgrind_wrapper() {
 #!/usr/bin/env bash
 
 mount -t proc proc /proc
-exec valgrind --leak-check=full --log-file=/valgrind.out $ROOTLIBDIR/systemd "\$@"
+exec valgrind --leak-check=full --track-fds=yes --log-file=/valgrind.out $ROOTLIBDIR/systemd "\$@"
 EOF
     chmod 0755 "$valgrind_wrapper"
 }
@@ -1054,6 +1060,29 @@ install_iscsi() {
     fi
 }
 
+install_mdadm() {
+    local unit
+    local mdadm_units=(
+        system/mdadm-grow-continue@.service
+        system/mdadm-last-resort@.service
+        system/mdadm-last-resort@.timer
+        system/mdmon@.service
+        system/mdmonitor-oneshot.service
+        system/mdmonitor-oneshot.timer
+        system/mdmonitor.service
+        system-shutdown/mdadm.shutdown
+    )
+
+    image_install mdadm mdmon
+    inst_rules 01-md-raid-creating.rules 63-md-raid-arrays.rules 64-md-raid-assembly.rules 69-md-clustered-confirm-device.rules
+    # Fedora/CentOS/RHEL ships this rule file
+    [[ -f /lib/udev/rules.d/65-md-incremental.rules ]] && inst_rules 65-md-incremental.rules
+
+    for unit in "${mdadm_units[@]}"; do
+        image_install "${ROOTLIBDIR:?}/$unit"
+    done
+}
+
 install_compiled_systemd() {
     dinfo "Install compiled systemd"
 
@@ -1070,6 +1099,9 @@ install_compiled_systemd() {
     if get_bool "$IS_BUILT_WITH_COVERAGE"; then
         mkdir -p "${initdir}/${BUILD_DIR:?}/"
         rsync -am --include='*/' --include='*.gcno' --exclude='*' "${BUILD_DIR:?}/" "${initdir}/${BUILD_DIR:?}/"
+        # Set effective & default ACLs for the build dir so unprivileged
+        # processes can write gcda files with coverage stats
+        setfacl -R -m 'd:o:rwX' -m 'o:rwX' "${initdir}/${BUILD_DIR:?}/"
     fi
 }
 
@@ -1154,17 +1186,38 @@ install_systemd() {
 
     # enable debug logging in PID1
     echo LogLevel=debug >>"$initdir/etc/systemd/system.conf"
+    if [[ -n "$TEST_SYSTEMD_LOG_LEVEL" ]]; then
+        echo DefaultEnvironment=SYSTEMD_LOG_LEVEL="$TEST_SYSTEMD_LOG_LEVEL" >>"$initdir/etc/systemd/system.conf"
+    fi
     # store coredumps in journal
     echo Storage=journal >>"$initdir/etc/systemd/coredump.conf"
     # Propagate SYSTEMD_UNIT_PATH to user systemd managers
     mkdir "$initdir/etc/systemd/system/user@.service.d/"
     echo -e "[Service]\nPassEnvironment=SYSTEMD_UNIT_PATH\n" >"$initdir/etc/systemd/system/user@.service.d/override.conf"
 
-    # When built with gcov, disable ProtectSystem= and ProtectHome in the test
-    # images, since it prevents gcov to write the coverage reports (*.gcda files)
+    # When built with gcov, disable ProtectSystem= and ProtectHome= in the test
+    # images, since it prevents gcov to write the coverage reports (*.gcda
+    # files)
     if get_bool "$IS_BUILT_WITH_COVERAGE"; then
         mkdir -p "$initdir/etc/systemd/system/service.d/"
-        echo -e "[Service]\nProtectSystem=no\nProtectHome=no\n" >"$initdir/etc/systemd/system/service.d/gcov-override.conf"
+        echo -e "[Service]\nProtectSystem=no\nProtectHome=no\n" >"$initdir/etc/systemd/system/service.d/99-gcov-override.conf"
+        # Similarly, set ReadWritePaths= to the $BUILD_DIR in the test image
+        # to make the coverage work with units utilizing DynamicUser=yes. Do
+        # this only for services from TEST-20, as setting this system-wide
+        # has many undesirable side-effects
+        mkdir -p "$initdir/etc/systemd/system/test20-.service.d/"
+        echo -e "[Service]\nReadWritePaths=${BUILD_DIR:?}\n" >"$initdir/etc/systemd/system/test20-.service.d/99-gcov-rwpaths-override.conf"
+    fi
+
+    # If we're built with -Dportabled=false, tests with systemd-analyze
+    # --profile will fail. Since we need just the profile (text) files, let's
+    # copy them into the image if they don't exist there.
+    local portable_dir="${initdir:?}${ROOTLIBDIR:?}/portable"
+    if [[ ! -d "$portable_dir/profile/strict" ]]; then
+        dinfo "Couldn't find portable profiles in the test image"
+        dinfo "Copying them directly from the source tree"
+        mkdir -p "$portable_dir"
+        cp -frv "${SOURCE_DIR:?}/src/portable/profile" "$portable_dir"
     fi
 }
 
@@ -1189,7 +1242,7 @@ install_missing_libraries() {
     local lib path
     # A number of dependencies is now optional via dlopen, so the install
     # script will not pick them up, since it looks at linkage.
-    for lib in libcryptsetup libidn libidn2 pwquality libqrencode tss2-esys tss2-rc tss2-mu libfido2 libbpf libelf libdw; do
+    for lib in libcryptsetup libidn libidn2 pwquality libqrencode tss2-esys tss2-rc tss2-mu tss2-tcti-device libfido2 libbpf libelf libdw; do
         ddebug "Searching for $lib via pkg-config"
         if pkg-config --exists "$lib"; then
                 path="$(pkg-config --variable=libdir "$lib")"
@@ -1253,7 +1306,7 @@ create_empty_image() {
     LOOPDEV=$(losetup --show -P -f "$IMAGE_PUBLIC")
     [ -b "$LOOPDEV" ] || return 1
     sfdisk "$LOOPDEV" <<EOF
-,$((size - 50))M
+,$((size - 50))M,L,*
 ,
 EOF
 
@@ -1326,6 +1379,7 @@ check_asan_reports() {
                  BEGIN {
                      %services_to_ignore = (
                          "dbus-daemon" => undef,
+                         "dbus-broker-launch" => undef,
                      );
                  }
                  print $2 if /\s(\S*)\[(\d+)\]:\s*SUMMARY:\s+\w+Sanitizer/ && !exists $services_to_ignore{$1}'
@@ -1373,6 +1427,20 @@ check_coverage_reports() {
         lcov --remove "${dest}" -o "${dest}" '/usr/include/*' '/usr/lib/*'
     fi
 
+    # If the test logs contain lines like:
+    #
+    # ...systemd-resolved[735885]: profiling:/systemd-meson-build/src/shared/libsystemd-shared-250.a.p/base-filesystem.c.gcda:Cannot open
+    #
+    # it means we're possibly missing some coverage since gcov can't write the stats,
+    # usually due to the sandbox being too restrictive (e.g. ProtectSystem=yes,
+    # ProtectHome=yes) or the $BUILD_DIR being inaccessible to non-root users - see
+    # `setfacl` stuff in install_compiled_systemd().
+    if ! get_bool "${IGNORE_MISSING_COVERAGE:=}" && \
+       "${JOURNALCTL:?}" -q --no-pager -D "${root:?}/var/log/journal" --grep "profiling:.+?gcda:[Cc]annot open"; then
+        derror "Detected possibly missing coverage, check the journal"
+        return 1
+    fi
+
     return 0
 }
 
@@ -1394,7 +1462,11 @@ save_journal() {
 
     for j in "${1:?}"/*; do
         if get_bool "$save"; then
-            "$SYSTEMD_JOURNAL_REMOTE" -o "$dest" --getter="$JOURNALCTL -o export -D $j"
+            if [ "$SYSTEMD_JOURNAL_REMOTE" = "" ]; then
+                cp -a "$j" "$dest"
+            else
+                "$SYSTEMD_JOURNAL_REMOTE" -o "$dest" --getter="$JOURNALCTL -o export -D $j"
+            fi
         fi
 
         if [ -n "${TEST_SHOW_JOURNAL}" ]; then
@@ -1807,7 +1879,7 @@ install_pam() {
         paths+=(/lib*/security)
     fi
 
-    for d in /etc/pam.d /etc/security /usr/{etc,lib}/pam.d; do
+    for d in /etc/pam.d /{usr/,}etc/security /usr/{etc,lib}/pam.d; do
         [ -d "$d" ] && paths+=("$d")
     done
 
@@ -1899,6 +1971,8 @@ has_user_dbus_socket() {
     fi
 }
 
+setup_nspawn_root_hook() { :;}
+
 setup_nspawn_root() {
     if [ -z "${initdir}" ]; then
         dfatal "\$initdir not defined"
@@ -1911,6 +1985,8 @@ setup_nspawn_root() {
         ddebug "cp -ar $initdir $TESTDIR/unprivileged-nspawn-root"
         cp -ar "$initdir" "$TESTDIR/unprivileged-nspawn-root"
     fi
+
+    setup_nspawn_root_hook
 }
 
 setup_basic_dirs() {
@@ -1947,11 +2023,9 @@ inst_libs() {
 
     while read -r line; do
         [[ "$line" = 'not a dynamic executable' ]] && break
-        # Skip a harmless error when running the tests on a system with a significantly
-        # older systemd version (ldd tries to resolve the unprefixed RPATH for libsystemd.so.0,
-        # which is in this case older than the already installed libsystemd.so.0 in $initdir).
-        # The issue is triggered by installing test dependencies in install_missing_libraries().
-        [[ "$line" =~ libsystemd.so.*:\ version\ .*\ not\ found ]] && continue
+        # Ignore errors about our own stuff missing. This is most likely caused
+        # by ldd attempting to use the unprefixed RPATH.
+        [[ "$line" =~ libsystemd.*\ not\ found ]] && continue
 
         if [[ "$line" =~ $so_regex ]]; then
             file="${BASH_REMATCH[1]}"
@@ -1998,6 +2072,24 @@ import_initdir() {
     initdir="${TESTDIR:?}/root"
     mkdir -p "$initdir"
     export initdir
+}
+
+get_cgroup_hierarchy() {
+    case "$(stat -c '%T' -f /sys/fs/cgroup)" in
+        cgroup2fs)
+            echo "unified"
+            ;;
+        tmpfs)
+            if [[ -d /sys/fs/cgroup/unified && "$(stat -c '%T' -f /sys/fs/cgroup/unified)" == cgroup2fs ]]; then
+                echo "hybrid"
+            else
+                echo "legacy"
+            fi
+            ;;
+        *)
+            dfatal "Failed to determine host's cgroup hierarchy"
+            exit 1
+    esac
 }
 
 ## @brief Converts numeric logging level to the first letter of level name.
@@ -2324,7 +2416,7 @@ inst_binary() {
     # In certain cases we might attempt to install a binary which is already
     # present in the test image, yet it's missing from the host system.
     # In such cases, let's check if the binary indeed exists in the image
-    # before doing any other chcecks. If it does, immediately return with
+    # before doing any other checks. If it does, immediately return with
     # success.
     if [[ $# -eq 1 ]]; then
         for path in "" bin sbin usr/bin usr/sbin; do
@@ -2342,6 +2434,10 @@ inst_binary() {
     # I love bash!
     while read -r line; do
         [[ "$line" = 'not a dynamic executable' ]] && break
+
+        # Ignore errors about our own stuff missing. This is most likely caused
+        # by ldd attempting to use the unprefixed RPATH.
+        [[ "$line" =~ libsystemd.*\ not\ found ]] && continue
 
         if [[ "$line" =~ $so_regex ]]; then
             file="${BASH_REMATCH[1]}"
@@ -2787,9 +2883,9 @@ test_run() {
 
     if ! get_bool "${TEST_NO_QEMU:=}"; then
         if run_qemu "$test_id"; then
-            check_result_qemu || { echo "QEMU test failed"; return 1; }
+            check_result_qemu || { echo "qemu test failed"; return 1; }
         else
-            dwarn "can't run QEMU, skipping"
+            dwarn "can't run qemu, skipping"
         fi
     fi
     if ! get_bool "${TEST_NO_NSPAWN:=}"; then
@@ -2819,12 +2915,12 @@ do_test() {
     fi
 
     if get_bool "${TEST_NO_QEMU:=}" && get_bool "${TEST_NO_NSPAWN:=}"; then
-        echo "TEST: $TEST_DESCRIPTION [SKIPPED]: both QEMU and nspawn disabled" >&2
+        echo "TEST: $TEST_DESCRIPTION [SKIPPED]: both qemu and nspawn disabled" >&2
         exit 0
     fi
 
     if get_bool "${TEST_QEMU_ONLY:=}" && ! get_bool "$TEST_NO_NSPAWN"; then
-        echo "TEST: $TEST_DESCRIPTION [SKIPPED]: QEMU-only tests requested" >&2
+        echo "TEST: $TEST_DESCRIPTION [SKIPPED]: qemu-only tests requested" >&2
         exit 0
     fi
 

@@ -2783,7 +2783,6 @@ static int process_reply(sd_bus *bus, sd_bus_message *m) {
 
 static int process_filter(sd_bus *bus, sd_bus_message *m) {
         _cleanup_(sd_bus_error_free) sd_bus_error error_buffer = SD_BUS_ERROR_NULL;
-        struct filter_callback *l;
         int r;
 
         assert(bus);
@@ -3973,6 +3972,10 @@ _public_ int sd_bus_path_decode(const char *path, const char *prefix, char **ext
                 *external_id = NULL;
                 return 0;
         }
+
+        /* Note that 'e' might be an empty string here. That's expected. E.g. a case where the subtree
+         * corresponds to a subtree on a disk, and we want to return something that represents the root
+         * of the filesystem. */
 
         ret = bus_label_unescape(e);
         if (!ret)

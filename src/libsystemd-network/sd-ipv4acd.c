@@ -200,10 +200,10 @@ static int ipv4acd_set_next_wakeup(sd_ipv4acd *acd, usec_t usec, usec_t random_u
         if (random_usec > 0)
                 next_timeout += (usec_t) random_u64() % random_usec;
 
-        assert_se(sd_event_now(acd->event, clock_boottime_or_monotonic(), &time_now) >= 0);
+        assert_se(sd_event_now(acd->event, CLOCK_BOOTTIME, &time_now) >= 0);
 
         return event_reset_time(acd->event, &acd->timer_event_source,
-                                clock_boottime_or_monotonic(),
+                                CLOCK_BOOTTIME,
                                 time_now + next_timeout, 0,
                                 ipv4acd_on_timeout, acd,
                                 acd->event_priority, "ipv4acd-timer", true);
@@ -329,7 +329,7 @@ static bool ipv4acd_arp_conflict(sd_ipv4acd *acd, const struct ether_arp *arp, b
         if (acd->check_mac_callback &&
             acd->check_mac_callback(acd, (const struct ether_addr*) arp->arp_sha, acd->check_mac_userdata) > 0)
                 /* sender hardware is one of the host's interfaces, ignoring. */
-                return true;
+                return false;
 
         return true; /* conflict! */
 }
@@ -381,7 +381,7 @@ static int ipv4acd_on_packet(
                 if (ipv4acd_arp_conflict(acd, &packet, true)) {
                         usec_t ts;
 
-                        assert_se(sd_event_now(acd->event, clock_boottime_or_monotonic(), &ts) >= 0);
+                        assert_se(sd_event_now(acd->event, CLOCK_BOOTTIME, &ts) >= 0);
 
                         /* Defend address */
                         if (ts > acd->defend_window) {

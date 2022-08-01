@@ -15,7 +15,7 @@ inspect() {
     # avoid unexpected fails. To see the full outputs of both homectl &
     # userdbctl (for debugging purposes) drop the fields just before the
     # comparison.
-    local USERNAME="${1:?missing argument}"
+    local USERNAME="${1:?}"
     homectl inspect "$USERNAME" | tee /tmp/a
     userdbctl user "$USERNAME" | tee /tmp/b
 
@@ -153,20 +153,13 @@ if ! systemd-detect-virt -cq ; then
     inspect test-user2
 fi
 
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- test ! -f /home/test-user/xyz
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- test -f /home/test-user/xyz \
     && { echo 'unexpected success'; exit 1; }
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- touch /home/test-user/xyz
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- test -f /home/test-user/xyz
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- rm /home/test-user/xyz
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- test ! -f /home/test-user/xyz
-wait_for_state test-user inactive
 PASSWORD=xEhErW0ndafV4s homectl with test-user -- test -f /home/test-user/xyz \
     && { echo 'unexpected success'; exit 1; }
 

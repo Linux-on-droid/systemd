@@ -622,6 +622,9 @@ static int mount_add_extras(Mount *m) {
 
         if (!m->where) {
                 r = unit_name_to_path(u->id, &m->where);
+                if (r == -ENAMETOOLONG)
+                        log_unit_error_errno(u, r, "Failed to derive mount point path from unit name, because unit name is hashed. "
+                                                   "Set \"Where=\" in the unit file explicitly.");
                 if (r < 0)
                         return r;
         }
@@ -1957,7 +1960,6 @@ static int drain_libmount(Manager *m) {
 static int mount_process_proc_self_mountinfo(Manager *m) {
         _cleanup_set_free_free_ Set *around = NULL, *gone = NULL;
         const char *what;
-        Unit *u;
         int r;
 
         assert(m);
@@ -2068,7 +2070,7 @@ static int mount_process_proc_self_mountinfo(Manager *m) {
                         continue;
 
                 /* Let the device units know that the device is no longer mounted */
-                device_found_node(m, what, 0, DEVICE_FOUND_MOUNT);
+                device_found_node(m, what, DEVICE_NOT_FOUND, DEVICE_FOUND_MOUNT);
         }
 
         return 0;

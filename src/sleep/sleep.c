@@ -85,7 +85,6 @@ static int write_hibernate_location_info(const HibernateLocation *hibernate_loca
 
 static int write_mode(char **modes) {
         int r = 0;
-        char **mode;
 
         STRV_FOREACH(mode, modes) {
                 int k;
@@ -103,7 +102,6 @@ static int write_mode(char **modes) {
 }
 
 static int write_state(FILE **f, char **states) {
-        char **state;
         int r = 0;
 
         assert(f);
@@ -354,7 +352,7 @@ static int parse_argv(int argc, char *argv[]) {
         assert(argv);
 
         while ((c = getopt_long(argc, argv, "h", options, NULL)) >= 0)
-                switch(c) {
+                switch (c) {
                 case 'h':
                         return help();
 

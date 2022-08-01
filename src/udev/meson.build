@@ -6,6 +6,7 @@ udevadm_sources = files(
         'udevadm-control.c',
         'udevadm-hwdb.c',
         'udevadm-info.c',
+        'udevadm-lock.c',
         'udevadm-monitor.c',
         'udevadm-settle.c',
         'udevadm-test.c',
@@ -13,6 +14,7 @@ udevadm_sources = files(
         'udevadm-trigger.c',
         'udevadm-util.c',
         'udevadm-util.h',
+        'udevadm-wait.c',
         'udevd.c',
 )
 
@@ -152,7 +154,7 @@ foreach prog : udev_progs
                 install : true,
                 install_dir : udevlibexecdir)
 
-        udev_prog_paths += {name : exe.full_path()}
+        udev_prog_paths += {name : exe}
 endforeach
 
 if install_sysconfdir_samples
@@ -164,7 +166,7 @@ custom_target(
         'udev.pc',
         input : 'udev.pc.in',
         output : 'udev.pc',
-        command : [meson_render_jinja2, config_h, '@INPUT@', '@OUTPUT@'],
+        command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
         install : pkgconfigdatadir != 'no',
         install_dir : pkgconfigdatadir)
 
@@ -174,49 +176,48 @@ if install_sysconfdir
 endif
 
 fuzzers += [
-        [['src/udev/net/fuzz-link-parser.c',
-          'src/fuzz/fuzz.h'],
+        [files('net/fuzz-link-parser.c'),
          [libudevd_core,
           libshared],
          [threads,
           libacl],
          udev_includes],
 
-        [['src/udev/fuzz-udev-rules.c'],
+        [files('fuzz-udev-rules.c'),
          [libudevd_core,
           libshared],
          [threads,
           libacl]],
 
-        [['src/udev/fuzz-udev-rule-parse-value.c']],
+        [files('fuzz-udev-rule-parse-value.c')],
 
-        [['src/udev/fido_id/fuzz-fido-id-desc.c',
-          'src/udev/fido_id/fido_id_desc.c']],
+        [files('fido_id/fuzz-fido-id-desc.c',
+               'fido_id/fido_id_desc.c')],
 ]
 
 tests += [
-        [['src/udev/test-udev-event.c'],
+        [files('test-udev-event.c'),
          [libudevd_core,
           libshared],
          [threads,
           libacl]],
 
-        [['src/udev/test-udev-node.c'],
+        [files('test-udev-node.c'),
          [libudevd_core,
           libshared],
          [threads,
           libacl]],
 
-        [['src/udev/test-udev-builtin.c'],
+        [files('test-udev-builtin.c'),
          [libudevd_core,
           libshared],
          [threads,
           libacl]],
 
-        [['src/udev/test-udev-netlink.c',
-          'src/udev/udev-netlink.c',
-          'src/udev/udev-netlink.h']],
+        [files('test-udev-netlink.c',
+               'udev-netlink.c',
+               'udev-netlink.h')],
 
-        [['src/udev/fido_id/test-fido-id-desc.c',
-          'src/udev/fido_id/fido_id_desc.c']],
+        [files('fido_id/test-fido-id-desc.c',
+               'fido_id/fido_id_desc.c')],
 ]

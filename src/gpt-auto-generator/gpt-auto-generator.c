@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdlib.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 #include "sd-device.h"
@@ -11,6 +12,7 @@
 #include "blockdev-util.h"
 #include "btrfs-util.h"
 #include "device-util.h"
+#include "devnum-util.h"
 #include "dirent-util.h"
 #include "dissect-image.h"
 #include "dropin.h"
@@ -56,8 +58,8 @@ static int open_parent_block_device(dev_t devnum, int *ret_fd) {
         if (sd_device_get_devname(d, &name) < 0) {
                 r = sd_device_get_syspath(d, &name);
                 if (r < 0) {
-                        log_device_debug_errno(d, r, "Device %u:%u does not have a name, ignoring: %m",
-                                               major(devnum), minor(devnum));
+                        log_device_debug_errno(d, r, "Device " DEVNUM_FORMAT_STR " does not have a name, ignoring: %m",
+                                               DEVNUM_FORMAT_VAL(devnum));
                         return 0;
                 }
         }
@@ -303,7 +305,7 @@ static int path_is_busy(const char *where) {
                 return log_warning_errno(r, "Cannot check if \"%s\" is a mount point: %m", where);
 
         /* not a mountpoint but it contains files */
-        r = dir_is_empty(where);
+        r = dir_is_empty(where, /* ignore_hidden_or_backup= */ false);
         if (r < 0)
                 return log_warning_errno(r, "Cannot check if \"%s\" is empty: %m", where);
         if (r > 0)
@@ -696,6 +698,12 @@ static int enumerate_partitions(dev_t devnum) {
         if (r <= 0)
                 return r;
 
+        /* Let's take a LOCK_SH lock on the block device, in case udevd is already running. If we don't take
+         * the lock, udevd might end up issuing BLKRRPART in the middle, and we don't want that, since that
+         * might remove all partitions while we are operating on them. */
+        if (flock(fd, LOCK_SH) < 0)
+                return log_error_errno(errno, "Failed to lock root block device: %m");
+
         r = dissect_image(
                         fd,
                         NULL, NULL,
@@ -703,7 +711,6 @@ static int enumerate_partitions(dev_t devnum) {
                         UINT64_MAX,
                         USEC_INFINITY,
                         DISSECT_IMAGE_GPT_ONLY|
-                        DISSECT_IMAGE_NO_UDEV|
                         DISSECT_IMAGE_USR_NO_ROOT,
                         &m);
         if (r == -ENOPKG) {
@@ -779,12 +786,16 @@ static int add_mounts(void) {
                         return btrfs_log_dev_root(LOG_ERR, r, "root file system");
                 if (r < 0)
                         return log_error_errno(r, "Failed to determine block device of root file system: %m");
-                if (r == 0) { /* Not backed by block device */
+                if (r == 0) { /* Not backed by a single block device. (Could be NFS or so, or could be multi-device RAID or so) */
                         r = get_block_device_harder("/usr", &devno);
                         if (r == -EUCLEAN)
                                 return btrfs_log_dev_root(LOG_ERR, r, "/usr");
                         if (r < 0)
-                                return log_error_errno(r, "Failed to determine block device of /usr file system: %m");
+                                return log_error_errno(r, "Failed to determine block device of /usr/ file system: %m");
+                        if (r == 0) { /* /usr/ not backed by single block device, either. */
+                                log_debug("Neither root nor /usr/ file system are on a (single) block device.");
+                                return 0;
+                        }
                 }
         } else if (r < 0)
                 return log_error_errno(r, "Failed to read symlink /run/systemd/volatile-root: %m");

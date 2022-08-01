@@ -298,17 +298,30 @@ static void format_active_state(const char *active_state, const char **active_on
                 *active_on = *active_off = "";
 }
 
+static void format_enable_state(const char *enable_state, const char **enable_on, const char **enable_off) {
+        assert(enable_on);
+        assert(enable_off);
+
+        if (streq_ptr(enable_state, "disabled")) {
+                *enable_on = ansi_highlight_yellow();
+                *enable_off = ansi_normal();
+        } else if (streq_ptr(enable_state, "enabled")) {
+                *enable_on = ansi_highlight_green();
+                *enable_off = ansi_normal();
+        } else
+                *enable_on = *enable_off = "";
+}
+
 static void print_status_info(
                 sd_bus *bus,
                 UnitStatusInfo *i,
                 bool *ellipsized) {
 
         const char *active_on, *active_off, *on, *off, *ss, *fs;
+        const char *enable_on, *enable_off, *preset_on, *preset_off;
         _cleanup_free_ char *formatted_path = NULL;
-        ExecStatusInfo *p;
         usec_t timestamp;
         const char *path;
-        char **t, **t2;
         int r;
 
         assert(i);
@@ -317,6 +330,8 @@ static void print_status_info(
          * printer */
 
         format_active_state(i->active_state, &active_on, &active_off);
+        format_enable_state(i->unit_file_state, &enable_on, &enable_off);
+        format_enable_state(i->unit_file_preset, &preset_on, &preset_off);
 
         const SpecialGlyph glyph = unit_active_state_to_glyph(unit_active_state_from_string(i->active_state));
 
@@ -347,12 +362,12 @@ static void print_status_info(
                 bool show_preset = !isempty(i->unit_file_preset) &&
                         show_preset_for_state(unit_file_state_from_string(i->unit_file_state));
 
-                printf("     Loaded: %s%s%s (%s; %s%s%s)\n",
+                printf("     Loaded: %s%s%s (%s; %s%s%s%s%s%s%s)\n",
                        on, strna(i->load_state), off,
                        path,
-                       i->unit_file_state,
-                       show_preset ? "; vendor preset: " : "",
-                       show_preset ? i->unit_file_preset : "");
+                       enable_on, i->unit_file_state, enable_off,
+                       show_preset ? "; preset: " : "",
+                       preset_on, show_preset ? i->unit_file_preset : "", preset_off);
 
         } else if (path)
                 printf("     Loaded: %s%s%s (%s)\n",
@@ -367,7 +382,6 @@ static void print_status_info(
         if (!strv_isempty(i->dropin_paths)) {
                 _cleanup_free_ char *dir = NULL;
                 bool last = false;
-                char ** dropin;
 
                 STRV_FOREACH(dropin, i->dropin_paths) {
                         _cleanup_free_ char *dropin_formatted = NULL;
@@ -421,7 +435,7 @@ static void print_status_info(
                     STRPTR_IN_SET(i->active_state, "activating")          ? i->inactive_exit_timestamp :
                                                                             i->active_exit_timestamp;
 
-        if (timestamp > 0 && timestamp < USEC_INFINITY) {
+        if (timestamp_is_set(timestamp)) {
                 printf(" since %s; %s\n",
                        FORMAT_TIMESTAMP_STYLE(timestamp, arg_timestamp_style),
                        FORMAT_TIMESTAMP_RELATIVE(timestamp));
@@ -432,6 +446,18 @@ static void print_status_info(
                         printf("      Until: %s; %s\n",
                                FORMAT_TIMESTAMP_STYLE(until_timestamp, arg_timestamp_style),
                                FORMAT_TIMESTAMP_RELATIVE(until_timestamp));
+                }
+
+                if (!endswith(i->id, ".target") &&
+                        STRPTR_IN_SET(i->active_state, "inactive", "failed") &&
+                        timestamp_is_set(i->active_enter_timestamp) &&
+                        timestamp_is_set(i->active_exit_timestamp) &&
+                        i->active_exit_timestamp >= i->active_enter_timestamp) {
+
+                        usec_t duration;
+
+                        duration = i->active_exit_timestamp - i->active_enter_timestamp;
+                        printf("   Duration: %s\n", FORMAT_TIMESPAN(duration, MSEC_PER_SEC));
                 }
         } else
                 printf("\n");
@@ -455,7 +481,7 @@ static void print_status_info(
                 dual_timestamp_get(&nw);
                 next_elapse = calc_next_elapse(&nw, &next);
 
-                if (next_elapse > 0 && next_elapse < USEC_INFINITY)
+                if (timestamp_is_set(next_elapse))
                         printf("    Trigger: %s; %s\n",
                                FORMAT_TIMESTAMP_STYLE(next_elapse, arg_timestamp_style),
                                FORMAT_TIMESTAMP_RELATIVE(next_elapse));
@@ -476,7 +502,6 @@ static void print_status_info(
         }
 
         if (!i->condition_result && i->condition_timestamp > 0) {
-                UnitCondition *c;
                 int n = 0;
 
                 printf("  Condition: start %scondition failed%s at %s; %s\n",
@@ -754,7 +779,7 @@ static void print_status_info(
                                 getuid(),
                                 get_output_flags() | OUTPUT_BEGIN_NEWLINE,
                                 SD_JOURNAL_LOCAL_ONLY,
-                                arg_scope == UNIT_FILE_SYSTEM,
+                                arg_scope == LOOKUP_SCOPE_SYSTEM,
                                 ellipsized);
 
         if (i->need_daemon_reload)
@@ -762,8 +787,6 @@ static void print_status_info(
 }
 
 static void show_unit_help(UnitStatusInfo *i) {
-        char **p;
-
         assert(i);
 
         if (!i->documentation) {
@@ -1066,7 +1089,6 @@ static int print_property(const char *name, const char *expected_value, sd_bus_m
 
                         if (FLAGS_SET(flags, BUS_PRINT_PROPERTY_SHOW_EMPTY) || allow_list || !strv_isempty(l)) {
                                 bool first = true;
-                                char **i;
 
                                 if (!FLAGS_SET(flags, BUS_PRINT_PROPERTY_ONLY_VALUE)) {
                                         fputs(name, stdout);
@@ -1958,7 +1980,6 @@ static int show_one(
                 .io_read_bytes = UINT64_MAX,
                 .io_write_bytes = UINT64_MAX,
         };
-        char **pp;
         int r;
 
         assert(path);
@@ -2125,12 +2146,18 @@ static int show_system_status(sd_bus *bus) {
         printf("    State: %s%s%s\n",
                on, strna(mi.state), off);
 
+        printf("    Units: %" PRIu32 " loaded (incl. loaded aliases)\n", mi.n_names);
         printf("     Jobs: %" PRIu32 " queued\n", mi.n_jobs);
         printf("   Failed: %" PRIu32 " units\n", mi.n_failed_units);
 
         printf("    Since: %s; %s\n",
                FORMAT_TIMESTAMP_STYLE(mi.timestamp, arg_timestamp_style),
                FORMAT_TIMESTAMP_RELATIVE(mi.timestamp));
+
+        printf("  systemd: %s\n", mi.version);
+
+        if (!isempty(mi.tainted))
+                printf("  Tainted: %s%s%s\n", ansi_highlight_yellow(), mi.tainted, ansi_normal());
 
         printf("   CGroup: %s\n", empty_to_root(mi.control_group));
 
@@ -2146,7 +2173,7 @@ static int show_system_status(sd_bus *bus) {
         return 0;
 }
 
-int show(int argc, char *argv[], void *userdata) {
+int verb_show(int argc, char *argv[], void *userdata) {
         bool new_line = false, ellipsized = false;
         SystemctlShowMode show_mode;
         int r, ret = 0;
@@ -2156,7 +2183,7 @@ int show(int argc, char *argv[], void *userdata) {
 
         show_mode = systemctl_show_mode_from_string(argv[0]);
         if (show_mode < 0)
-                return log_error_errno(show_mode, "Invalid argument.");
+                return log_error_errno(show_mode, "Invalid argument '%s'.", argv[0]);
 
         if (show_mode == SYSTEMCTL_SHOW_HELP && argc <= 1)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
@@ -2182,7 +2209,6 @@ int show(int argc, char *argv[], void *userdata) {
                         ret = show_all(bus, &new_line, &ellipsized);
         } else {
                 _cleanup_free_ char **patterns = NULL;
-                char **name;
 
                 STRV_FOREACH(name, strv_skip(argv, 1)) {
                         _cleanup_free_ char *path = NULL, *unit = NULL;

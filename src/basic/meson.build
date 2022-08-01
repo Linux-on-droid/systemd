@@ -32,6 +32,8 @@ basic_sources = files(
         'conf-files.c',
         'conf-files.h',
         'def.h',
+        'devnum-util.c',
+        'devnum-util.h',
         'dirent-util.c',
         'dirent-util.h',
         'dns-def.h',
@@ -383,7 +385,7 @@ filesystem_includes = ['linux/magic.h',
                        'linux/gfs2_ondisk.h']
 
 check_filesystems = find_program('check-filesystems.sh')
-r = run_command([check_filesystems, cpp, 'filesystems-gperf.gperf'] + filesystem_includes)
+r = run_command([check_filesystems, cpp, 'filesystems-gperf.gperf'] + filesystem_includes, check: false)
 if r.returncode() != 0
         error('found unknown filesystem(s) defined in kernel headers:\n\n' + r.stdout())
         r.stdout()
@@ -442,5 +444,23 @@ libbasic_gcrypt = static_library(
         basic_gcrypt_sources,
         include_directories : basic_includes,
         dependencies : [libgcrypt],
+        c_args : ['-fvisibility=default'],
+        build_by_default : false)
+
+############################################################
+
+basic_compress_sources = files(
+        'compress.c',
+        'compress.h')
+
+# A convenience library that is separate from libbasic to avoid unnecessary
+# linking to the compression libraries.
+libbasic_compress = static_library(
+        'basic-compress',
+        basic_compress_sources,
+        include_directories : basic_includes,
+        dependencies : [libxz,
+                        libzstd,
+                        liblz4],
         c_args : ['-fvisibility=default'],
         build_by_default : false)

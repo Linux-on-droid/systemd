@@ -14,8 +14,8 @@ pairs, encoded as JSON. Specifically:
 
 1. [`systemd-homed.service`](https://www.freedesktop.org/software/systemd/man/systemd-homed.service.html)
    manages `human` user home directories and embeds these JSON records
-   directly in the home directory images (see [Home
-   Directories](https://systemd.io/HOME_DIRECTORY) for details).
+   directly in the home directory images
+   (see [Home Directories](HOME_DIRECTORY.md) for details).
 
 2. [`pam_systemd`](https://www.freedesktop.org/software/systemd/man/pam_systemd.html)
    processes these JSON records for users that log in, and applies various
@@ -71,14 +71,13 @@ the following extensions are envisioned:
 
 4. Default parameters for backup applications and similar
 
-Similar to JSON User Records there are also [JSON Group
-Records](https://systemd.io/GROUP_RECORD) that encapsulate UNIX groups.
+Similar to JSON User Records there are also
+[JSON Group Records](GROUP_RECORD.md) that encapsulate UNIX groups.
 
 JSON User Records may be transferred or written to disk in various protocols
 and formats. To inquire about such records defined on the local system use the
-[User/Group Lookup API via
-Varlink](https://systemd.io/USER_GROUP_API). User/group records may also be
-dropped in number of drop-in directories as files. See
+[User/Group Lookup API via Varlink](USER_GROUP_API.md). User/group records may
+also be dropped in number of drop-in directories as files. See
 [`nss-systemd(8)`](https://www.freedesktop.org/software/systemd/man/nss-systemd.html)
 for details.
 
@@ -215,7 +214,7 @@ object. The following fields are currently defined:
 UNIX user name. This field is the only mandatory field, all others are
 optional. Corresponds with the `pw_name` field of of `struct passwd` and the
 `sp_namp` field of `struct spwd` (i.e. the shadow user record stored in
-`/etc/shadow`). See [User/Group Name Syntax](https://systemd.io/USER_NAMES) for
+`/etc/shadow`). See [User/Group Name Syntax](USER_NAMES.md) for
 the (relaxed) rules the various systemd components enforce on user/group names.
 
 `realm` → The "realm" a user is defined in. This concept allows distinguishing
@@ -333,7 +332,7 @@ values, which is then inherited by all the user's processes, see
 [`setrlimit()`](http://man7.org/linux/man-pages/man2/setrlimit.2.html) for more
 information.
 
-`locked` → A boolean value. If true the user account is locked, the user may
+`locked` → A boolean value. If true, the user account is locked, the user may
 not log in. If this field is missing it should be assumed to be false,
 i.e. logins are permitted. This field corresponds to the `sp_expire` field of
 `struct spwd` (i.e. the `/etc/shadow` data for a user) being set to zero or
@@ -359,11 +358,11 @@ directory, also containing the `~/.identity` user record; `luks` is a per-user
 LUKS volume that is mounted as home directory, and `cifs` a home directory
 mounted from a Windows File Share. The five latter types are primarily used by
 `systemd-homed` when managing home directories, but may be used if other
-managers are used too. If this is not set `classic` is the implied default.
+managers are used too. If this is not set, `classic` is the implied default.
 
 `diskSize` → An unsigned 64bit integer, indicating the intended home directory
 disk space in bytes to assign to the user. Depending on the selected storage
-type this might be implement differently: for `luks` this is the intended size
+type this might be implemented differently: for `luks` this is the intended size
 of the file system and LUKS volume, while for the others this likely translates
 to classic file system quota settings.
 
@@ -425,7 +424,7 @@ the top-level directory of the CIFS share is used.
 
 `imagePath` → A string with an absolute file system path to the file, directory
 or block device to use for storage backing the home directory. If the `luks`
-storage is used this refers to the loopback file or block device node to store
+storage is used, this refers to the loopback file or block device node to store
 the LUKS volume on. For `fscrypt`, `directory`, `subvolume` this refers to the
 directory to bind mount as home directory on login. Not defined for `classic`
 or `cifs`.
@@ -465,7 +464,7 @@ relevant when the storage mechanism used is `luks`.
 referencing the file system UUID the home directory is located in. This is
 primarily relevant when the storage mechanism used is `luks`.
 
-`luksDiscard` → A boolean. If true and `luks` storage is used controls whether
+`luksDiscard` → A boolean. If true and `luks` storage is used, controls whether
 the loopback block devices, LUKS and the file system on top shall be used in
 `discard` mode, i.e. erased sectors should always be returned to the underlying
 storage. If false and `luks` storage is used turns this behavior off. In
@@ -579,7 +578,7 @@ against all plugged in security tokens and if there's exactly one matching
 private key found with it it is used.
 
 `fido2HmacCredential` → An array of strings, each with a Base64-encoded FIDO2
-credential ID that shell be used for authentication with FIDO2 devices that
+credential ID that shall be used for authentication with FIDO2 devices that
 implement the `hmac-secret` extension. The salt to pass to the FIDO2 device is
 found in `fido2HmacSalt`.
 

@@ -273,7 +273,7 @@ static int property_get_conditions(
                 sd_bus_error *error) {
 
         const char *(*to_string)(ConditionType type) = NULL;
-        Condition **list = userdata, *c;
+        Condition **list = userdata;
         int r;
 
         assert(bus);
@@ -736,7 +736,7 @@ int bus_unit_method_clean(sd_bus_message *message, void *userdata, sd_bus_error 
 
         r = unit_clean(u, mask);
         if (r == -EOPNOTSUPP)
-                return sd_bus_error_setf(error, SD_BUS_ERROR_NOT_SUPPORTED, "Unit '%s' does not supporting cleaning.", u->id);
+                return sd_bus_error_setf(error, SD_BUS_ERROR_NOT_SUPPORTED, "Unit '%s' does not support cleaning.", u->id);
         if (r == -EUNATCH)
                 return sd_bus_error_set(error, BUS_ERROR_NOTHING_TO_CLEAN, "No matching resources found.");
         if (r == -EBUSY)
@@ -951,87 +951,61 @@ const sd_bus_vtable bus_unit_vtable[] = {
         SD_BUS_PROPERTY("CollectMode", "s", property_get_collect_mode, offsetof(Unit, collect_mode), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("Refs", "as", property_get_refs, 0, 0),
 
-        SD_BUS_METHOD_WITH_NAMES("Start",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_start,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Stop",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_stop,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Reload",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_reload,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Restart",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_restart,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("TryRestart",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_try_restart,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("ReloadOrRestart",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_reload_or_restart,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("ReloadOrTryRestart",
-                                 "s",
-                                 SD_BUS_PARAM(mode),
-                                 "o",
-                                 SD_BUS_PARAM(job),
-                                 bus_unit_method_reload_or_try_restart,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("EnqueueJob",
-                                 "ss",
-                                 SD_BUS_PARAM(job_type)
-                                 SD_BUS_PARAM(job_mode),
-                                 "uososa(uosos)",
-                                 SD_BUS_PARAM(job_id)
-                                 SD_BUS_PARAM(job_path)
-                                 SD_BUS_PARAM(unit_id)
-                                 SD_BUS_PARAM(unit_path)
-                                 SD_BUS_PARAM(job_type)
-                                 SD_BUS_PARAM(affected_jobs),
-                                 bus_unit_method_enqueue_job,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Kill",
-                                 "si",
-                                 SD_BUS_PARAM(whom)
-                                 SD_BUS_PARAM(signal),
-                                 NULL,,
-                                 bus_unit_method_kill,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Start",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_start,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Stop",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_stop,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Reload",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_reload,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Restart",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_restart,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("TryRestart",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_try_restart,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ReloadOrRestart",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_reload_or_restart,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("ReloadOrTryRestart",
+                                SD_BUS_ARGS("s", mode),
+                                SD_BUS_RESULT("o", job),
+                                bus_unit_method_reload_or_try_restart,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("EnqueueJob",
+                                SD_BUS_ARGS("s", job_type, "s", job_mode),
+                                SD_BUS_RESULT("u", job_id, "o", job_path, "s", unit_id, "o", unit_path, "s", job_type, "a(uosos)", affected_jobs),
+                                bus_unit_method_enqueue_job,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Kill",
+                                SD_BUS_ARGS("s", whom, "i", signal),
+                                SD_BUS_NO_RESULT,
+                                bus_unit_method_kill,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
         SD_BUS_METHOD("ResetFailed",
                       NULL,
                       NULL,
                       bus_unit_method_reset_failed,
                       SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("SetProperties",
-                                 "ba(sv)",
-                                 SD_BUS_PARAM(runtime)
-                                 SD_BUS_PARAM(properties),
-                                 NULL,,
-                                 bus_unit_method_set_properties,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("SetProperties",
+                                SD_BUS_ARGS("b", runtime, "a(sv)", properties),
+                                SD_BUS_NO_RESULT,
+                                bus_unit_method_set_properties,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
         SD_BUS_METHOD("Ref",
                       NULL,
                       NULL,
@@ -1042,12 +1016,11 @@ const sd_bus_vtable bus_unit_vtable[] = {
                       NULL,
                       bus_unit_method_unref,
                       SD_BUS_VTABLE_UNPRIVILEGED),
-        SD_BUS_METHOD_WITH_NAMES("Clean",
-                                 "as",
-                                 SD_BUS_PARAM(mask),
-                                 NULL,,
-                                 bus_unit_method_clean,
-                                 SD_BUS_VTABLE_UNPRIVILEGED),
+        SD_BUS_METHOD_WITH_ARGS("Clean",
+                                SD_BUS_ARGS("as", mask),
+                                SD_BUS_NO_RESULT,
+                                bus_unit_method_clean,
+                                SD_BUS_VTABLE_UNPRIVILEGED),
         SD_BUS_METHOD("Freeze",
                       NULL,
                       NULL,
@@ -1584,6 +1557,7 @@ const sd_bus_vtable bus_unit_cgroup_vtable[] = {
         SD_BUS_VTABLE_START(0),
         SD_BUS_PROPERTY("Slice", "s", property_get_slice, 0, 0),
         SD_BUS_PROPERTY("ControlGroup", "s", property_get_cgroup, 0, 0),
+        SD_BUS_PROPERTY("ControlGroupId", "t", NULL, offsetof(Unit, cgroup_id), 0),
         SD_BUS_PROPERTY("MemoryCurrent", "t", property_get_current_memory, 0, 0),
         SD_BUS_PROPERTY("MemoryAvailable", "t", property_get_available_memory, 0, 0),
         SD_BUS_PROPERTY("CPUUsageNSec", "t", property_get_cpu_usage, 0, 0),
@@ -1599,18 +1573,15 @@ const sd_bus_vtable bus_unit_cgroup_vtable[] = {
         SD_BUS_PROPERTY("IOWriteBytes", "t", property_get_io_counter, 0, 0),
         SD_BUS_PROPERTY("IOWriteOperations", "t", property_get_io_counter, 0, 0),
 
-        SD_BUS_METHOD_WITH_NAMES("GetProcesses",
-                                 NULL,,
-                                 "a(sus)",
-                                 SD_BUS_PARAM(processes),
+        SD_BUS_METHOD_WITH_ARGS("GetProcesses",
+                                 SD_BUS_NO_ARGS,
+                                 SD_BUS_ARGS("a(sus)", processes),
                                  bus_unit_method_get_processes,
                                  SD_BUS_VTABLE_UNPRIVILEGED),
 
-        SD_BUS_METHOD_WITH_NAMES("AttachProcesses",
-                                 "sau",
-                                 SD_BUS_PARAM(subcgroup)
-                                 SD_BUS_PARAM(pids),
-                                 NULL,,
+        SD_BUS_METHOD_WITH_ARGS("AttachProcesses",
+                                 SD_BUS_ARGS("s", subcgroup, "au", pids),
+                                 SD_BUS_NO_RESULT,
                                  bus_unit_method_attach_processes,
                                  SD_BUS_VTABLE_UNPRIVILEGED),
 
@@ -2241,16 +2212,14 @@ static int bus_unit_set_transient_property(
 
         if (streq(name, "Documentation")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **p;
 
                 r = sd_bus_message_read_strv(message, &l);
                 if (r < 0)
                         return r;
 
-                STRV_FOREACH(p, l) {
+                STRV_FOREACH(p, l)
                         if (!documentation_url_is_valid(*p))
                                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid URL in %s: %s", name, *p);
-                }
 
                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         if (strv_isempty(l)) {
@@ -2306,7 +2275,6 @@ static int bus_unit_set_transient_property(
 
         } else if (streq(name, "RequiresMountsFor")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **p;
 
                 r = sd_bus_message_read_strv(message, &l);
                 if (r < 0)

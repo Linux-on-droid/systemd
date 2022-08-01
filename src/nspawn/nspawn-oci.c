@@ -8,6 +8,7 @@
 #include "bus-util.h"
 #include "cap-list.h"
 #include "cpu-set-util.h"
+#include "devnum-util.h"
 #include "env-util.h"
 #include "format-util.h"
 #include "fs-util.h"
@@ -20,7 +21,6 @@
 #if HAVE_SECCOMP
 #include "seccomp-util.h"
 #endif
-#include "stat-util.h"
 #include "stdio-util.h"
 #include "string-util.h"
 #include "strv.h"
@@ -1892,7 +1892,6 @@ static int oci_seccomp_syscalls(const char *name, JsonVariant *v, JsonDispatchFl
                 struct syscall_rule rule = {
                         .action = UINT32_MAX,
                 };
-                char **i;
 
                 r = json_dispatch(e, table, oci_unexpected, flags, &rule);
                 if (r < 0)
@@ -2006,7 +2005,7 @@ static int oci_masked_paths(const char *name, JsonVariant *v, JsonDispatchFlags 
 
                 if (!path_is_absolute(p))
                         return json_log(v, flags, SYNTHETIC_ERRNO(EINVAL),
-                                        "Path is not not absolute, refusing: %s", p);
+                                        "Path is not absolute, refusing: %s", p);
 
                 if (oci_exclude_mount(p))
                         continue;
@@ -2048,7 +2047,7 @@ static int oci_readonly_paths(const char *name, JsonVariant *v, JsonDispatchFlag
 
                 if (!path_is_absolute(p))
                         return json_log(v, flags, SYNTHETIC_ERRNO(EINVAL),
-                                        "Path is not not absolute, refusing: %s", p);
+                                        "Path is not absolute, refusing: %s", p);
 
                 if (oci_exclude_mount(p))
                         continue;

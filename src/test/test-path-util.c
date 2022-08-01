@@ -481,7 +481,6 @@ TEST(path_strv_resolve) {
         char tmp_dir[] = "/tmp/test-path-util-XXXXXX";
         _cleanup_strv_free_ char **search_dirs = NULL;
         _cleanup_strv_free_ char **absolute_dirs = NULL;
-        char **d;
 
         assert_se(mkdtemp(tmp_dir) != NULL);
 
@@ -959,21 +958,6 @@ TEST(hidden_or_backup_file) {
 
         assert_se(!hidden_or_backup_file("test.rpmnew."));
         assert_se(!hidden_or_backup_file("test.dpkg-old.foo"));
-}
-
-TEST(systemd_installation_has_version) {
-        int r;
-        const unsigned versions[] = {0, 231, PROJECT_VERSION, 999};
-        unsigned i;
-
-        log_info("/* %s */", __func__);
-
-        for (i = 0; i < ELEMENTSOF(versions); i++) {
-                r = systemd_installation_has_version(saved_argv[1], versions[i]);
-                assert_se(r >= 0);
-                log_info("%s has systemd >= %u: %s",
-                         saved_argv[1] ?: "Current installation", versions[i], yes_no(r));
-        }
 }
 
 TEST(skip_dev_prefix) {

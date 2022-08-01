@@ -9,6 +9,7 @@
 #include "memory-util.h"
 #include "resolved-dns-packet.h"
 #include "set.h"
+#include "stdio-util.h"
 #include "string-table.h"
 #include "strv.h"
 #include "unaligned.h"
@@ -102,7 +103,7 @@ void dns_packet_set_flags(DnsPacket *p, bool dnssec_checking_disabled, bool trun
 
         h = DNS_PACKET_HEADER(p);
 
-        switch(p->protocol) {
+        switch (p->protocol) {
         case DNS_PROTOCOL_LLMNR:
                 assert(!truncated);
 
@@ -941,15 +942,12 @@ int dns_packet_append_rr(DnsPacket *p, const DnsResourceRecord *rr, const DnsAns
                         r = dns_packet_append_raw_string(p, NULL, 0, NULL);
                         if (r < 0)
                                 goto fail;
-                } else {
-                        DnsTxtItem *i;
-
+                } else
                         LIST_FOREACH(items, i, rr->txt.items) {
                                 r = dns_packet_append_raw_string(p, i->data, i->length, NULL);
                                 if (r < 0)
                                         goto fail;
                         }
-                }
 
                 r = 0;
                 break;
@@ -1254,8 +1252,9 @@ int dns_packet_append_answer(DnsPacket *p, DnsAnswer *a, unsigned *completed) {
 
 int dns_packet_read(DnsPacket *p, size_t sz, const void **ret, size_t *start) {
         assert(p);
+        assert(p->rindex <= p->size);
 
-        if (p->rindex + sz > p->size)
+        if (sz > p->size - p->rindex)
                 return -EMSGSIZE;
 
         if (ret)
@@ -1392,7 +1391,7 @@ int dns_packet_read_string(DnsPacket *p, char **ret, size_t *start) {
         if (memchr(d, 0, c))
                 return -EBADMSG;
 
-        t = strndup(d, c);
+        t = memdup_suffix0(d, c);
         if (!t)
                 return -ENOMEM;
 
@@ -1595,17 +1594,19 @@ static int dns_packet_read_type_windows(DnsPacket *p, Bitmap **types, size_t siz
         _cleanup_(rewind_dns_packet) DnsPacketRewinder rewinder = REWINDER_INIT(p);
         int r;
 
-        while (p->rindex < rewinder.saved_rindex + size) {
+        while (p->rindex - rewinder.saved_rindex < size) {
                 r = dns_packet_read_type_window(p, types, NULL);
                 if (r < 0)
                         return r;
 
+                assert(p->rindex >= rewinder.saved_rindex);
+
                 /* don't read past end of current RR */
-                if (p->rindex > rewinder.saved_rindex + size)
+                if (p->rindex - rewinder.saved_rindex > size)
                         return -EBADMSG;
         }
 
-        if (p->rindex != rewinder.saved_rindex + size)
+        if (p->rindex - rewinder.saved_rindex != size)
                 return -EBADMSG;
 
         if (start)
@@ -1716,7 +1717,7 @@ int dns_packet_read_rr(
         if (r < 0)
                 return r;
 
-        if (p->rindex + rdlength > p->size)
+        if (rdlength > p->size - p->rindex)
                 return -EBADMSG;
 
         offset = p->rindex;
@@ -1760,7 +1761,7 @@ int dns_packet_read_rr(
                 } else {
                         DnsTxtItem *last = NULL;
 
-                        while (p->rindex < offset + rdlength) {
+                        while (p->rindex - offset < rdlength) {
                                 DnsTxtItem *i;
                                 const void *data;
                                 size_t sz;
@@ -1992,7 +1993,7 @@ int dns_packet_read_rr(
                 if (r < 0)
                         return r;
 
-                if (rdlength + offset < p->rindex)
+                if (rdlength < p->rindex - offset)
                         return -EBADMSG;
 
                 r = dns_packet_read_memdup(p, offset + rdlength - p->rindex,
@@ -2018,6 +2019,9 @@ int dns_packet_read_rr(
                 r = dns_packet_read_name(p, &rr->nsec.next_domain_name, allow_compressed, NULL);
                 if (r < 0)
                         return r;
+
+                if (rdlength < p->rindex - offset)
+                        return -EBADMSG;
 
                 r = dns_packet_read_type_windows(p, &rr->nsec.types, offset + rdlength - p->rindex, NULL);
 
@@ -2064,6 +2068,9 @@ int dns_packet_read_rr(
                 if (r < 0)
                         return r;
 
+                if (rdlength < p->rindex - offset)
+                        return -EBADMSG;
+
                 r = dns_packet_read_type_windows(p, &rr->nsec3.types, offset + rdlength - p->rindex, NULL);
 
                 /* empty non-terminals can have NSEC3 records, so empty bitmaps are allowed */
@@ -2107,7 +2114,7 @@ int dns_packet_read_rr(
                 if (r < 0)
                         return r;
 
-                if (rdlength + offset < p->rindex)
+                if (rdlength < p->rindex - offset)
                         return -EBADMSG;
 
                 r = dns_packet_read_memdup(p,
@@ -2126,7 +2133,7 @@ int dns_packet_read_rr(
         }
         if (r < 0)
                 return r;
-        if (p->rindex != offset + rdlength)
+        if (p->rindex - offset != rdlength)
                 return -EBADMSG;
 
         if (ret)
@@ -2362,8 +2369,7 @@ static int dns_packet_extract_answer(DnsPacket *p, DnsAnswer **ret_answer) {
                 /* Remember this RR, so that we can potentially merge its ->key object with the
                  * next RR. Note that we only do this if we actually decided to keep the RR around.
                  */
-                dns_resource_record_unref(previous);
-                previous = dns_resource_record_ref(rr);
+                DNS_RR_REPLACE(previous, dns_resource_record_ref(rr));
         }
 
         if (bad_opt) {
@@ -2505,7 +2511,7 @@ int dns_packet_patch_ttls(DnsPacket *p, usec_t timestamp) {
         usec_t k;
         int r;
 
-        k = now(clock_boottime_or_monotonic());
+        k = now(CLOCK_BOOTTIME);
         assert(k >= timestamp);
         k -= timestamp;
 
@@ -2639,6 +2645,14 @@ static const char* const dns_rcode_table[_DNS_RCODE_MAX_DEFINED] = {
         [DNS_RCODE_BADCOOKIE] = "BADCOOKIE",
 };
 DEFINE_STRING_TABLE_LOOKUP(dns_rcode, int);
+
+const char *format_dns_rcode(int i, char buf[static DECIMAL_STR_MAX(int)]) {
+        const char *p = dns_rcode_to_string(i);
+        if (p)
+                return p;
+
+        return snprintf_ok(buf, DECIMAL_STR_MAX(int), "%i", i);
+}
 
 static const char* const dns_protocol_table[_DNS_PROTOCOL_MAX] = {
         [DNS_PROTOCOL_DNS]   = "dns",

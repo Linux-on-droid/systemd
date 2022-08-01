@@ -5,8 +5,6 @@ sd_journal_sources = files(
         'sd-journal/audit-type.h',
         'sd-journal/catalog.c',
         'sd-journal/catalog.h',
-        'sd-journal/compress.c',
-        'sd-journal/compress.h',
         'sd-journal/journal-def.h',
         'sd-journal/journal-file.c',
         'sd-journal/journal-file.h',
@@ -171,7 +169,8 @@ libsystemd_static = static_library(
         libsystemd_sources,
         include_directories : libsystemd_includes,
         c_args : libsystemd_c_args,
-        link_with : libbasic,
+        link_with : [libbasic,
+                     libbasic_compress],
         dependencies : [threads,
                         librt],
         build_by_default : false)
@@ -186,140 +185,129 @@ custom_target(
         'libsystemd.pc',
         input : 'libsystemd.pc.in',
         output : 'libsystemd.pc',
-        command : [meson_render_jinja2, config_h, '@INPUT@', '@OUTPUT@'],
+        command : [jinja2_cmdline, '@INPUT@', '@OUTPUT@'],
         install : pkgconfiglibdir != 'no',
+        install_tag : 'devel',
         install_dir : pkgconfiglibdir)
 
 ############################################################
 
 tests += [
-        [['src/libsystemd/sd-journal/test-journal-send.c']],
+        [files('sd-journal/test-journal-send.c')],
 
-        [['src/libsystemd/sd-journal/test-journal-match.c']],
+        [files('sd-journal/test-journal-match.c')],
 
-        [['src/libsystemd/sd-journal/test-journal-enum.c'],
+        [files('sd-journal/test-journal-enum.c'),
          [], [], [], '', 'timeout=360'],
 
-        [['src/libsystemd/sd-journal/test-journal-init.c']],
+        [files('sd-journal/test-journal-init.c')],
 
-        [['src/libsystemd/sd-journal/test-mmap-cache.c']],
+        [files('sd-journal/test-mmap-cache.c')],
 
-        [['src/libsystemd/sd-journal/test-catalog.c']],
+        [files('sd-journal/test-catalog.c')],
 
-        [['src/libsystemd/sd-journal/test-compress.c'],
-         [],
-         [liblz4,
-          libzstd,
-          libxz]],
-
-        [['src/libsystemd/sd-journal/test-compress-benchmark.c'],
-         [],
-         [liblz4,
-          libzstd,
-          libxz],
-         [], '', 'timeout=90'],
-
-        [['src/libsystemd/sd-journal/test-audit-type.c']],
+        [files('sd-journal/test-audit-type.c')],
 ]
 
 ############################################################
 
 tests += [
-        [['src/libsystemd/sd-bus/test-bus-address.c'],
+        [files('sd-bus/test-bus-address.c'),
          [],
          [threads]],
 
-        [['src/libsystemd/sd-bus/test-bus-marshal.c'],
+        [files('sd-bus/test-bus-marshal.c'),
          [],
          [threads,
           libglib,
           libgobject,
           libgio,
-          libdbus]],
+          libdbus,
+          libm]],
 
-        [['src/libsystemd/sd-bus/test-bus-signature.c'],
+        [files('sd-bus/test-bus-signature.c'),
          [],
          [threads]],
 
-        [['src/libsystemd/sd-bus/test-bus-queue-ref-cycle.c'],
+        [files('sd-bus/test-bus-queue-ref-cycle.c'),
          [],
          [threads]],
 
-        [['src/libsystemd/sd-bus/test-bus-watch-bind.c'],
+        [files('sd-bus/test-bus-watch-bind.c'),
          [],
          [threads],
          [], '', 'timeout=120'],
 
-        [['src/libsystemd/sd-bus/test-bus-chat.c'],
+        [files('sd-bus/test-bus-chat.c'),
          [],
          [threads]],
 
-        [['src/libsystemd/sd-bus/test-bus-cleanup.c'],
+        [files('sd-bus/test-bus-cleanup.c'),
          [],
          [threads,
           libseccomp]],
 
-        [['src/libsystemd/sd-bus/test-bus-track.c'],
+        [files('sd-bus/test-bus-track.c'),
          [],
          [libseccomp]],
 
-        [['src/libsystemd/sd-bus/test-bus-server.c'],
+        [files('sd-bus/test-bus-server.c'),
          [],
          [threads]],
 
-        [['src/libsystemd/sd-bus/test-bus-objects.c'],
+        [files('sd-bus/test-bus-objects.c'),
          [],
          [threads]],
 
-        [['src/libsystemd/sd-bus/test-bus-vtable.c',
-          'src/libsystemd/sd-bus/test-vtable-data.h']],
+        [files('sd-bus/test-bus-vtable.c',
+               'sd-bus/test-vtable-data.h')],
 
-        [['src/libsystemd/sd-bus/test-bus-gvariant.c'],
+        [files('sd-bus/test-bus-gvariant.c'),
          [],
          [libglib,
           libgobject,
           libgio]],
 
-        [['src/libsystemd/sd-bus/test-bus-creds.c']],
+        [files('sd-bus/test-bus-creds.c')],
 
-        [['src/libsystemd/sd-bus/test-bus-match.c']],
+        [files('sd-bus/test-bus-match.c')],
 
-        [['src/libsystemd/sd-bus/test-bus-benchmark.c'],
+        [files('sd-bus/test-bus-benchmark.c'),
          [],
          [threads],
          [], '', 'manual'],
 
-        [['src/libsystemd/sd-bus/test-bus-introspect.c',
-          'src/libsystemd/sd-bus/test-vtable-data.h']],
+        [files('sd-bus/test-bus-introspect.c',
+               'sd-bus/test-vtable-data.h')],
 
-        [['src/libsystemd/sd-event/test-event.c']],
+        [files('sd-event/test-event.c')],
 
-        [['src/libsystemd/sd-netlink/test-netlink.c']],
+        [files('sd-netlink/test-netlink.c')],
 
-        [['src/libsystemd/sd-resolve/test-resolve.c'],
+        [files('sd-resolve/test-resolve.c'),
          [],
          [threads],
          [], '', 'timeout=120'],
 
-        [['src/libsystemd/sd-login/test-login.c']],
+        [files('sd-login/test-login.c')],
 
-        [['src/libsystemd/sd-device/test-sd-device.c']],
+        [files('sd-device/test-sd-device.c')],
 
-        [['src/libsystemd/sd-device/test-device-util.c']],
+        [files('sd-device/test-device-util.c')],
 
-        [['src/libsystemd/sd-device/test-sd-device-monitor.c']],
+        [files('sd-device/test-sd-device-monitor.c')],
 ]
 
 if cxx_cmd != ''
         tests += [
-                [['src/libsystemd/sd-bus/test-bus-vtable-cc.cc']],
+                [files('sd-bus/test-bus-vtable-cc.cc')],
         ]
 endif
 
 ############################################################
 
 fuzzers += [
-        [['src/libsystemd/sd-bus/fuzz-bus-message.c']],
+        [files('sd-bus/fuzz-bus-message.c')],
 
-        [['src/libsystemd/sd-bus/fuzz-bus-match.c']],
+        [files('sd-bus/fuzz-bus-match.c')],
 ]

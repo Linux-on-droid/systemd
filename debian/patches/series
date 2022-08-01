@@ -1,7 +1,7 @@
-oomd-move-oomctl-to-bindir.patch
-test-explicitly-configure-oomd-stuff-via-dropins.patch
-units-don-t-install-dbus-org.freedesktop.oom1.service-ali.patch
-test-enable-systemd-oomd.service.patch
+Do-not-require-a-valid-version-when-parsing-sd-boot-loade.patch
+Move-homectl-and-userdbctl-to-bindir.patch
+meson-install-libsystemd-shared-into-rootpkglibdir.patch
+shellcheck-clean-kernel-install-again.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
@@ -21,3 +21,4 @@ debian/udev-drop-SystemCallArchitectures-native-from-systemd-ude.patch
 debian/Move-sysusers.d-sysctl.d-binfmt.d-modules-load.d-back-to-.patch
 debian/systemctl-do-not-shutdown-immediately-on-scheduled-shutdo.patch
 debian/Downgrade-a-couple-of-warnings-to-debug.patch
+debian/Do-not-fail-EFI-build-with-newer-binutils.patch

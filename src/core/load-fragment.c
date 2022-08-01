@@ -49,7 +49,7 @@
 #include "missing_ioprio.h"
 #include "mountpoint-util.h"
 #include "nulstr-util.h"
-#include "parse-socket-bind-item.h"
+#include "parse-helpers.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "percent-util.h"
@@ -644,7 +644,7 @@ int config_parse_socket_listen(
                         p->address.type = SOCK_SEQPACKET;
                 }
 
-                if (socket_address_family(&p->address) != AF_LOCAL && p->address.type == SOCK_SEQPACKET) {
+                if (socket_address_family(&p->address) != AF_UNIX && p->address.type == SOCK_SEQPACKET) {
                         log_syntax(unit, LOG_WARNING, filename, line, 0, "Address family not supported, ignoring: %s", rvalue);
                         return 0;
                 }
@@ -1000,7 +1000,7 @@ int config_parse_exec(
                         if (r < 0)
                                 return ignore ? 0 : -ENOEXEC;
 
-                        r = unit_path_printf(u, word, &resolved);
+                        r = unit_full_printf(u, word, &resolved);
                         if (r < 0) {
                                 log_syntax(unit, ignore ? LOG_WARNING : LOG_ERR, filename, line, r,
                                            "Failed to resolve unit specifiers in %s%s: %m",
@@ -1634,7 +1634,6 @@ int config_parse_root_image_options(
 
         _cleanup_(mount_options_free_allp) MountOptions *options = NULL;
         _cleanup_strv_free_ char **l = NULL;
-        char **first = NULL, **second = NULL;
         ExecContext *c = data;
         const Unit *u = userdata;
         int r;
@@ -4212,9 +4211,14 @@ int config_parse_io_device_weight(
         r = extract_first_word(&p, &path, NULL, EXTRACT_UNQUOTE);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || isempty(p)) {
+        if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to extract device path and weight from '%s', ignoring.", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Invalid device path or weight specified in '%s', ignoring.", rvalue);
                 return 0;
         }
 
@@ -4281,9 +4285,14 @@ int config_parse_io_device_latency(
         r = extract_first_word(&p, &path, NULL, EXTRACT_UNQUOTE);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || isempty(p)) {
+        if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to extract device path and latency from '%s', ignoring.", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Invalid device path or latency specified in '%s', ignoring.", rvalue);
                 return 0;
         }
 
@@ -4328,7 +4337,7 @@ int config_parse_io_limit(
                 void *userdata) {
 
         _cleanup_free_ char *path = NULL, *resolved = NULL;
-        CGroupIODeviceLimit *l = NULL, *t;
+        CGroupIODeviceLimit *l = NULL;
         CGroupContext *c = data;
         CGroupIOLimitType type;
         const char *p = rvalue;
@@ -4343,17 +4352,22 @@ int config_parse_io_limit(
         assert(type >= 0);
 
         if (isempty(rvalue)) {
-                LIST_FOREACH(device_limits, l, c->io_device_limits)
-                        l->limits[type] = cgroup_io_limit_defaults[type];
+                LIST_FOREACH(device_limits, t, c->io_device_limits)
+                        t->limits[type] = cgroup_io_limit_defaults[type];
                 return 0;
         }
 
         r = extract_first_word(&p, &path, NULL, EXTRACT_UNQUOTE);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || isempty(p)) {
+        if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to extract device node and bandwidth from '%s', ignoring.", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Invalid device node or bandwidth specified in '%s', ignoring.", rvalue);
                 return 0;
         }
 
@@ -4378,12 +4392,11 @@ int config_parse_io_limit(
                 }
         }
 
-        LIST_FOREACH(device_limits, t, c->io_device_limits) {
+        LIST_FOREACH(device_limits, t, c->io_device_limits)
                 if (path_equal(resolved, t->path)) {
                         l = t;
                         break;
                 }
-        }
 
         if (!l) {
                 CGroupIOLimitType ttype;
@@ -4437,9 +4450,14 @@ int config_parse_blockio_device_weight(
         r = extract_first_word(&p, &path, NULL, EXTRACT_UNQUOTE);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || isempty(p)) {
+        if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to extract device node and weight from '%s', ignoring.", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Invalid device node or weight specified in '%s', ignoring.", rvalue);
                 return 0;
         }
 
@@ -4486,7 +4504,7 @@ int config_parse_blockio_bandwidth(
                 void *userdata) {
 
         _cleanup_free_ char *path = NULL, *resolved = NULL;
-        CGroupBlockIODeviceBandwidth *b = NULL, *t;
+        CGroupBlockIODeviceBandwidth *b = NULL;
         CGroupContext *c = data;
         const char *p = rvalue;
         uint64_t bytes;
@@ -4500,9 +4518,9 @@ int config_parse_blockio_bandwidth(
         read = streq("BlockIOReadBandwidth", lvalue);
 
         if (isempty(rvalue)) {
-                LIST_FOREACH(device_bandwidths, b, c->blockio_device_bandwidths) {
-                        b->rbps = CGROUP_LIMIT_MAX;
-                        b->wbps = CGROUP_LIMIT_MAX;
+                LIST_FOREACH(device_bandwidths, t, c->blockio_device_bandwidths) {
+                        t->rbps = CGROUP_LIMIT_MAX;
+                        t->wbps = CGROUP_LIMIT_MAX;
                 }
                 return 0;
         }
@@ -4510,9 +4528,14 @@ int config_parse_blockio_bandwidth(
         r = extract_first_word(&p, &path, NULL, EXTRACT_UNQUOTE);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || isempty(p)) {
+        if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r,
                            "Failed to extract device node and bandwidth from '%s', ignoring.", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0,
+                           "Invalid device node or bandwidth specified in '%s', ignoring.", rvalue);
                 return 0;
         }
 
@@ -4533,14 +4556,13 @@ int config_parse_blockio_bandwidth(
                 return 0;
         }
 
-        LIST_FOREACH(device_bandwidths, t, c->blockio_device_bandwidths) {
+        LIST_FOREACH(device_bandwidths, t, c->blockio_device_bandwidths)
                 if (path_equal(resolved, t->path)) {
                         b = t;
                         break;
                 }
-        }
 
-        if (!t) {
+        if (!b) {
                 b = new0(CGroupBlockIODeviceBandwidth, 1);
                 if (!b)
                         return log_oom();
@@ -4731,8 +4753,12 @@ int config_parse_set_credential(
         r = extract_first_word(&p, &word, ":", EXTRACT_DONT_COALESCE_SEPARATORS);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || !p) {
-                log_syntax(unit, LOG_WARNING, filename, line, r, "Invalid syntax, ignoring: %s", rvalue);
+        if (r < 0) {
+                log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to extract credential name, ignoring: %s", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0, "Invalid syntax, ignoring: %s", rvalue);
                 return 0;
         }
 
@@ -4852,7 +4878,7 @@ int config_parse_load_credential(
         }
 
         if (isempty(p)) {
-                /* If only one field field is specified take it as shortcut for inheriting a credential named
+                /* If only one field is specified take it as shortcut for inheriting a credential named
                  * the same way from our parent */
                 q = strdup(k);
                 if (!q)
@@ -5211,7 +5237,7 @@ int config_parse_bind_paths(
                                 if (r == -ENOMEM)
                                         return log_oom();
                                 if (r < 0) {
-                                        log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse %s: %s", lvalue, rvalue);
+                                        log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse %s=, ignoring: %s", lvalue, rvalue);
                                         return 0;
                                 }
 
@@ -5861,6 +5887,7 @@ int config_parse_bpf_foreign_program(
                 void *userdata) {
         _cleanup_free_ char *resolved = NULL, *word = NULL;
         CGroupContext *c = data;
+        const char *p = rvalue;
         Unit *u = userdata;
         int attach_type, r;
 
@@ -5875,11 +5902,15 @@ int config_parse_bpf_foreign_program(
                 return 0;
         }
 
-        r = extract_first_word(&rvalue, &word, ":", 0);
+        r = extract_first_word(&p, &word, ":", 0);
         if (r == -ENOMEM)
                 return log_oom();
-        if (r <= 0 || isempty(rvalue)) {
+        if (r < 0) {
                 log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to parse foreign BPF program, ignoring: %s", rvalue);
+                return 0;
+        }
+        if (r == 0 || isempty(p)) {
+                log_syntax(unit, LOG_WARNING, filename, line, 0, "Invalid syntax in %s=, ignoring: %s", lvalue, rvalue);
                 return 0;
         }
 
@@ -5889,9 +5920,9 @@ int config_parse_bpf_foreign_program(
                 return 0;
         }
 
-        r = unit_path_printf(u, rvalue, &resolved);
+        r = unit_path_printf(u, p, &resolved);
         if (r < 0) {
-                log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to resolve unit specifiers in '%s', ignoring: %m", rvalue);
+                log_syntax(unit, LOG_WARNING, filename, line, r, "Failed to resolve unit specifiers in '%s', ignoring: %s", p, rvalue);
                 return 0;
         }
 

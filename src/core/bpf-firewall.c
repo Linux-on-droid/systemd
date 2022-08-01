@@ -145,6 +145,7 @@ static int add_instructions_for_ip_any(
 
 static int bpf_firewall_compile_bpf(
                 Unit *u,
+                const char *prog_name,
                 bool is_ingress,
                 BPFProgram **ret,
                 bool ip_allow_any,
@@ -216,7 +217,7 @@ static int bpf_firewall_compile_bpf(
                 return 0;
         }
 
-        r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, &p);
+        r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, prog_name, &p);
         if (r < 0)
                 return r;
 
@@ -526,9 +527,10 @@ static int bpf_firewall_prepare_accounting_maps(Unit *u, bool enabled, int *fd_i
 }
 
 int bpf_firewall_compile(Unit *u) {
+        const char *ingress_name = NULL, *egress_name = NULL;
+        bool ip_allow_any = false, ip_deny_any = false;
         CGroupContext *cc;
         int r, supported;
-        bool ip_allow_any = false, ip_deny_any = false;
 
         assert(u);
 
@@ -541,7 +543,7 @@ int bpf_firewall_compile(Unit *u) {
                 return supported;
         if (supported == BPF_FIREWALL_UNSUPPORTED)
                 return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP),
-                                            "BPF firewalling not supported on this manager, proceeding without.");
+                                            "bpf-firewall: BPF firewalling not supported, proceeding without.");
         if (supported != BPF_FIREWALL_SUPPORTED_WITH_MULTI && u->type == UNIT_SLICE)
                 /* If BPF_F_ALLOW_MULTI is not supported we don't support any BPF magic on inner nodes (i.e. on slice
                  * units), since that would mean leaf nodes couldn't do any BPF anymore at all. Under the assumption
@@ -549,7 +551,14 @@ int bpf_firewall_compile(Unit *u) {
                  * consistent with old systemd behaviour from before v238, where BPF wasn't supported in inner nodes at
                  * all, either. */
                 return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP),
-                                            "BPF_F_ALLOW_MULTI is not supported on this manager, not doing BPF firewall on slice units.");
+                                            "bpf-firewall: BPF_F_ALLOW_MULTI is not supported, not doing BPF firewall on slice units.");
+
+        /* If BPF_F_ALLOW_MULTI flag is supported program name is also supported (both were added to v4.15
+         * kernel). */
+        if (supported == BPF_FIREWALL_SUPPORTED_WITH_MULTI) {
+                ingress_name = "sd_fw_ingress";
+                egress_name = "sd_fw_egress";
+        }
 
         /* Note that when we compile a new firewall we first flush out the access maps and the BPF programs themselves,
          * but we reuse the accounting maps. That way the firewall in effect always maps to the actual
@@ -573,48 +582,46 @@ int bpf_firewall_compile(Unit *u) {
 
                 r = bpf_firewall_prepare_access_maps(u, ACCESS_ALLOWED, &u->ipv4_allow_map_fd, &u->ipv6_allow_map_fd, &ip_allow_any);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Preparation of eBPF allow maps failed: %m");
+                        return log_unit_error_errno(u, r, "bpf-firewall: Preparation of BPF allow maps failed: %m");
 
                 r = bpf_firewall_prepare_access_maps(u, ACCESS_DENIED, &u->ipv4_deny_map_fd, &u->ipv6_deny_map_fd, &ip_deny_any);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Preparation of eBPF deny maps failed: %m");
+                        return log_unit_error_errno(u, r, "bpf-firewall: Preparation of BPF deny maps failed: %m");
         }
 
         r = bpf_firewall_prepare_accounting_maps(u, cc->ip_accounting, &u->ip_accounting_ingress_map_fd, &u->ip_accounting_egress_map_fd);
         if (r < 0)
-                return log_unit_error_errno(u, r, "Preparation of eBPF accounting maps failed: %m");
+                return log_unit_error_errno(u, r, "bpf-firewall: Preparation of BPF accounting maps failed: %m");
 
-        r = bpf_firewall_compile_bpf(u, true, &u->ip_bpf_ingress, ip_allow_any, ip_deny_any);
+        r = bpf_firewall_compile_bpf(u, ingress_name, true, &u->ip_bpf_ingress, ip_allow_any, ip_deny_any);
         if (r < 0)
-                return log_unit_error_errno(u, r, "Compilation for ingress BPF program failed: %m");
+                return log_unit_error_errno(u, r, "bpf-firewall: Compilation of ingress BPF program failed: %m");
 
-        r = bpf_firewall_compile_bpf(u, false, &u->ip_bpf_egress, ip_allow_any, ip_deny_any);
+        r = bpf_firewall_compile_bpf(u, egress_name, false, &u->ip_bpf_egress, ip_allow_any, ip_deny_any);
         if (r < 0)
-                return log_unit_error_errno(u, r, "Compilation for egress BPF program failed: %m");
+                return log_unit_error_errno(u, r, "bpf-firewall: Compilation of egress BPF program failed: %m");
 
         return 0;
 }
 
 static int load_bpf_progs_from_fs_to_set(Unit *u, char **filter_paths, Set **set) {
-        char **bpf_fs_path;
-
         set_clear(*set);
 
         STRV_FOREACH(bpf_fs_path, filter_paths) {
                 _cleanup_(bpf_program_freep) BPFProgram *prog = NULL;
                 int r;
 
-                r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, &prog);
+                r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, NULL, &prog);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Can't allocate CGROUP SKB BPF program: %m");
+                        return log_unit_error_errno(u, r, "bpf-firewall: Allocation of SKB BPF program failed: %m");
 
                 r = bpf_program_load_from_bpf_fs(prog, *bpf_fs_path);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Loading of ingress BPF program %s failed: %m", *bpf_fs_path);
+                        return log_unit_error_errno(u, r, "bpf-firewall: Loading of ingress BPF program %s failed: %m", *bpf_fs_path);
 
                 r = set_ensure_consume(set, &bpf_program_hash_ops, TAKE_PTR(prog));
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Can't add program to BPF program set: %m");
+                        return log_oom();
         }
 
         return 0;
@@ -638,7 +645,8 @@ int bpf_firewall_load_custom(Unit *u) {
                 return supported;
 
         if (supported != BPF_FIREWALL_SUPPORTED_WITH_MULTI)
-                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP), "BPF_F_ALLOW_MULTI not supported on this manager, cannot attach custom BPF programs.");
+                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP),
+                                            "bpf-firewall: BPF_F_ALLOW_MULTI not supported, cannot attach custom BPF programs.");
 
         r = load_bpf_progs_from_fs_to_set(u, cc->ip_filters_ingress, &u->ip_bpf_custom_ingress);
         if (r < 0)
@@ -664,7 +672,7 @@ static int attach_custom_bpf_progs(Unit *u, const char *path, int attach_type, S
         SET_FOREACH_MOVE(prog, *set_installed, *set) {
                 r = bpf_program_cgroup_attach(prog, attach_type, path, BPF_F_ALLOW_MULTI);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Attaching custom egress BPF program to cgroup %s failed: %m", path);
+                        return log_unit_error_errno(u, r, "bpf-firewall: Attaching custom egress BPF program to cgroup %s failed: %m", path);
         }
         return 0;
 }
@@ -690,16 +698,19 @@ int bpf_firewall_install(Unit *u) {
         if (supported < 0)
                 return supported;
         if (supported == BPF_FIREWALL_UNSUPPORTED)
-                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP), "BPF firewalling not supported on this manager, proceeding without.");
+                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP),
+                                            "bpf-firewall: BPF firewalling not supported, proceeding without.");
         if (supported != BPF_FIREWALL_SUPPORTED_WITH_MULTI && u->type == UNIT_SLICE)
-                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP), "BPF_F_ALLOW_MULTI is not supported on this manager, not doing BPF firewall on slice units.");
+                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP),
+                                            "bpf-firewall: BPF_F_ALLOW_MULTI not supported, not doing BPF firewall on slice units.");
         if (supported != BPF_FIREWALL_SUPPORTED_WITH_MULTI &&
             (!set_isempty(u->ip_bpf_custom_ingress) || !set_isempty(u->ip_bpf_custom_egress)))
-                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP), "BPF_F_ALLOW_MULTI not supported on this manager, cannot attach custom BPF programs.");
+                return log_unit_debug_errno(u, SYNTHETIC_ERRNO(EOPNOTSUPP),
+                                            "bpf-firewall: BPF_F_ALLOW_MULTI not supported, cannot attach custom BPF programs.");
 
         r = cg_get_path(SYSTEMD_CGROUP_CONTROLLER, u->cgroup_path, NULL, &path);
         if (r < 0)
-                return log_unit_error_errno(u, r, "Failed to determine cgroup path: %m");
+                return log_unit_error_errno(u, r, "bpf-firewall: Failed to determine cgroup path: %m");
 
         flags = supported == BPF_FIREWALL_SUPPORTED_WITH_MULTI ? BPF_F_ALLOW_MULTI : 0;
 
@@ -721,7 +732,8 @@ int bpf_firewall_install(Unit *u) {
         if (u->ip_bpf_egress) {
                 r = bpf_program_cgroup_attach(u->ip_bpf_egress, BPF_CGROUP_INET_EGRESS, path, flags);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Attaching egress BPF program to cgroup %s failed: %m", path);
+                        return log_unit_error_errno(u, r,
+                                "bpf-firewall: Attaching egress BPF program to cgroup %s failed: %m", path);
 
                 /* Remember that this BPF program is installed now. */
                 u->ip_bpf_egress_installed = TAKE_PTR(u->ip_bpf_egress);
@@ -730,7 +742,8 @@ int bpf_firewall_install(Unit *u) {
         if (u->ip_bpf_ingress) {
                 r = bpf_program_cgroup_attach(u->ip_bpf_ingress, BPF_CGROUP_INET_INGRESS, path, flags);
                 if (r < 0)
-                        return log_unit_error_errno(u, r, "Attaching ingress BPF program to cgroup %s failed: %m", path);
+                        return log_unit_error_errno(u, r,
+                                "bpf-firewall: Attaching ingress BPF program to cgroup %s failed: %m", path);
 
                 u->ip_bpf_ingress_installed = TAKE_PTR(u->ip_bpf_ingress);
         }
@@ -817,32 +830,33 @@ int bpf_firewall_supported(void) {
 
         r = cg_unified_controller(SYSTEMD_CGROUP_CONTROLLER);
         if (r < 0)
-                return log_error_errno(r, "Can't determine whether the unified hierarchy is used: %m");
+                return log_error_errno(r, "bpf-firewall: Can't determine whether the unified hierarchy is used: %m");
         if (r == 0) {
                 bpf_firewall_unsupported_reason =
                         log_debug_errno(SYNTHETIC_ERRNO(EUCLEAN),
-                                        "Not running with unified cgroups, BPF firewalling is not supported.");
+                                        "bpf-firewall: Not running with unified cgroup hierarchy, BPF firewalling is not supported.");
                 return supported = BPF_FIREWALL_UNSUPPORTED;
         }
 
-        r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, &program);
+        /* prog_name is NULL since it is supported only starting from v4.15 kernel. */
+        r = bpf_program_new(BPF_PROG_TYPE_CGROUP_SKB, NULL, &program);
         if (r < 0) {
                 bpf_firewall_unsupported_reason =
-                        log_debug_errno(r, "Can't allocate CGROUP SKB BPF program, BPF firewalling is not supported: %m");
+                        log_debug_errno(r, "bpf-firewall: Can't allocate CGROUP SKB BPF program, BPF firewalling is not supported: %m");
                 return supported = BPF_FIREWALL_UNSUPPORTED;
         }
 
         r = bpf_program_add_instructions(program, trivial, ELEMENTSOF(trivial));
         if (r < 0) {
                 bpf_firewall_unsupported_reason =
-                        log_debug_errno(r, "Can't add trivial instructions to CGROUP SKB BPF program, BPF firewalling is not supported: %m");
+                        log_debug_errno(r, "bpf-firewall: Can't add trivial instructions to CGROUP SKB BPF program, BPF firewalling is not supported: %m");
                 return supported = BPF_FIREWALL_UNSUPPORTED;
         }
 
         r = bpf_program_load_kernel(program, NULL, 0);
         if (r < 0) {
                 bpf_firewall_unsupported_reason =
-                        log_debug_errno(r, "Can't load kernel CGROUP SKB BPF program, BPF firewalling is not supported: %m");
+                        log_debug_errno(r, "bpf-firewall: Can't load kernel CGROUP SKB BPF program, BPF firewalling is not supported: %m");
                 return supported = BPF_FIREWALL_UNSUPPORTED;
         }
 
@@ -866,7 +880,7 @@ int bpf_firewall_supported(void) {
         if (bpf(BPF_PROG_DETACH, &attr, sizeof(attr)) < 0) {
                 if (errno != EBADF) {
                         bpf_firewall_unsupported_reason =
-                                log_debug_errno(errno, "Didn't get EBADF from BPF_PROG_DETACH, BPF firewalling is not supported: %m");
+                                log_debug_errno(errno, "bpf-firewall: Didn't get EBADF from BPF_PROG_DETACH, BPF firewalling is not supported: %m");
                         return supported = BPF_FIREWALL_UNSUPPORTED;
                 }
 
@@ -874,7 +888,7 @@ int bpf_firewall_supported(void) {
         } else {
                 bpf_firewall_unsupported_reason =
                         log_debug_errno(SYNTHETIC_ERRNO(EBADE),
-                                        "Wut? Kernel accepted our invalid BPF_PROG_DETACH call? "
+                                        "bpf-firewall: Wut? Kernel accepted our invalid BPF_PROG_DETACH call? "
                                         "Something is weird, assuming BPF firewalling is broken and hence not supported.");
                 return supported = BPF_FIREWALL_UNSUPPORTED;
         }
@@ -882,7 +896,9 @@ int bpf_firewall_supported(void) {
         /* So now we know that the BPF program is generally available, let's see if BPF_F_ALLOW_MULTI is also supported
          * (which was added in kernel 4.15). We use a similar logic as before, but this time we use the BPF_PROG_ATTACH
          * bpf() call and the BPF_F_ALLOW_MULTI flags value. Since the flags are checked early in the system call we'll
-         * get EINVAL if it's not supported, and EBADF as before if it is available. */
+         * get EINVAL if it's not supported, and EBADF as before if it is available.
+         * Use probe result as the indicator that program name is also supported since they both were
+         * added in kernel 4.15. */
 
         zero(attr);
         attr.attach_type = BPF_CGROUP_INET_EGRESS;
@@ -892,20 +908,20 @@ int bpf_firewall_supported(void) {
 
         if (bpf(BPF_PROG_ATTACH, &attr, sizeof(attr)) < 0) {
                 if (errno == EBADF) {
-                        log_debug_errno(errno, "Got EBADF when using BPF_F_ALLOW_MULTI, which indicates it is supported. Yay!");
+                        log_debug_errno(errno, "bpf-firewall: Got EBADF when using BPF_F_ALLOW_MULTI, which indicates it is supported. Yay!");
                         return supported = BPF_FIREWALL_SUPPORTED_WITH_MULTI;
                 }
 
                 if (errno == EINVAL)
-                        log_debug_errno(errno, "Got EINVAL error when using BPF_F_ALLOW_MULTI, which indicates it's not supported.");
+                        log_debug_errno(errno, "bpf-firewall: Got EINVAL error when using BPF_F_ALLOW_MULTI, which indicates it's not supported.");
                 else
-                        log_debug_errno(errno, "Got unexpected error when using BPF_F_ALLOW_MULTI, assuming it's not supported: %m");
+                        log_debug_errno(errno, "bpf-firewall: Got unexpected error when using BPF_F_ALLOW_MULTI, assuming it's not supported: %m");
 
                 return supported = BPF_FIREWALL_SUPPORTED;
         } else {
                 bpf_firewall_unsupported_reason =
                         log_debug_errno(SYNTHETIC_ERRNO(EBADE),
-                                        "Wut? Kernel accepted our invalid BPF_PROG_ATTACH+BPF_F_ALLOW_MULTI call? "
+                                        "bpf-firewall: Wut? Kernel accepted our invalid BPF_PROG_ATTACH+BPF_F_ALLOW_MULTI call? "
                                         "Something is weird, assuming BPF firewalling is broken and hence not supported.");
                 return supported = BPF_FIREWALL_UNSUPPORTED;
         }
@@ -917,16 +933,17 @@ void emit_bpf_firewall_warning(Unit *u) {
         assert(u);
         assert(u->manager);
 
-        if (!warned && !MANAGER_IS_TEST_RUN(u->manager)) {
-                bool quiet = bpf_firewall_unsupported_reason == -EPERM && detect_container() > 0;
+        if (warned || MANAGER_IS_TEST_RUN(u->manager))
+                return;
 
-                log_unit_full_errno(u, quiet ? LOG_DEBUG : LOG_WARNING, bpf_firewall_unsupported_reason,
-                                    "unit configures an IP firewall, but %s.\n"
-                                    "(This warning is only shown for the first unit using IP firewalling.)",
-                                    getuid() != 0 ? "not running as root" :
-                                                    "the local system does not support BPF/cgroup firewalling");
-                warned = true;
-        }
+        bool quiet = ERRNO_IS_PRIVILEGE(bpf_firewall_unsupported_reason) && detect_container() > 0;
+
+        log_unit_full_errno(u, quiet ? LOG_DEBUG : LOG_WARNING, bpf_firewall_unsupported_reason,
+                            "unit configures an IP firewall, but %s.\n"
+                            "(This warning is only shown for the first unit using IP firewalling.)",
+                            getuid() != 0 ? "not running as root" :
+                            "the local system does not support BPF/cgroup firewalling");
+        warned = true;
 }
 
 void bpf_firewall_close(Unit *u) {

@@ -29,7 +29,7 @@
 #include "mountpoint-util.h"
 #include "nsflags.h"
 #include "numa-util.h"
-#include "parse-socket-bind-item.h"
+#include "parse-helpers.h"
 #include "parse-util.h"
 #include "path-util.h"
 #include "percent-util.h"
@@ -973,6 +973,7 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                               "ExecPaths",
                               "NoExecPaths",
                               "ExecSearchPath",
+                              "ExtensionDirectories",
                               "ConfigurationDirectory",
                               "SupplementaryGroups",
                               "SystemCallArchitectures"))
@@ -1155,8 +1156,11 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                                 return log_oom();
                         if (r < 0)
                                 return log_error_errno(r, "Failed to parse %s= parameter: %s", field, eq);
-                        if (r == 0 || !p)
+                        if (r == 0)
                                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Missing argument to %s=.", field);
+
+                        if (isempty(p)) /* If only one field is specified, then this means "inherit from above" */
+                                p = eq;
 
                         r = sd_bus_message_append(m, "a(ss)", 1, word, p);
                 }
@@ -1674,7 +1678,6 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
 
         if (streq(field, "RootImageOptions")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **first = NULL, **second = NULL;
                 const char *p = eq;
 
                 r = sd_bus_message_open_container(m, SD_BUS_TYPE_STRUCT, "sv");
@@ -1952,7 +1955,7 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                         path_simplify(source);
 
                         if (isempty(destination)) {
-                                r = strv_extend(&sources, TAKE_PTR(source));
+                                r = strv_consume(&sources, TAKE_PTR(source));
                                 if (r < 0)
                                         return bus_log_create_error(r);
                         } else {
@@ -2023,7 +2026,6 @@ static int bus_append_execute_property(sd_bus_message *m, const char *field, con
                         if (r < 0)
                                 return bus_log_create_error(r);
 
-                        char **source, **destination;
                         STRV_FOREACH_PAIR(source, destination, symlinks) {
                                 r = sd_bus_message_append(m, "(sst)", *source, *destination, 0);
                                 if (r < 0)
@@ -2647,7 +2649,6 @@ int bus_append_unit_property_assignment(sd_bus_message *m, UnitType t, const cha
 }
 
 int bus_append_unit_property_assignment_many(sd_bus_message *m, UnitType t, char **l) {
-        char **i;
         int r;
 
         assert(m);

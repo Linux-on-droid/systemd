@@ -352,14 +352,30 @@ static int md_list_get(MountPoint **head) {
         if (r < 0)
                 return r;
 
+        /* Filter out partitions. */
+        r = sd_device_enumerator_add_match_property(e, "DEVTYPE", "disk");
+        if (r < 0)
+                return r;
+
         FOREACH_DEVICE(e, d) {
                 _cleanup_free_ char *p = NULL;
-                const char *dn;
+                const char *dn, *md_level;
                 MountPoint *m;
                 dev_t devnum;
 
                 if (sd_device_get_devnum(d, &devnum) < 0 ||
                     sd_device_get_devname(d, &dn) < 0)
+                        continue;
+
+                r = sd_device_get_property_value(d, "MD_LEVEL", &md_level);
+                if (r < 0) {
+                        log_warning_errno(r, "Failed to get MD_LEVEL property for %s, ignoring: %m", dn);
+                        continue;
+                }
+
+                /* MD "containers" are a special type of MD devices, used for external metadata.
+                 * Since it doesn't provide RAID functionality in itself we don't need to stop it. */
+                if (streq(md_level, "container"))
                         continue;
 
                 p = strdup(dn);
@@ -522,7 +538,7 @@ static int remount_with_timeout(MountPoint *m, int umount_log_level) {
         if (r < 0)
                 return r;
         if (r == 0) {
-                log_info("Remounting '%s' read-only with options '%s'.", m->path, strna(m->remount_options));
+                log_info("Remounting '%s' read-only with options '%s'.", m->path, strempty(m->remount_options));
 
                 /* Start the mount operation here in the child */
                 r = mount(NULL, m->path, NULL, m->remount_flags, m->remount_options);
@@ -589,7 +605,6 @@ static int umount_with_timeout(MountPoint *m, int umount_log_level) {
 /* This includes remounting readonly, which changes the kernel mount options.  Therefore the list passed to
  * this function is invalidated, and should not be reused. */
 static int mount_points_list_umount(MountPoint **head, bool *changed, int umount_log_level) {
-        MountPoint *m;
         int n_failed = 0;
 
         assert(head);
@@ -635,13 +650,12 @@ static int mount_points_list_umount(MountPoint **head, bool *changed, int umount
 }
 
 static int swap_points_list_off(MountPoint **head, bool *changed) {
-        MountPoint *m, *n;
         int n_failed = 0;
 
         assert(head);
         assert(changed);
 
-        LIST_FOREACH_SAFE(mount_point, m, n, *head) {
+        LIST_FOREACH(mount_point, m, *head) {
                 log_info("Deactivating swap %s.", m->path);
                 if (swapoff(m->path) < 0) {
                         log_warning_errno(errno, "Could not deactivate swap %s: %m", m->path);
@@ -657,7 +671,6 @@ static int swap_points_list_off(MountPoint **head, bool *changed) {
 }
 
 static int loopback_points_list_detach(MountPoint **head, bool *changed, int umount_log_level) {
-        MountPoint *m, *n;
         int n_failed = 0, r;
         dev_t rootdev = 0;
 
@@ -666,7 +679,7 @@ static int loopback_points_list_detach(MountPoint **head, bool *changed, int umo
 
         (void) get_block_device("/", &rootdev);
 
-        LIST_FOREACH_SAFE(mount_point, m, n, *head) {
+        LIST_FOREACH(mount_point, m, *head) {
                 if (major(rootdev) != 0 && rootdev == m->devnum) {
                         n_failed++;
                         continue;
@@ -689,7 +702,6 @@ static int loopback_points_list_detach(MountPoint **head, bool *changed, int umo
 }
 
 static int dm_points_list_detach(MountPoint **head, bool *changed, int umount_log_level) {
-        MountPoint *m, *n;
         int n_failed = 0, r;
         dev_t rootdev = 0;
 
@@ -698,7 +710,7 @@ static int dm_points_list_detach(MountPoint **head, bool *changed, int umount_lo
 
         (void) get_block_device("/", &rootdev);
 
-        LIST_FOREACH_SAFE(mount_point, m, n, *head) {
+        LIST_FOREACH(mount_point, m, *head) {
                 if (major(rootdev) != 0 && rootdev == m->devnum) {
                         n_failed ++;
                         continue;
@@ -720,7 +732,6 @@ static int dm_points_list_detach(MountPoint **head, bool *changed, int umount_lo
 }
 
 static int md_points_list_detach(MountPoint **head, bool *changed, int umount_log_level) {
-        MountPoint *m, *n;
         int n_failed = 0, r;
         dev_t rootdev = 0;
 
@@ -729,7 +740,7 @@ static int md_points_list_detach(MountPoint **head, bool *changed, int umount_lo
 
         (void) get_block_device("/", &rootdev);
 
-        LIST_FOREACH_SAFE(mount_point, m, n, *head) {
+        LIST_FOREACH(mount_point, m, *head) {
                 if (major(rootdev) != 0 && rootdev == m->devnum) {
                         n_failed ++;
                         continue;

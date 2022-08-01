@@ -345,8 +345,6 @@ fail:
 }
 
 static void dns_query_stop(DnsQuery *q) {
-        DnsQueryCandidate *c;
-
         assert(q);
 
         event_source_disable(q->timeout_event_source);
@@ -718,8 +716,7 @@ static int dns_query_try_etc_hosts(DnsQuery *q) {
 
 int dns_query_go(DnsQuery *q) {
         DnsScopeMatch found = DNS_SCOPE_NO;
-        DnsScope *s, *first = NULL;
-        DnsQueryCandidate *c;
+        DnsScope *first = NULL;
         int r;
 
         assert(q);
@@ -780,7 +777,7 @@ int dns_query_go(DnsQuery *q) {
         r = event_reset_time_relative(
                         q->manager->event,
                         &q->timeout_event_source,
-                        clock_boottime_or_monotonic(),
+                        CLOCK_BOOTTIME,
                         SD_RESOLVED_QUERY_TIMEOUT_USEC,
                         0, on_query_timeout, q,
                         0, "query-timeout", true);
@@ -853,17 +850,14 @@ static void dns_query_accept(DnsQuery *q, DnsQueryCandidate *c) {
                                 q->answer_query_flags |= dns_transaction_source_to_query_flags(t->answer_source);
                         } else {
                                 /* Override non-successful previous answers */
-                                dns_answer_unref(q->answer);
-                                q->answer = dns_answer_ref(t->answer);
-
+                                DNS_ANSWER_REPLACE(q->answer, dns_answer_ref(t->answer));
                                 q->answer_query_flags = dns_transaction_source_to_query_flags(t->answer_source);
                         }
 
                         q->answer_rcode = t->answer_rcode;
                         q->answer_errno = 0;
 
-                        dns_packet_unref(q->answer_full_packet);
-                        q->answer_full_packet = dns_packet_ref(t->received);
+                        DNS_PACKET_REPLACE(q->answer_full_packet, dns_packet_ref(t->received));
 
                         if (FLAGS_SET(t->answer_query_flags, SD_RESOLVED_AUTHENTICATED)) {
                                 has_authenticated = true;
@@ -899,14 +893,12 @@ static void dns_query_accept(DnsQuery *q, DnsQueryCandidate *c) {
                             !FLAGS_SET(t->answer_query_flags, SD_RESOLVED_AUTHENTICATED))
                                 continue;
 
-                        dns_answer_unref(q->answer);
-                        q->answer = dns_answer_ref(t->answer);
+                        DNS_ANSWER_REPLACE(q->answer, dns_answer_ref(t->answer));
                         q->answer_rcode = t->answer_rcode;
                         q->answer_dnssec_result = t->answer_dnssec_result;
                         q->answer_query_flags = t->answer_query_flags | dns_transaction_source_to_query_flags(t->answer_source);
                         q->answer_errno = t->answer_errno;
-                        dns_packet_unref(q->answer_full_packet);
-                        q->answer_full_packet = dns_packet_ref(t->received);
+                        DNS_PACKET_REPLACE(q->answer_full_packet, dns_packet_ref(t->received));
 
                         state = t->state;
                         break;
@@ -938,8 +930,7 @@ fail:
 }
 
 void dns_query_ready(DnsQuery *q) {
-
-        DnsQueryCandidate *bad = NULL, *c;
+        DnsQueryCandidate *bad = NULL;
         bool pending = false;
 
         assert(q);

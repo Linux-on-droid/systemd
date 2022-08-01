@@ -26,6 +26,7 @@
 #include "conf-files.h"
 #include "copy.h"
 #include "def.h"
+#include "devnum-util.h"
 #include "dirent-util.h"
 #include "dissect-image.h"
 #include "env-util.h"
@@ -58,7 +59,6 @@
 #include "set.h"
 #include "sort-util.h"
 #include "specifier.h"
-#include "stat-util.h"
 #include "stdio-util.h"
 #include "string-table.h"
 #include "string-util.h"
@@ -203,31 +203,6 @@ STATIC_DESTRUCTOR_REGISTER(arg_image, freep);
 
 static int specifier_machine_id_safe(char specifier, const void *data, const char *root, const void *userdata, char **ret);
 static int specifier_directory(char specifier, const void *data, const char *root, const void *userdata, char **ret);
-
-static const Specifier specifier_table[] = {
-        { 'a', specifier_architecture,    NULL },
-        { 'b', specifier_boot_id,         NULL },
-        { 'B', specifier_os_build_id,     NULL },
-        { 'H', specifier_host_name,       NULL },
-        { 'l', specifier_short_host_name, NULL },
-        { 'm', specifier_machine_id_safe, NULL },
-        { 'o', specifier_os_id,           NULL },
-        { 'v', specifier_kernel_release,  NULL },
-        { 'w', specifier_os_version_id,   NULL },
-        { 'W', specifier_os_variant_id,   NULL },
-
-        { 'h', specifier_user_home,       NULL },
-
-        { 'C', specifier_directory,       UINT_TO_PTR(DIRECTORY_CACHE) },
-        { 'L', specifier_directory,       UINT_TO_PTR(DIRECTORY_LOGS) },
-        { 'S', specifier_directory,       UINT_TO_PTR(DIRECTORY_STATE) },
-        { 't', specifier_directory,       UINT_TO_PTR(DIRECTORY_RUNTIME) },
-
-        COMMON_CREDS_SPECIFIERS,
-
-        COMMON_TMP_SPECIFIERS,
-        {}
-};
 
 static int specifier_machine_id_safe(char specifier, const void *data, const char *root, const void *userdata, char **ret) {
         int r;
@@ -621,7 +596,7 @@ static int dir_cleanup(
                         continue;
                 if (r < 0) {
                         /* FUSE, NFS mounts, SELinux might return EACCES */
-                        r = log_full_errno(errno == EACCES ? LOG_DEBUG : LOG_ERR, errno,
+                        r = log_full_errno(r == -EACCES ? LOG_DEBUG : LOG_ERR, r,
                                            "statx(%s/%s) failed: %m", p, de->d_name);
                         continue;
                 }
@@ -1044,8 +1019,6 @@ static int parse_xattrs_from_arg(Item *i) {
 }
 
 static int fd_set_xattrs(Item *i, int fd, const char *path, const struct stat *st) {
-        char **name, **value;
-
         assert(i);
         assert(fd >= 0);
         assert(path);
@@ -1964,7 +1937,6 @@ static int glob_item(Item *i, action_t action) {
                 .gl_opendir = (void *(*)(const char *)) opendir_nomod,
         };
         int r = 0, k;
-        char **fn;
 
         k = safe_glob(i->path, GLOB_NOSORT|GLOB_BRACE, &g);
         if (k < 0 && k != -ENOENT)
@@ -1984,7 +1956,6 @@ static int glob_item_recursively(Item *i, fdaction_t action) {
                 .gl_opendir = (void *(*)(const char *)) opendir_nomod,
         };
         int r = 0, k;
-        char **fn;
 
         k = safe_glob(i->path, GLOB_NOSORT|GLOB_BRACE, &g);
         if (k < 0 && k != -ENOENT)
@@ -2686,7 +2657,7 @@ static int item_compare(const Item *a, const Item *b) {
         return CMP(a->type, b->type);
 }
 
-static bool item_compatible(Item *a, Item *b) {
+static bool item_compatible(const Item *a, const Item *b) {
         assert(a);
         assert(b);
         assert(streq(a->path, b->path));
@@ -2720,8 +2691,6 @@ static bool item_compatible(Item *a, Item *b) {
 }
 
 static bool should_include_path(const char *path) {
-        char **prefix;
-
         STRV_FOREACH(prefix, arg_exclude_prefixes)
                 if (path_startswith(path, *prefix)) {
                         log_debug("Entry \"%s\" matches exclude prefix \"%s\", skipping.",
@@ -2743,7 +2712,7 @@ static bool should_include_path(const char *path) {
         return false;
 }
 
-static int specifier_expansion_from_arg(Item *i) {
+static int specifier_expansion_from_arg(const Specifier *specifier_table, Item *i) {
         int r;
 
         assert(i);
@@ -2771,8 +2740,7 @@ static int specifier_expansion_from_arg(Item *i) {
                 return free_and_replace(i->argument, resolved);
         }
         case SET_XATTR:
-        case RECURSIVE_SET_XATTR: {
-                char **xattr;
+        case RECURSIVE_SET_XATTR:
                 STRV_FOREACH(xattr, i->xattrs) {
                         _cleanup_free_ char *resolved = NULL;
 
@@ -2783,7 +2751,7 @@ static int specifier_expansion_from_arg(Item *i) {
                         free_and_replace(*xattr, resolved);
                 }
                 return 0;
-        }
+
         default:
                 return 0;
         }
@@ -2928,6 +2896,26 @@ static int parse_age_by_from_arg(const char *age_by_str, Item *item) {
         return 0;
 }
 
+static bool is_duplicated_item(ItemArray *existing, const Item *i) {
+
+        assert(existing);
+        assert(i);
+
+        for (size_t n = 0; n < existing->n_items; n++) {
+                const Item *e = existing->items + n;
+
+                if (item_compatible(e, i))
+                        continue;
+
+                /* Only multiple 'w+' lines for the same path are allowed. */
+                if (e->type != WRITE_FILE || !e->append_or_force ||
+                    i->type != WRITE_FILE || !i->append_or_force)
+                        return true;
+        }
+
+        return false;
+}
+
 static int parse_line(
                 const char *fname,
                 unsigned line,
@@ -2950,6 +2938,30 @@ static int parse_line(
         assert(fname);
         assert(line >= 1);
         assert(buffer);
+
+        const Specifier specifier_table[] = {
+                { 'a', specifier_architecture,    NULL },
+                { 'b', specifier_boot_id,         NULL },
+                { 'B', specifier_os_build_id,     NULL },
+                { 'H', specifier_hostname,        NULL },
+                { 'l', specifier_short_hostname,  NULL },
+                { 'm', specifier_machine_id_safe, NULL },
+                { 'o', specifier_os_id,           NULL },
+                { 'v', specifier_kernel_release,  NULL },
+                { 'w', specifier_os_version_id,   NULL },
+                { 'W', specifier_os_variant_id,   NULL },
+
+                { 'h', specifier_user_home,       NULL },
+
+                { 'C', specifier_directory,       UINT_TO_PTR(DIRECTORY_CACHE)   },
+                { 'L', specifier_directory,       UINT_TO_PTR(DIRECTORY_LOGS)    },
+                { 'S', specifier_directory,       UINT_TO_PTR(DIRECTORY_STATE)   },
+                { 't', specifier_directory,       UINT_TO_PTR(DIRECTORY_RUNTIME) },
+
+                COMMON_CREDS_SPECIFIERS(arg_user ? LOOKUP_SCOPE_USER : LOOKUP_SCOPE_SYSTEM),
+                COMMON_TMP_SPECIFIERS,
+                {}
+        };
 
         r = extract_many_words(
                         &buffer,
@@ -3092,7 +3104,7 @@ static int parse_line(
                         return log_syntax(NULL, LOG_ERR, fname, line, SYNTHETIC_ERRNO(EBADMSG), "Device file requires argument.");
                 }
 
-                r = parse_dev(i.argument, &i.major_minor);
+                r = parse_devnum(i.argument, &i.major_minor);
                 if (r < 0) {
                         *invalid_config = true;
                         return log_syntax(NULL, LOG_ERR, fname, line, r, "Can't parse device file major/minor '%s'.", i.argument);
@@ -3155,7 +3167,7 @@ static int parse_line(
         if (!should_include_path(i.path))
                 return 0;
 
-        r = specifier_expansion_from_arg(&i);
+        r = specifier_expansion_from_arg(specifier_table, &i);
         if (r == -ENXIO)
                 return log_unresolvable_specifier(fname, line);
         if (r < 0) {
@@ -3255,13 +3267,10 @@ static int parse_line(
 
         existing = ordered_hashmap_get(h, i.path);
         if (existing) {
-                size_t n;
-
-                for (n = 0; n < existing->n_items; n++) {
-                        if (!item_compatible(existing->items + n, &i) && !i.append_or_force) {
-                                log_syntax(NULL, LOG_NOTICE, fname, line, 0, "Duplicate line for path \"%s\", ignoring.", i.path);
-                                return 0;
-                        }
+                if (is_duplicated_item(existing, &i)) {
+                        log_syntax(NULL, LOG_NOTICE, fname, line, 0,
+                                   "Duplicate line for path \"%s\", ignoring.", i.path);
+                        return 0;
                 }
         } else {
                 existing = new0(ItemArray, 1);
@@ -3612,7 +3621,6 @@ static int read_config_file(char **config_dirs, const char *fn, bool ignore_enoe
 }
 
 static int parse_arguments(char **config_dirs, char **args, bool *invalid_config) {
-        char **arg;
         int r;
 
         STRV_FOREACH(arg, args) {
@@ -3627,7 +3635,6 @@ static int parse_arguments(char **config_dirs, char **args, bool *invalid_config
 static int read_config_files(char **config_dirs, char **args, bool *invalid_config) {
         _cleanup_strv_free_ char **files = NULL;
         _cleanup_free_ char *p = NULL;
-        char **f;
         int r;
 
         r = conf_files_list_with_replacement(arg_root, config_dirs, arg_replace, &files, &p);
@@ -3734,7 +3741,6 @@ static int run(int argc, char *argv[]) {
 
         if (DEBUG_LOGGING) {
                 _cleanup_free_ char *t = NULL;
-                char **i;
 
                 STRV_FOREACH(i, config_dirs) {
                         _cleanup_free_ char *j = NULL;

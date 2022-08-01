@@ -623,6 +623,11 @@ int config_parse_private_users(
                 settings->userns_mode = USER_NAMESPACE_PICK;
                 settings->uid_shift = UID_INVALID;
                 settings->uid_range = UINT32_C(0x10000);
+        } else if (streq(rvalue, "identity")) {
+                /* identity: User namespacing on, UID range is 0:65536 */
+                settings->userns_mode = USER_NAMESPACE_FIXED;
+                settings->uid_shift = 0;
+                settings->uid_range = UINT32_C(0x10000);
         } else {
                 const char *range, *shift;
                 uid_t sh, rn;
@@ -708,31 +713,6 @@ int config_parse_syscall_filter(
                 if (r < 0)
                         return log_oom();
         }
-}
-
-int config_parse_hostname(
-                const char *unit,
-                const char *filename,
-                unsigned line,
-                const char *section,
-                unsigned section_line,
-                const char *lvalue,
-                int ltype,
-                const char *rvalue,
-                void *data,
-                void *userdata) {
-
-        char **s = data;
-
-        assert(rvalue);
-        assert(s);
-
-        if (!hostname_is_valid(rvalue, 0)) {
-                log_syntax(unit, LOG_WARNING, filename, line, 0, "Invalid hostname, ignoring: %s", rvalue);
-                return 0;
-        }
-
-        return free_and_strdup_warn(s, empty_to_null(rvalue));
 }
 
 int config_parse_oom_score_adjust(

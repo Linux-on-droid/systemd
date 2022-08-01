@@ -122,7 +122,7 @@ uint64_t oomd_pgscan_rate(const OomdCGroupContext *c) {
         return c->pgscan - last_pgscan;
 }
 
-bool oomd_mem_free_below(const OomdSystemContext *ctx, int threshold_permyriad) {
+bool oomd_mem_available_below(const OomdSystemContext *ctx, int threshold_permyriad) {
         uint64_t mem_threshold;
 
         assert(ctx);
@@ -192,6 +192,10 @@ int oomd_cgroup_kill(const char *path, bool recurse, bool dry_run) {
         if (!pids_killed)
                 return -ENOMEM;
 
+        r = increment_oomd_xattr(path, "user.oomd_ooms", 1);
+        if (r < 0)
+                log_debug_errno(r, "Failed to set user.oomd_ooms before kill: %m");
+
         if (recurse)
                 r = cg_kill_recursive(SYSTEMD_CGROUP_CONTROLLER, path, SIGKILL, CGROUP_IGNORE_SELF, pids_killed, log_kill, NULL);
         else
@@ -216,9 +220,34 @@ int oomd_cgroup_kill(const char *path, bool recurse, bool dry_run) {
         return set_size(pids_killed) != 0;
 }
 
+typedef void (*dump_candidate_func)(const OomdCGroupContext *ctx, FILE *f, const char *prefix);
+
+static int dump_kill_candidates(OomdCGroupContext **sorted, int n, int dump_until, dump_candidate_func dump_func) {
+        /* Try dumping top offendors, ignoring any errors that might happen. */
+        _cleanup_free_ char *dump = NULL;
+        _cleanup_fclose_ FILE *f = NULL;
+        int r;
+        size_t size;
+
+        f = open_memstream_unlocked(&dump, &size);
+        if (!f)
+                return -errno;
+
+        fprintf(f, "Considered %d cgroups for killing, top candidates were:\n", n);
+        for (int i = 0; i < dump_until; i++)
+                dump_func(sorted[i], f, "\t");
+
+        r = fflush_and_check(f);
+        if (r < 0)
+                return r;
+
+        return log_dump(LOG_INFO, dump);
+}
+
 int oomd_kill_by_pgscan_rate(Hashmap *h, const char *prefix, bool dry_run, char **ret_selected) {
         _cleanup_free_ OomdCGroupContext **sorted = NULL;
         int n, r, ret = 0;
+        int dump_until;
 
         assert(h);
         assert(ret_selected);
@@ -227,6 +256,7 @@ int oomd_kill_by_pgscan_rate(Hashmap *h, const char *prefix, bool dry_run, char 
         if (n < 0)
                 return n;
 
+        dump_until = MIN(n, DUMP_ON_KILL_COUNT);
         for (int i = 0; i < n; i++) {
                 /* Skip cgroups with no reclaim and memory usage; it won't alleviate pressure.
                  * Continue since there might be "avoid" cgroups at the end. */
@@ -242,12 +272,16 @@ int oomd_kill_by_pgscan_rate(Hashmap *h, const char *prefix, bool dry_run, char 
                         continue; /* Try to find something else to kill */
                 }
 
+                dump_until = MAX(dump_until, i);
                 char *selected = strdup(sorted[i]->path);
                 if (!selected)
                         return -ENOMEM;
                 *ret_selected = selected;
-                return r;
+                ret = r;
+                break;
         }
+
+        dump_kill_candidates(sorted, n, dump_until, oomd_dump_memory_pressure_cgroup_context);
 
         return ret;
 }
@@ -255,6 +289,7 @@ int oomd_kill_by_pgscan_rate(Hashmap *h, const char *prefix, bool dry_run, char 
 int oomd_kill_by_swap_usage(Hashmap *h, uint64_t threshold_usage, bool dry_run, char **ret_selected) {
         _cleanup_free_ OomdCGroupContext **sorted = NULL;
         int n, r, ret = 0;
+        int dump_until;
 
         assert(h);
         assert(ret_selected);
@@ -263,6 +298,7 @@ int oomd_kill_by_swap_usage(Hashmap *h, uint64_t threshold_usage, bool dry_run, 
         if (n < 0)
                 return n;
 
+        dump_until = MIN(n, DUMP_ON_KILL_COUNT);
         /* Try to kill cgroups with non-zero swap usage until we either succeed in killing or we get to a cgroup with
          * no swap usage. Threshold killing only cgroups with more than threshold swap usage. */
         for (int i = 0; i < n; i++) {
@@ -280,12 +316,16 @@ int oomd_kill_by_swap_usage(Hashmap *h, uint64_t threshold_usage, bool dry_run, 
                         continue; /* Try to find something else to kill */
                 }
 
+                dump_until = MAX(dump_until, i);
                 char *selected = strdup(sorted[i]->path);
                 if (!selected)
                         return -ENOMEM;
                 *ret_selected = selected;
-                return r;
+                ret = r;
+                break;
         }
+
+        dump_kill_candidates(sorted, n, dump_until, oomd_dump_swap_cgroup_context);
 
         return ret;
 }
@@ -378,15 +418,15 @@ int oomd_system_context_acquire(const char *proc_meminfo_path, OomdSystemContext
         _cleanup_fclose_ FILE *f = NULL;
         unsigned field_filled = 0;
         OomdSystemContext ctx = {};
-        uint64_t mem_free, swap_free;
+        uint64_t mem_available, swap_free;
         int r;
 
         enum {
                 MEM_TOTAL = 1U << 0,
-                MEM_FREE = 1U << 1,
+                MEM_AVAILABLE = 1U << 1,
                 SWAP_TOTAL = 1U << 2,
                 SWAP_FREE = 1U << 3,
-                ALL = MEM_TOTAL|MEM_FREE|SWAP_TOTAL|SWAP_FREE,
+                ALL = MEM_TOTAL|MEM_AVAILABLE|SWAP_TOTAL|SWAP_FREE,
         };
 
         assert(proc_meminfo_path);
@@ -409,9 +449,9 @@ int oomd_system_context_acquire(const char *proc_meminfo_path, OomdSystemContext
                 if ((word = startswith(line, "MemTotal:"))) {
                         field_filled |= MEM_TOTAL;
                         r = convert_meminfo_value_to_uint64_bytes(word, &ctx.mem_total);
-                } else if ((word = startswith(line, "MemFree:"))) {
-                        field_filled |= MEM_FREE;
-                        r = convert_meminfo_value_to_uint64_bytes(word, &mem_free);
+                } else if ((word = startswith(line, "MemAvailable:"))) {
+                        field_filled |= MEM_AVAILABLE;
+                        r = convert_meminfo_value_to_uint64_bytes(word, &mem_available);
                 } else if ((word = startswith(line, "SwapTotal:"))) {
                         field_filled |= SWAP_TOTAL;
                         r = convert_meminfo_value_to_uint64_bytes(word, &ctx.swap_total);
@@ -431,10 +471,10 @@ int oomd_system_context_acquire(const char *proc_meminfo_path, OomdSystemContext
         if (field_filled != ALL)
                 return log_debug_errno(SYNTHETIC_ERRNO(EINVAL), "%s is missing expected fields", proc_meminfo_path);
 
-        if (mem_free > ctx.mem_total)
+        if (mem_available > ctx.mem_total)
                 return log_debug_errno(SYNTHETIC_ERRNO(EINVAL),
-                                       "MemFree (%" PRIu64 ") cannot be greater than MemTotal (%" PRIu64 ") %m",
-                                       mem_free,
+                                       "MemAvailable (%" PRIu64 ") cannot be greater than MemTotal (%" PRIu64 ") %m",
+                                       mem_available,
                                        ctx.mem_total);
 
         if (swap_free > ctx.swap_total)
@@ -443,7 +483,7 @@ int oomd_system_context_acquire(const char *proc_meminfo_path, OomdSystemContext
                                        swap_free,
                                        ctx.swap_total);
 
-        ctx.mem_used = ctx.mem_total - mem_free;
+        ctx.mem_used = ctx.mem_total - mem_available;
         ctx.swap_used = ctx.swap_total - swap_free;
 
         *ret = ctx;

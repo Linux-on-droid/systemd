@@ -360,13 +360,10 @@ bool dns_resource_key_reduce(DnsResourceKey **a, DnsResourceKey **b) {
                 return false;
 
         /* Keep the one which already has more references. */
-        if ((*a)->n_ref > (*b)->n_ref) {
-                dns_resource_key_unref(*b);
-                *b = dns_resource_key_ref(*a);
-        } else {
-                dns_resource_key_unref(*a);
-                *a = dns_resource_key_ref(*b);
-        }
+        if ((*a)->n_ref > (*b)->n_ref)
+                DNS_RESOURCE_KEY_REPLACE(*b, dns_resource_key_ref(*a));
+        else
+                DNS_RESOURCE_KEY_REPLACE(*a, dns_resource_key_ref(*b));
 
         return true;
 }
@@ -403,7 +400,7 @@ static DnsResourceRecord* dns_resource_record_free(DnsResourceRecord *rr) {
         assert(rr);
 
         if (rr->key) {
-                switch(rr->key->type) {
+                switch (rr->key->type) {
 
                 case DNS_TYPE_SRV:
                         free(rr->srv.name);
@@ -784,7 +781,6 @@ static char *format_types(Bitmap *types) {
 }
 
 static char *format_txt(DnsTxtItem *first) {
-        DnsTxtItem *i;
         size_t c = 1;
         char *p, *s;
 
@@ -1167,7 +1163,7 @@ ssize_t dns_resource_record_payload(DnsResourceRecord *rr, void **out) {
         assert(rr);
         assert(out);
 
-        switch(rr->unparsable ? _DNS_TYPE_INVALID : rr->key->type) {
+        switch (rr->unparsable ? _DNS_TYPE_INVALID : rr->key->type) {
         case DNS_TYPE_SRV:
         case DNS_TYPE_PTR:
         case DNS_TYPE_NS:
@@ -1358,8 +1354,6 @@ void dns_resource_record_hash_func(const DnsResourceRecord *rr, struct siphash *
 
         case DNS_TYPE_TXT:
         case DNS_TYPE_SPF: {
-                DnsTxtItem *j;
-
                 LIST_FOREACH(items, j, rr->txt.items) {
                         siphash24_compress_safe(j->data, j->length, state);
 
@@ -1711,9 +1705,7 @@ int dns_resource_record_clamp_ttl(DnsResourceRecord **rr, uint32_t max_ttl) {
 
         new_rr->ttl = new_ttl;
 
-        dns_resource_record_unref(*rr);
-        *rr = new_rr;
-
+        DNS_RR_REPLACE(*rr, new_rr);
         return 1;
 }
 
@@ -1813,7 +1805,7 @@ bool dns_txt_item_equal(DnsTxtItem *a, DnsTxtItem *b) {
 }
 
 DnsTxtItem *dns_txt_item_copy(DnsTxtItem *first) {
-        DnsTxtItem *i, *copy = NULL, *end = NULL;
+        DnsTxtItem *copy = NULL, *end = NULL;
 
         LIST_FOREACH(items, i, first) {
                 DnsTxtItem *j;

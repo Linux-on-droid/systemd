@@ -357,6 +357,19 @@
       </varlistentry>
 
       <varlistentry>
+        <term><option>--fido2-credential-algorithm=</option><replaceable>STRING</replaceable></term>
+        <listitem><para>Specify COSE algorithm used in credential generation. The default value is
+        <literal>es256</literal>. Supported values are <literal>es256</literal>, <literal>rs256</literal>
+        and <literal>eddsa</literal>.</para>
+
+        <para><literal>es256</literal> denotes ECDSA over NIST P-256 with SHA-256. <literal>rs256</literal>
+        denotes 2048-bit RSA with PKCS#1.5 padding and SHA-256. <literal>eddsa</literal> denotes
+        EDDSA over Curve25519 with SHA-512.</para>
+
+        <para>Note that your authenticator may not support some algorithms.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term><option>--fido2-device=</option><replaceable>PATH</replaceable></term>
 
         <listitem><para>Takes a path to a Linux <literal>hidraw</literal> device
@@ -673,7 +686,7 @@
       <varlistentry>
         <term><option>--luks-cipher=</option><replaceable>CIPHER</replaceable></term>
         <term><option>--luks-cipher-mode=</option><replaceable>MODE</replaceable></term>
-        <term><option>--luks-volume-key-size=</option><replaceable>BITS</replaceable></term>
+        <term><option>--luks-volume-key-size=</option><replaceable>BYTES</replaceable></term>
         <term><option>--luks-pbkdf-type=</option><replaceable>TYPE</replaceable></term>
         <term><option>--luks-pbkdf-hash-algorithm=</option><replaceable>ALGORITHM</replaceable></term>
         <term><option>--luks-pbkdf-time-cost=</option><replaceable>SECONDS</replaceable></term>
@@ -683,7 +696,12 @@
         <listitem><para>Configures various cryptographic parameters for the LUKS2 storage mechanism. See
         <citerefentry
         project='man-pages'><refentrytitle>cryptsetup</refentrytitle><manvolnum>8</manvolnum></citerefentry>
-        for details on the specific attributes.</para></listitem>
+        for details on the specific attributes.</para>
+
+        <para>Note that <command>homectl</command> uses bytes for key size, like
+        <filename>/proc/crypto</filename>, but <citerefentry
+        project='man-pages'><refentrytitle>cryptsetup</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+        uses bits.</para></listitem>
       </varlistentry>
 
       <varlistentry>

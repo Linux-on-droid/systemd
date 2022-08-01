@@ -101,7 +101,6 @@ int device_add_property_aux(sd_device *device, const char *key, const char *valu
 static inline int device_add_property_internal(sd_device *device, const char *key, const char *value) {
         return device_add_property_aux(device, key, value, false);
 }
-int device_read_uevent_file(sd_device *device);
 
 int device_set_syspath(sd_device *device, const char *_syspath, bool verify);
 int device_set_ifindex(sd_device *device, const char *ifindex);
@@ -110,6 +109,7 @@ int device_set_devname(sd_device *device, const char *devname);
 int device_set_devtype(sd_device *device, const char *devtype);
 int device_set_devnum(sd_device *device, const char *major, const char *minor);
 int device_set_subsystem(sd_device *device, const char *subsystem);
+int device_set_diskseq(sd_device *device, const char *str);
 int device_set_drivers_subsystem(sd_device *device);
 int device_set_driver(sd_device *device, const char *driver);
 int device_set_usec_initialized(sd_device *device, usec_t when);

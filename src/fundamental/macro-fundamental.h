@@ -53,28 +53,39 @@
 #define CONCATENATE(x, y) XCONCATENATE(x, y)
 
 #ifdef SD_BOOT
+        _noreturn_ void efi_assert(const char *expr, const char *file, unsigned line, const char *function);
+
         #ifdef NDEBUG
                 #define assert(expr)
                 #define assert_not_reached() __builtin_unreachable()
         #else
-                void efi_assert(const char *expr, const char *file, unsigned line, const char *function) _noreturn_;
                 #define assert(expr) ({ _likely_(expr) ? VOID_0 : efi_assert(#expr, __FILE__, __LINE__, __PRETTY_FUNCTION__); })
                 #define assert_not_reached() efi_assert("Code should not be reached", __FILE__, __LINE__, __PRETTY_FUNCTION__)
         #endif
+        #define static_assert _Static_assert
+        #define assert_se(expr) ({ _likely_(expr) ? VOID_0 : efi_assert(#expr, __FILE__, __LINE__, __PRETTY_FUNCTION__); })
 
         #define memcpy(a, b, c) CopyMem((a), (b), (c))
         #define free(a) FreePool(a)
 #endif
 
-#if defined(static_assert)
-#define assert_cc(expr)                                                 \
-        static_assert(expr, #expr)
-#else
-#define assert_cc(expr)                                                 \
-        struct CONCATENATE(_assert_struct_, __COUNTER__) {              \
-                char x[(expr) ? 0 : -1];                                \
-        }
-#endif
+/* This passes the argument through after (if asserts are enabled) checking that it is not null. */
+#define ASSERT_PTR(expr)                        \
+        ({                                      \
+                typeof(expr) _expr_ = (expr);   \
+                assert(_expr_);                 \
+                _expr_;                         \
+        })
+
+#define ASSERT_SE_PTR(expr)                     \
+        ({                                      \
+                typeof(expr) _expr_ = (expr);   \
+                assert_se(_expr_);              \
+                _expr_;                         \
+        })
+
+#define assert_cc(expr) static_assert(expr, #expr)
+
 
 #define UNIQ_T(x, uniq) CONCATENATE(__unique_prefix_, CONCATENATE(x, uniq))
 #define UNIQ __COUNTER__
@@ -235,23 +246,23 @@
                                CASE_F_10,CASE_F_9,CASE_F_8,CASE_F_7,CASE_F_6,CASE_F_5,CASE_F_4,CASE_F_3,CASE_F_2,CASE_F_1) \
                    (CASE_F,__VA_ARGS__)
 
-#define IN_SET(x, ...)                          \
-        ({                                      \
-                sd_bool _found = sd_false;      \
+#define IN_SET(x, ...)                                                  \
+        ({                                                              \
+                sd_bool _found = sd_false;                              \
                 /* If the build breaks in the line below, you need to extend the case macros. (We use "long double" as  \
                  * type for the array, in the hope that checkers such as ubsan don't complain that the initializers for \
                  * the array are not representable by the base type. Ideally we'd use typeof(x) as base type, but that  \
                  * doesn't work, as we want to use this on bitfields and gcc refuses typeof() on bitfields.) */         \
                 static const long double __assert_in_set[] _unused_ = { __VA_ARGS__ }; \
-                assert_cc(ELEMENTSOF(__assert_in_set) <= 20); \
-                switch(x) {                     \
-                FOR_EACH_MAKE_CASE(__VA_ARGS__) \
-                        _found = sd_true;       \
-                        break;                  \
-                default:                        \
-                        break;                  \
-                }                               \
-                _found;                         \
+                assert_cc(ELEMENTSOF(__assert_in_set) <= 20);           \
+                switch (x) {                                            \
+                FOR_EACH_MAKE_CASE(__VA_ARGS__)                         \
+                        _found = sd_true;                               \
+                       break;                                           \
+                default:                                                \
+                        break;                                          \
+                }                                                       \
+                _found;                                                 \
         })
 
 /* Takes inspiration from Rust's Option::take() method: reads and returns a pointer, but at the same time

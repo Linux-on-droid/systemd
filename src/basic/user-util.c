@@ -247,7 +247,7 @@ int get_user_creds(
                 else if (FLAGS_SET(flags, USER_CREDS_ALLOW_MISSING) && !gid && !home && !shell) {
 
                         /* If the specified user is a numeric UID and it isn't in the user database, and the caller
-                         * passed USER_CREDS_ALLOW_MISSING and was only interested in the UID, then juts return that
+                         * passed USER_CREDS_ALLOW_MISSING and was only interested in the UID, then just return that
                          * and don't complain. */
 
                         if (uid)
@@ -794,7 +794,7 @@ bool valid_user_group_name(const char *u, ValidUserFlags flags) {
                 /* Compare with strict result and warn if result doesn't match */
                 if (FLAGS_SET(flags, VALID_USER_WARN) && !valid_user_group_name(u, 0))
                         log_struct(LOG_NOTICE,
-                                   "MESSAGE=Accepting user/group name '%s', which does not match strict user/group name rules.", u,
+                                   LOG_MESSAGE("Accepting user/group name '%s', which does not match strict user/group name rules.", u),
                                    "USER_GROUP_NAME=%s", u,
                                    "MESSAGE_ID=" SD_MESSAGE_UNSAFE_USER_NAME_STR);
 

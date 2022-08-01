@@ -415,7 +415,7 @@ int safe_atoi(const char *s, int *ret_i) {
         return 0;
 }
 
-int safe_atollu_full(const char *s, unsigned base, long long unsigned *ret_llu) {
+int safe_atollu_full(const char *s, unsigned base, unsigned long long *ret_llu) {
         char *x = NULL;
         unsigned long long l;
 
@@ -689,34 +689,6 @@ int parse_ip_prefix_length(const char *s, int *ret) {
 
         *ret = (int) l;
 
-        return 0;
-}
-
-int parse_dev(const char *s, dev_t *ret) {
-        const char *major;
-        unsigned x, y;
-        size_t n;
-        int r;
-
-        n = strspn(s, DIGITS);
-        if (n == 0)
-                return -EINVAL;
-        if (s[n] != ':')
-                return -EINVAL;
-
-        major = strndupa_safe(s, n);
-        r = safe_atou(major, &x);
-        if (r < 0)
-                return r;
-
-        r = safe_atou(s + n + 1, &y);
-        if (r < 0)
-                return r;
-
-        if (!DEVICE_MAJOR_VALID(x) || !DEVICE_MINOR_VALID(y))
-                return -ERANGE;
-
-        *ret = makedev(x, y);
         return 0;
 }
 

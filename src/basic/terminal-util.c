@@ -22,6 +22,7 @@
 
 #include "alloc-util.h"
 #include "def.h"
+#include "devnum-util.h"
 #include "env-util.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -432,7 +433,6 @@ int acquire_terminal(
 
                 for (;;) {
                         union inotify_event_buffer buffer;
-                        struct inotify_event *e;
                         ssize_t l;
 
                         if (timeout != USEC_INFINITY) {
@@ -1278,7 +1278,7 @@ ColorMode get_color_mode(void) {
                         /* We only check for the presence of the variable; value is ignored. */
                         cached_color_mode = COLOR_OFF;
 
-                else if (getpid_cached() == 1)
+                else if (getpid_cached() == 1) {
                         /* PID1 outputs to the console without holding it open all the time.
                          *
                          * Note that the Linux console can only display 16 colors. We still enable 256 color
@@ -1287,9 +1287,23 @@ ColorMode get_color_mode(void) {
                          * map them to the closest color in the 16 color palette (since kernel 3.16). Doing
                          * 256 colors is nice for people who invoke systemd in a container or via a serial
                          * link or such, and use a true 256 color terminal to do so. */
-                        cached_color_mode = getenv_terminal_is_dumb() ? COLOR_OFF : COLOR_256;
-                else
-                        cached_color_mode = terminal_is_dumb() ? COLOR_OFF : COLOR_256;
+                        if (getenv_terminal_is_dumb())
+                                cached_color_mode = COLOR_OFF;
+                } else {
+                        if (terminal_is_dumb())
+                                cached_color_mode = COLOR_OFF;
+                }
+
+                if (cached_color_mode < 0) {
+                        /* We failed to figure out any reason to *disable* colors.
+                         * Let's see how many colors we shall use. */
+                        if (STRPTR_IN_SET(getenv("COLORTERM"),
+                                          "truecolor",
+                                          "24bit"))
+                                cached_color_mode = COLOR_24BIT;
+                        else
+                                cached_color_mode = COLOR_256;
+                }
         }
 
         return cached_color_mode;

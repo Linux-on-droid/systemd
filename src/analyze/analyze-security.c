@@ -3,6 +3,7 @@
 #include <sys/utsname.h>
 
 #include "af-list.h"
+#include "analyze.h"
 #include "analyze-security.h"
 #include "analyze-verify.h"
 #include "bus-error.h"
@@ -11,6 +12,8 @@
 #include "bus-util.h"
 #include "copy.h"
 #include "env-util.h"
+#include "fd-util.h"
+#include "fileio.h"
 #include "format-table.h"
 #include "in-addr-prefix-util.h"
 #include "locale-util.h"
@@ -97,12 +100,12 @@ typedef struct SecurityInfo {
 
         bool delegate;
         char *device_policy;
-        bool device_allow_non_empty;
+        char **device_allow;
 
         Set *system_call_architectures;
 
         bool system_call_filter_allow_list;
-        Hashmap *system_call_filter;
+        Set *system_call_filter;
 
         mode_t _umask;
 } SecurityInfo;
@@ -165,11 +168,11 @@ static SecurityInfo *security_info_free(SecurityInfo *i) {
         free(i->notify_access);
 
         free(i->device_policy);
+        strv_free(i->device_allow);
 
         strv_free(i->supplementary_groups);
         set_free(i->system_call_architectures);
-
-        hashmap_free(i->system_call_filter);
+        set_free(i->system_call_filter);
 
         return mfree(i);
 }
@@ -527,6 +530,8 @@ static int assess_restrict_namespaces(
         return 0;
 }
 
+#if HAVE_SECCOMP
+
 static int assess_system_call_architectures(
                 const struct security_assessor *a,
                 const SecurityInfo *info,
@@ -561,14 +566,10 @@ static int assess_system_call_architectures(
         return 0;
 }
 
-#if HAVE_SECCOMP
-
-static bool syscall_names_in_filter(Hashmap *s, bool allow_list, const SyscallFilterSet *f, const char **ret_offending_syscall) {
+static bool syscall_names_in_filter(Set *s, bool allow_list, const SyscallFilterSet *f, const char **ret_offending_syscall) {
         const char *syscall;
 
         NULSTR_FOREACH(syscall, f->value) {
-                int id;
-
                 if (syscall[0] == '@') {
                         const SyscallFilterSet *g;
 
@@ -580,11 +581,10 @@ static bool syscall_names_in_filter(Hashmap *s, bool allow_list, const SyscallFi
                 }
 
                 /* Let's see if the system call actually exists on this platform, before complaining */
-                id = seccomp_syscall_resolve_name(syscall);
-                if (id < 0)
+                if (seccomp_syscall_resolve_name(syscall) < 0)
                         continue;
 
-                if (hashmap_contains(s, syscall) == allow_list) {
+                if (set_contains(s, syscall) == allow_list) {
                         log_debug("Offending syscall filter item: %s", syscall);
                         if (ret_offending_syscall)
                                 *ret_offending_syscall = syscall;
@@ -615,7 +615,7 @@ static int assess_system_call_filter(
         uint64_t b;
         int r;
 
-        if (!info->system_call_filter_allow_list && hashmap_isempty(info->system_call_filter)) {
+        if (!info->system_call_filter_allow_list && set_isempty(info->system_call_filter)) {
                 r = free_and_strdup(&d, "Service does not filter system calls");
                 b = 10;
         } else {
@@ -717,8 +717,14 @@ static int assess_device_allow(
 
         if (STRPTR_IN_SET(info->device_policy, "strict", "closed")) {
 
-                if (info->device_allow_non_empty) {
-                        d = strdup("Service has a device ACL with some special devices");
+                if (!strv_isempty(info->device_allow)) {
+                        _cleanup_free_ char *join = NULL;
+
+                        join = strv_join(info->device_allow, " ");
+                        if (!join)
+                                return log_oom();
+
+                        d = strjoin("Service has a device ACL with some special devices: ", join);
                         b = 5;
                 } else {
                         d = strdup("Service has a minimal device ACL");
@@ -1473,6 +1479,7 @@ static const struct security_assessor security_assessor_table[] = {
                 .assess = assess_bool,
                 .offset = offsetof(SecurityInfo, restrict_address_family_other),
         },
+#if HAVE_SECCOMP
         {
                 .id = "SystemCallArchitectures=",
                 .json_field = "SystemCallArchitectures",
@@ -1481,7 +1488,6 @@ static const struct security_assessor security_assessor_table[] = {
                 .range = 10,
                 .assess = assess_system_call_architectures,
         },
-#if HAVE_SECCOMP
         {
                 .id = "SystemCallFilter=~@swap",
                 .json_field = "SystemCallFilter_swap",
@@ -1902,7 +1908,7 @@ static int assess(const SecurityInfo *info,
                         name = info->id;
 
                 printf("\n%s %sOverall exposure level for %s%s: %s%" PRIu64 ".%" PRIu64 " %s%s %s\n",
-                       special_glyph(SPECIAL_GLYPH_ARROW),
+                       special_glyph(SPECIAL_GLYPH_ARROW_RIGHT),
                        ansi_highlight(),
                        name,
                        ansi_normal(),
@@ -2129,9 +2135,8 @@ static int property_read_system_call_filter(
                 if (r == 0)
                         break;
 
-                /* The actual ExecContext stores the system call id as the map value, which we don't
-                 * need. So we assign NULL to all values here. */
-                r = hashmap_put_strdup(&info->system_call_filter, name, NULL);
+                /* ignore errno or action after colon */
+                r = set_put_strndup(&info->system_call_filter, name, strchrnul(name, ':') - name);
                 if (r < 0)
                         return r;
         }
@@ -2256,7 +2261,6 @@ static int property_read_device_allow(
                 void *userdata) {
 
         SecurityInfo *info = userdata;
-        size_t n = 0;
         int r;
 
         assert(bus);
@@ -2276,10 +2280,10 @@ static int property_read_device_allow(
                 if (r == 0)
                         break;
 
-                n++;
+                r = strv_extendf(&info->device_allow, "%s:%s", name, policy);
+                if (r < 0)
+                        return r;
         }
-
-        info->device_allow_non_empty = n > 0;
 
         return sd_bus_message_exit_container(m);
 }
@@ -2568,17 +2572,36 @@ static int get_security_info(Unit *u, ExecContext *c, CGroupContext *g, Security
                                 return log_oom();
                 }
                 info->_umask = c->umask;
-                if (c->syscall_archs) {
-                        info->system_call_architectures = set_copy(c->syscall_archs);
-                        if (!info->system_call_architectures)
+
+#if HAVE_SECCOMP
+                SET_FOREACH(key, c->syscall_archs) {
+                        const char *name;
+
+                        name = seccomp_arch_to_string(PTR_TO_UINT32(key) - 1);
+                        if (!name)
+                                continue;
+
+                        if (set_put_strdup(&info->system_call_architectures, name) < 0)
                                 return log_oom();
                 }
+
                 info->system_call_filter_allow_list = c->syscall_allow_list;
-                if (c->syscall_filter) {
-                        info->system_call_filter = hashmap_copy(c->syscall_filter);
-                        if (!info->system_call_filter)
+
+                void *id, *num;
+                HASHMAP_FOREACH_KEY(num, id, c->syscall_filter) {
+                        _cleanup_free_ char *name = NULL;
+
+                        if (info->system_call_filter_allow_list && PTR_TO_INT(num) >= 0)
+                                continue;
+
+                        name = seccomp_syscall_resolve_num_arch(SCMP_ARCH_NATIVE, PTR_TO_INT(id) - 1);
+                        if (!name)
+                                continue;
+
+                        if (set_ensure_consume(&info->system_call_filter, &string_hash_ops_free, TAKE_PTR(name)) < 0)
                                 return log_oom();
                 }
+#endif
         }
 
         if (g) {
@@ -2610,7 +2633,13 @@ static int get_security_info(Unit *u, ExecContext *c, CGroupContext *g, Security
 
                 info->ip_filters_custom_ingress = !strv_isempty(g->ip_filters_ingress);
                 info->ip_filters_custom_egress = !strv_isempty(g->ip_filters_egress);
-                info->device_allow_non_empty = !LIST_IS_EMPTY(g->device_allow);
+
+                LIST_FOREACH(device_allow, a, g->device_allow)
+                        if (strv_extendf(&info->device_allow,
+                                         "%s:%s%s%s",
+                                         a->path,
+                                         a->r ? "r" : "", a->w ? "w" : "", a->m ? "m" : "") < 0)
+                                return log_oom();
         }
 
         *ret_info = TAKE_PTR(info);
@@ -2643,7 +2672,7 @@ static int offline_security_check(Unit *u,
 
 static int offline_security_checks(char **filenames,
                                    JsonVariant *policy,
-                                   UnitFileScope scope,
+                                   LookupScope scope,
                                    bool check_man,
                                    bool run_generators,
                                    unsigned threshold,
@@ -2663,7 +2692,6 @@ static int offline_security_checks(char **filenames,
         _cleanup_free_ char *var = NULL;
         int r, k;
         size_t count = 0;
-        char **filename;
 
         if (strv_isempty(filenames))
                 return 0;
@@ -2753,10 +2781,10 @@ static int offline_security_checks(char **filenames,
         return r;
 }
 
-int analyze_security(sd_bus *bus,
+static int analyze_security(sd_bus *bus,
                      char **units,
                      JsonVariant *policy,
-                     UnitFileScope scope,
+                     LookupScope scope,
                      bool check_man,
                      bool run_generators,
                      bool offline,
@@ -2786,7 +2814,6 @@ int analyze_security(sd_bus *bus,
                 _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;
                 _cleanup_strv_free_ char **list = NULL;
                 size_t n = 0;
-                char **i;
 
                 r = sd_bus_call_method(
                                 bus,
@@ -2838,9 +2865,7 @@ int analyze_security(sd_bus *bus,
                                 ret = r;
                 }
 
-        } else {
-                char **i;
-
+        } else
                 STRV_FOREACH(i, units) {
                         _cleanup_free_ char *mangled = NULL, *instance = NULL;
                         const char *name;
@@ -2872,7 +2897,6 @@ int analyze_security(sd_bus *bus,
                         if (r < 0 && ret >= 0)
                                 ret = r;
                 }
-        }
 
         if (overview_table) {
                 if (!FLAGS_SET(flags, ANALYZE_SECURITY_SHORT)) {
@@ -2885,4 +2909,52 @@ int analyze_security(sd_bus *bus,
                         return log_error_errno(r, "Failed to output table: %m");
         }
         return ret;
+}
+
+int verb_security(int argc, char *argv[], void *userdata) {
+        _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
+        _cleanup_(json_variant_unrefp) JsonVariant *policy = NULL;
+        int r;
+        unsigned line, column;
+
+        if (!arg_offline) {
+                r = acquire_bus(&bus, NULL);
+                if (r < 0)
+                        return bus_log_connect_error(r, arg_transport);
+        }
+
+        pager_open(arg_pager_flags);
+
+        if (arg_security_policy) {
+                r = json_parse_file(/*f=*/ NULL, arg_security_policy, /*flags=*/ 0, &policy, &line, &column);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to parse '%s' at %u:%u: %m", arg_security_policy, line, column);
+        } else {
+                _cleanup_fclose_ FILE *f = NULL;
+                _cleanup_free_ char *pp = NULL;
+
+                r = search_and_fopen_nulstr("systemd-analyze-security.policy", "re", /*root=*/ NULL, CONF_PATHS_NULSTR("systemd"), &f, &pp);
+                if (r < 0 && r != -ENOENT)
+                        return r;
+
+                if (f) {
+                        r = json_parse_file(f, pp, /*flags=*/ 0, &policy, &line, &column);
+                        if (r < 0)
+                                return log_error_errno(r, "[%s:%u:%u] Failed to parse JSON policy: %m", pp, line, column);
+                }
+        }
+
+        return analyze_security(bus,
+                                strv_skip(argv, 1),
+                                policy,
+                                arg_scope,
+                                arg_man,
+                                arg_generators,
+                                arg_offline,
+                                arg_threshold,
+                                arg_root,
+                                arg_profile,
+                                arg_json_format_flags,
+                                arg_pager_flags,
+                                /*flags=*/ 0);
 }

@@ -74,7 +74,6 @@ static int property_get_environment_files(
                 sd_bus_error *error) {
 
         ExecContext *c = userdata;
-        char **j;
         int r;
 
         assert(bus);
@@ -355,10 +354,6 @@ static int property_get_syscall_filter(
         _cleanup_strv_free_ char **l = NULL;
         int r;
 
-#if HAVE_SECCOMP
-        void *id, *val;
-#endif
-
         assert(bus);
         assert(reply);
         assert(c);
@@ -372,6 +367,7 @@ static int property_get_syscall_filter(
                 return r;
 
 #if HAVE_SECCOMP
+        void *id, *val;
         HASHMAP_FOREACH_KEY(val, id, c->syscall_filter) {
                 _cleanup_free_ char *name = NULL;
                 const char *e = NULL;
@@ -424,10 +420,6 @@ static int property_get_syscall_log(
         _cleanup_strv_free_ char **l = NULL;
         int r;
 
-#if HAVE_SECCOMP
-        void *id, *val;
-#endif
-
         assert(bus);
         assert(reply);
         assert(c);
@@ -441,6 +433,7 @@ static int property_get_syscall_log(
                 return r;
 
 #if HAVE_SECCOMP
+        void *id, *val;
         HASHMAP_FOREACH_KEY(val, id, c->syscall_log) {
                 char *name = NULL;
 
@@ -476,15 +469,12 @@ static int property_get_syscall_archs(
         _cleanup_strv_free_ char **l = NULL;
         int r;
 
-#if HAVE_SECCOMP
-        void *id;
-#endif
-
         assert(bus);
         assert(reply);
         assert(c);
 
 #if HAVE_SECCOMP
+        void *id;
         SET_FOREACH(id, c->syscall_archs) {
                 const char *name;
 
@@ -960,7 +950,6 @@ static int property_get_root_image_options(
                 sd_bus_error *error) {
 
         ExecContext *c = userdata;
-        MountOptions *m;
         int r;
 
         assert(bus);
@@ -1005,8 +994,6 @@ static int property_get_mount_images(
                 return r;
 
         for (size_t i = 0; i < c->n_mount_images; i++) {
-                MountOptions *m;
-
                 r = sd_bus_message_open_container(reply, SD_BUS_TYPE_STRUCT, "ssba(ss)");
                 if (r < 0)
                         return r;
@@ -1060,8 +1047,6 @@ static int property_get_extension_images(
                 return r;
 
         for (size_t i = 0; i < c->n_extension_images; i++) {
-                MountOptions *m;
-
                 r = sd_bus_message_open_container(reply, SD_BUS_TYPE_STRUCT, "sba(ss)");
                 if (r < 0)
                         return r;
@@ -1143,15 +1128,12 @@ static int bus_property_get_exec_dir_symlink(
         if (r < 0)
                 return r;
 
-        for (size_t i = 0; i < d->n_items; i++) {
-                char **dst;
-
+        for (size_t i = 0; i < d->n_items; i++)
                 STRV_FOREACH(dst, d->items[i].symlinks) {
                         r = sd_bus_message_append(reply, "(sst)", d->items[i].path, *dst, 0 /* flags, unused for now */);
                         if (r < 0)
                                 return r;
                 }
-        }
 
         return sd_bus_message_close_container(reply);
 }
@@ -1204,6 +1186,7 @@ const sd_bus_vtable bus_exec_vtable[] = {
         SD_BUS_PROPERTY("RootHashSignature", "ay", property_get_root_hash_sig, 0, SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("RootHashSignaturePath", "s", NULL, offsetof(ExecContext, root_hash_sig_path), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("RootVerity", "s", NULL, offsetof(ExecContext, root_verity), SD_BUS_VTABLE_PROPERTY_CONST),
+        SD_BUS_PROPERTY("ExtensionDirectories", "as", NULL, offsetof(ExecContext, extension_directories), SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("ExtensionImages", "a(sba(ss))", property_get_extension_images, 0, SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("MountImages", "a(ssba(ss))", property_get_mount_images, 0, SD_BUS_VTABLE_PROPERTY_CONST),
         SD_BUS_PROPERTY("OOMScoreAdjust", "i", property_get_oom_score_adjust, 0, SD_BUS_VTABLE_PROPERTY_CONST),
@@ -1448,7 +1431,7 @@ int bus_property_get_exec_command_list(
                 void *userdata,
                 sd_bus_error *ret_error) {
 
-        ExecCommand *c = *(ExecCommand**) userdata;
+        ExecCommand *exec_command = *(ExecCommand**) userdata;
         int r;
 
         assert(bus);
@@ -1458,7 +1441,7 @@ int bus_property_get_exec_command_list(
         if (r < 0)
                 return r;
 
-        LIST_FOREACH(command, c, c) {
+        LIST_FOREACH(command, c, exec_command) {
                 r = append_exec_command(reply, c);
                 if (r < 0)
                         return r;
@@ -1476,7 +1459,7 @@ int bus_property_get_exec_ex_command_list(
                 void *userdata,
                 sd_bus_error *ret_error) {
 
-        ExecCommand *c, *exec_command = *(ExecCommand**) userdata;
+        ExecCommand *exec_command = *(ExecCommand**) userdata;
         int r;
 
         assert(bus);
@@ -1586,7 +1569,6 @@ int bus_set_transient_exec_command(
         if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                 _cleanup_free_ char *buf = NULL;
                 _cleanup_fclose_ FILE *f = NULL;
-                ExecCommand *c;
                 size_t size = 0;
 
                 if (n == 0)
@@ -2021,7 +2003,6 @@ int bus_exec_context_set_transient_property(
                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         _cleanup_free_ char *joined = NULL;
                         FilesystemParseFlags invert_flag = allow_list ? 0 : FILESYSTEM_PARSE_INVERT;
-                        char **s;
 
                         if (strv_isempty(l)) {
                                 c->restrict_filesystems_allow_list = false;
@@ -2067,7 +2048,6 @@ int bus_exec_context_set_transient_property(
 
         if (streq(name, "SupplementaryGroups")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **p;
 
                 r = sd_bus_message_read_strv(message, &l);
                 if (r < 0)
@@ -2432,7 +2412,6 @@ int bus_exec_context_set_transient_property(
                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         _cleanup_free_ char *joined = NULL;
                         SeccompParseFlags invert_flag = allow_list ? 0 : SECCOMP_PARSE_INVERT;
-                        char **s;
 
                         if (strv_isempty(l)) {
                                 c->syscall_allow_list = false;
@@ -2517,7 +2496,6 @@ int bus_exec_context_set_transient_property(
                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         _cleanup_free_ char *joined = NULL;
                         SeccompParseFlags invert_flag = allow_list ? 0 : SECCOMP_PARSE_INVERT;
-                        char **s;
 
                         if (strv_isempty(l)) {
                                 c->syscall_log_allow_list = false;
@@ -2569,9 +2547,7 @@ int bus_exec_context_set_transient_property(
 
                         if (strv_isempty(l))
                                 c->syscall_archs = set_free(c->syscall_archs);
-                        else {
-                                char **s;
-
+                        else
                                 STRV_FOREACH(s, l) {
                                         uint32_t a;
 
@@ -2583,8 +2559,6 @@ int bus_exec_context_set_transient_property(
                                         if (r < 0)
                                                 return r;
                                 }
-
-                        }
 
                         joined = strv_join(l, " ");
                         if (!joined)
@@ -2617,7 +2591,6 @@ int bus_exec_context_set_transient_property(
 
                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         _cleanup_free_ char *joined = NULL;
-                        char **s;
 
                         if (strv_isempty(l)) {
                                 c->address_families_allow_list = allow_list;
@@ -3146,7 +3119,6 @@ int bus_exec_context_set_transient_property(
                 _cleanup_fclose_ FILE *f = NULL;
                 _cleanup_strv_free_ char **l = NULL;
                 size_t size = 0;
-                char **i;
 
                 r = sd_bus_message_enter_container(message, 'a', "(sb)");
                 if (r < 0)
@@ -3261,10 +3233,10 @@ int bus_exec_context_set_transient_property(
                 return 1;
 
         } else if (STR_IN_SET(name, "ReadWriteDirectories", "ReadOnlyDirectories", "InaccessibleDirectories",
-                              "ReadWritePaths", "ReadOnlyPaths", "InaccessiblePaths", "ExecPaths", "NoExecPaths")) {
+                              "ReadWritePaths", "ReadOnlyPaths", "InaccessiblePaths", "ExecPaths", "NoExecPaths",
+                              "ExtensionDirectories")) {
                 _cleanup_strv_free_ char **l = NULL;
                 char ***dirs;
-                char **p;
 
                 r = sd_bus_message_read_strv(message, &l);
                 if (r < 0)
@@ -3291,6 +3263,8 @@ int bus_exec_context_set_transient_property(
                                 dirs = &c->exec_paths;
                         else if (streq(name, "NoExecPaths"))
                                 dirs = &c->no_exec_paths;
+                        else if (streq(name, "ExtensionDirectories"))
+                                dirs = &c->extension_directories;
                         else /* "InaccessiblePaths" */
                                 dirs = &c->inaccessible_paths;
 
@@ -3316,16 +3290,15 @@ int bus_exec_context_set_transient_property(
 
         } else if (streq(name, "ExecSearchPath")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **p;
 
                 r = sd_bus_message_read_strv(message, &l);
                 if (r < 0)
                         return r;
 
-                STRV_FOREACH(p, l) {
+                STRV_FOREACH(p, l)
                         if (!path_is_absolute(*p) || !path_is_normalized(*p) || strchr(*p, ':'))
                                 return sd_bus_error_setf(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid %s", name);
-                }
+
                 if (!UNIT_WRITE_FLAGS_NOOP(flags)) {
                         if (strv_isempty(l)) {
                                 c->exec_search_path = strv_free(c->exec_search_path);
@@ -3346,7 +3319,6 @@ int bus_exec_context_set_transient_property(
 
         } else if (STR_IN_SET(name, "RuntimeDirectory", "StateDirectory", "CacheDirectory", "LogsDirectory", "ConfigurationDirectory")) {
                 _cleanup_strv_free_ char **l = NULL;
-                char **p;
 
                 r = sd_bus_message_read_strv(message, &l);
                 if (r < 0)
@@ -3375,7 +3347,6 @@ int bus_exec_context_set_transient_property(
                                 unit_write_settingf(u, flags, name, "%s=", name);
                         } else {
                                 _cleanup_free_ char *joined = NULL;
-                                char **source;
 
                                 STRV_FOREACH(source, l) {
                                         r = exec_directory_add(&d->items, &d->n_items, *source, NULL);

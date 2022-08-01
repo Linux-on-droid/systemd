@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <grp.h>
+#include <net/if_arp.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -11,11 +12,15 @@
 #include "escape.h"
 #include "exit-status.h"
 #include "fd-util.h"
+#include "fs-util.h"
 #include "in-addr-util.h"
 #include "io-util.h"
 #include "log.h"
 #include "macro.h"
+#include "path-util.h"
 #include "process-util.h"
+#include "random-util.h"
+#include "rm-rf.h"
 #include "socket-util.h"
 #include "string-util.h"
 #include "tests.h"
@@ -228,17 +233,12 @@ TEST(passfd_read) {
 
         if (r == 0) {
                 /* Child */
-                char tmpfile[] = "/tmp/test-socket-util-passfd-read-XXXXXX";
-                _cleanup_close_ int tmpfd = -1;
-
                 pair[0] = safe_close(pair[0]);
 
-                tmpfd = mkostemp_safe(tmpfile);
-                assert_se(tmpfd >= 0);
-                assert_se(write(tmpfd, file_contents, strlen(file_contents)) == (ssize_t) strlen(file_contents));
-                tmpfd = safe_close(tmpfd);
+                char tmpfile[] = "/tmp/test-socket-util-passfd-read-XXXXXX";
+                assert_se(write_tmpfile(tmpfile, file_contents) == 0);
 
-                tmpfd = open(tmpfile, O_RDONLY);
+                _cleanup_close_ int tmpfd = open(tmpfile, O_RDONLY);
                 assert_se(tmpfd >= 0);
                 assert_se(unlink(tmpfile) == 0);
 
@@ -277,16 +277,12 @@ TEST(passfd_contents_read) {
                 /* Child */
                 struct iovec iov = IOVEC_INIT_STRING(wire_contents);
                 char tmpfile[] = "/tmp/test-socket-util-passfd-contents-read-XXXXXX";
-                _cleanup_close_ int tmpfd = -1;
 
                 pair[0] = safe_close(pair[0]);
 
-                tmpfd = mkostemp_safe(tmpfile);
-                assert_se(tmpfd >= 0);
-                assert_se(write(tmpfd, file_contents, strlen(file_contents)) == (ssize_t) strlen(file_contents));
-                tmpfd = safe_close(tmpfd);
+                assert_se(write_tmpfile(tmpfile, file_contents) == 0);
 
-                tmpfd = open(tmpfile, O_RDONLY);
+                _cleanup_close_ int tmpfd = open(tmpfile, O_RDONLY);
                 assert_se(tmpfd >= 0);
                 assert_se(unlink(tmpfile) == 0);
 
@@ -485,6 +481,48 @@ TEST(flush_accept) {
 TEST(ipv6_enabled) {
         log_info("IPv6 supported: %s", yes_no(socket_ipv6_is_supported()));
         log_info("IPv6 enabled: %s", yes_no(socket_ipv6_is_enabled()));
+}
+
+TEST(sockaddr_un_set_path) {
+        _cleanup_(rm_rf_physical_and_freep) char *t = NULL;
+        _cleanup_(unlink_and_freep) char *sh = NULL;
+        _cleanup_free_ char *j = NULL;
+        union sockaddr_union sa;
+        _cleanup_close_ int fd1 = -1, fd2 = -1, fd3 = -1;
+
+        assert_se(mkdtemp_malloc("/tmp/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaXXXXXX", &t) >= 0);
+        assert_se(strlen(t) > SUN_PATH_LEN);
+
+        assert_se(j = path_join(t, "sock"));
+        assert_se(sockaddr_un_set_path(&sa.un, j) == -ENAMETOOLONG); /* too long for AF_UNIX socket */
+
+        assert_se(asprintf(&sh, "/tmp/%" PRIx64, random_u64()) >= 0);
+        assert_se(symlink(t, sh) >= 0); /* create temporary symlink, to access it anyway */
+
+        free(j);
+        assert_se(j = path_join(sh, "sock"));
+        assert_se(sockaddr_un_set_path(&sa.un, j) >= 0);
+
+        fd1 = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
+        assert_se(fd1 >= 0);
+        assert_se(bind(fd1, &sa.sa, SOCKADDR_LEN(sa)) >= 0);
+        assert_se(listen(fd1, 1) >= 0);
+
+        sh = unlink_and_free(sh); /* remove temporary symlink */
+
+        fd2 = socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0);
+        assert_se(fd2 >= 0);
+        assert_se(connect(fd2, &sa.sa, SOCKADDR_LEN(sa)) < 0);
+        assert_se(errno == ENOENT); /* we removed the symlink, must fail */
+
+        free(j);
+        assert_se(j = path_join(t, "sock"));
+
+        fd3 = open(j, O_CLOEXEC|O_PATH|O_NOFOLLOW);
+        assert_se(fd3 > 0);
+        assert_se(sockaddr_un_set_path(&sa.un, FORMAT_PROC_FD_PATH(fd3)) >= 0); /* connect via O_PATH instead, circumventing 108ch limit */
+
+        assert_se(connect(fd2, &sa.sa, SOCKADDR_LEN(sa)) >= 0);
 }
 
 DEFINE_TEST_MAIN(LOG_DEBUG);

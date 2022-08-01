@@ -33,11 +33,7 @@ cpu_arch_defines = {
 clang_arch_flags = cpu_arch_defines.get(host_machine.cpu_family(),
                                         ['-D__@0@__'.format(host_machine.cpu_family())])
 
-if meson.version().version_compare('>= 0.58')
-        libbpf_include_dir = libbpf.get_variable('includedir')
-else
-        libbpf_include_dir = libbpf.get_variable(pkgconfig : 'includedir')
-endif
+libbpf_include_dir = libbpf.get_variable(pkgconfig : 'includedir')
 
 bpf_o_unstripped_cmd = [
         clang,
@@ -65,17 +61,27 @@ bpf_o_unstripped_cmd += [
         '@OUTPUT@'
 ]
 
-bpf_o_cmd = [
-        llvm_strip,
-        '-g',
-        '@INPUT@',
-        '-o',
-        '@OUTPUT@'
-]
+if bpftool_strip
+        bpf_o_cmd = [
+                bpftool,
+                'gen',
+                'object',
+                '@OUTPUT@',
+                '@INPUT@'
+        ]
+else
+        bpf_o_cmd = [
+                llvm_strip,
+                '-g',
+                '@INPUT@',
+                '-o',
+                '@OUTPUT@'
+        ]
+endif
 
 skel_h_cmd = [
         bpftool,
-        'g',
-        's',
+        'gen',
+        'skeleton',
         '@INPUT@'
 ]

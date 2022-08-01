@@ -33,6 +33,10 @@ BEGIN {
     }
 }
 
+# Relax sd-device's sysfs verification, since we want to provide a fake sysfs
+# here that actually is a tmpfs.
+$ENV{"SYSTEMD_DEVICE_VERIFY_SYSFS"}="0";
+
 my $udev_bin            = "./test-udev";
 my $valgrind            = 0;
 my $gdb                 = 0;
@@ -172,7 +176,7 @@ EOF
                         {
                                 devpath         => "/devices/pci0000:00/0000:00:1f.2/host0/target0:0:0/0:0:0:0/block/sda/sda1",
                                 exp_links       => ["boot_disk1", "boot_disk1-4", "boot_disk1-5"],
-                                not_exp_links   => ["boot_disk1-1", "boot_disk1-2", "boot_disk1-3"]
+                                not_exp_links   => ["boot_disk1-1", "boot_disk1-2", "boot_disk1-3", "boot_disk1-6", "boot_disk1-7"]
                         }],
                 rules           => <<EOF
 SUBSYSTEMS=="scsi", ATTRS{vendor}=="?ATA", SYMLINK+="boot_disk%n-1"
@@ -181,6 +185,12 @@ SUBSYSTEMS=="scsi", ATTRS{vendor}=="A??", SYMLINK+="boot_disk%n"
 SUBSYSTEMS=="scsi", ATTRS{vendor}=="ATAS", SYMLINK+="boot_disk%n-3"
 SUBSYSTEMS=="scsi", ATTRS{vendor}=="AT?", SYMLINK+="boot_disk%n-4"
 SUBSYSTEMS=="scsi", ATTRS{vendor}=="??A", SYMLINK+="boot_disk%n-5"
+SUBSYSTEMS=="scsi", ATTRS{vendor}=="ATA", GOTO="skip-6"
+SUBSYSTEMS=="scsi", ATTRS{vendor}=="ATA", SYMLINK+="boot_disk%n-6"
+LABEL="skip-6"
+SUBSYSTEMS=="scsi", GOTO="skip-7"
+SUBSYSTEMS=="scsi", ATTRS{vendor}=="ATA", SYMLINK+="boot_disk%n-7"
+LABEL="skip-7"
 EOF
         },
         {

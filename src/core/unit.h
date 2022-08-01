@@ -285,7 +285,7 @@ typedef struct Unit {
         nsec_t cpu_usage_base;
         nsec_t cpu_usage_last; /* the most recently read value */
 
-        /* The current counter of processes sent SIGKILL by systemd-oomd */
+        /* The current counter of OOM kills initiated by systemd-oomd */
         uint64_t managed_oom_kill_last;
 
         /* The current counter of the oom_kill field in the memory.events cgroup attribute */
@@ -596,7 +596,7 @@ typedef struct UnitVTable {
         void (*notify_cgroup_empty)(Unit *u);
 
         /* Called whenever an OOM kill event on this unit was seen */
-        void (*notify_cgroup_oom)(Unit *u);
+        void (*notify_cgroup_oom)(Unit *u, bool managed_oom);
 
         /* Called whenever a process of this unit sends us a message */
         void (*notify_message)(Unit *u, const struct ucred *ucred, char * const *tags, FDSet *fds);
@@ -810,6 +810,8 @@ int unit_reload(Unit *u);
 
 int unit_kill(Unit *u, KillWho w, int signo, sd_bus_error *error);
 int unit_kill_common(Unit *u, KillWho who, int signo, pid_t main_pid, pid_t control_pid, sd_bus_error *error);
+
+void unit_notify_cgroup_oom(Unit *u, bool managed_oom);
 
 typedef enum UnitNotifyFlags {
         UNIT_NOTIFY_RELOAD_FAILURE    = 1 << 0,
@@ -1044,7 +1046,8 @@ Condition *unit_find_failed_condition(Unit *u);
 
 #define log_unit_struct_iovec(unit, level, iovec, n_iovec) log_unit_struct_iovec_errno(unit, level, 0, iovec, n_iovec)
 
-#define LOG_UNIT_MESSAGE(unit, fmt, ...) "MESSAGE=%s: " fmt, (unit)->id, ##__VA_ARGS__
+/* Like LOG_MESSAGE(), but with the unit name prefixed. */
+#define LOG_UNIT_MESSAGE(unit, fmt, ...) LOG_MESSAGE("%s: " fmt, (unit)->id, ##__VA_ARGS__)
 #define LOG_UNIT_ID(unit) (unit)->manager->unit_log_format_string, (unit)->id
 #define LOG_UNIT_INVOCATION_ID(unit) (unit)->manager->invocation_log_format_string, (unit)->invocation_id_string
 

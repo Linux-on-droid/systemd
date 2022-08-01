@@ -865,7 +865,6 @@ TEST(strverscmp_improved) {
                 "124",
                 NULL,
         };
-        const char * const *p, * const *q;
 
         STRV_FOREACH(p, versions)
                 STRV_FOREACH(q, p + 1)
@@ -934,6 +933,26 @@ TEST(strextendf) {
 
         assert_se(strextendf_with_separator(&p, ",", "<%08x>", 0x1234) >= 0);
         assert_se(streq(p, "<77>,<99>,<                                                                              88>,<00001234>"));
+}
+
+TEST(string_replace_char) {
+        assert_se(streq(string_replace_char(strdupa(""), 'a', 'b'), ""));
+        assert_se(streq(string_replace_char(strdupa("abc"), 'a', 'b'), "bbc"));
+        assert_se(streq(string_replace_char(strdupa("hoge"), 'a', 'b'), "hoge"));
+        assert_se(streq(string_replace_char(strdupa("aaaa"), 'a', 'b'), "bbbb"));
+        assert_se(streq(string_replace_char(strdupa("aaaa"), 'a', '\t'), "\t\t\t\t"));
+}
+
+TEST(strspn_from_end) {
+        assert_se(strspn_from_end(NULL, NULL) == 0);
+        assert_se(strspn_from_end("hoge", NULL) == 0);
+        assert_se(strspn_from_end(NULL, DIGITS) == 0);
+        assert_se(strspn_from_end("", DIGITS) == 0);
+        assert_se(strspn_from_end("hoge", DIGITS) == 0);
+        assert_se(strspn_from_end("1234", DIGITS) == 4);
+        assert_se(strspn_from_end("aaa1234", DIGITS) == 4);
+        assert_se(strspn_from_end("aaa1234aaa", DIGITS) == 0);
+        assert_se(strspn_from_end("aaa12aa34", DIGITS) == 2);
 }
 
 TEST(streq_skip_trailing_chars) {
