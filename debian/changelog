@@ -1,3 +1,27 @@
+systemd (251.3-1~bpo11+1) bullseye-backports; urgency=medium
+
+  [ Michael Biebl ]
+  * Rebuild for bullseye-backports
+  * Revert "Enable pager Hyperlink ANSI sequence support"
+    We do not strictly need this feature and by not having the versioned
+    Breaks we avoid having less being removed accidentally.
+    This reverts commit 9a2a5528ca0c98c76a892fc9da0edf410b8ca664.
+  * Revert "autopkgtest: install swtpm and tpm2-tools for upstream suite"
+    Skip TEST-70-TPM2 as swtpm is not available in bullseye.
+    This reverts commit 8da23d25f6ed616675557479c8913accff7acf93.
+  * autopkgtest: install libssl-dev for upstream test.
+    Works around an issue in libfido2-dev, which is missing a libssl-dev
+    dependency in bullseye.
+    See https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1003699
+    Fixes a failure in TEST-02-UNITTESTS.
+
+  [ Luca Boccassi ]
+  * Revert "Build with dh_package_notes"
+    A newer binutils is required, not available in bullseye or backports
+    This reverts commit a8a310c5e6f6e466f638a246ac8840615e5019f0.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 03 Aug 2022 16:22:55 +0200
+
 systemd (251.3-1) unstable; urgency=medium
 
   * New upstream version 251.3
