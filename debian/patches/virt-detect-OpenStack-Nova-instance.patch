@@ -1,0 +1,21 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Sun, 7 Aug 2022 15:21:12 +0200
+Subject: virt: detect OpenStack Nova instance
+
+(cherry picked from commit 01d9fbccddd694bc584aed24eaa0543f831dc929)
+---
+ src/basic/virt.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/basic/virt.c b/src/basic/virt.c
+index 54befd9..78ee1b8 100644
+--- a/src/basic/virt.c
++++ b/src/basic/virt.c
+@@ -149,6 +149,7 @@ static int detect_vm_dmi(void) {
+                 int id;
+         } dmi_vendor_table[] = {
+                 { "KVM",                 VIRTUALIZATION_KVM       },
++                { "OpenStack",           VIRTUALIZATION_KVM       }, /* Detect OpenStack instance as KVM in non x86 architecture */
+                 { "QEMU",                VIRTUALIZATION_QEMU      },
+                 { "VMware",              VIRTUALIZATION_VMWARE    }, /* https://kb.vmware.com/s/article/1009458 */
+                 { "VMW",                 VIRTUALIZATION_VMWARE    },
