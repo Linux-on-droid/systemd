@@ -25,6 +25,8 @@ machine-adjust-error-message-to-use-normalized-instead-of.patch
 shared-mount-util-use-namespace_fork-utils.patch
 machine-enter-target-PID-namespace-when-adding-a-live-mou.patch
 Drop-bundled-copy-of-linux-if_arp.h.patch
+virt-Support-detection-for-ARM64-Hyper-V-guests.patch
+virt-Fix-the-detection-for-Hyper-V-VMs.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
