@@ -1,0 +1,111 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Sun, 30 Oct 2022 09:43:05 +0900
+Subject: udev: always create device symlinks for USB disks
+
+Previously, ata_id might not be able to retrieve attributes correctly,
+and properties from usb_id were used as a fallback. See issue #24921
+and PR #24923. To keep backward compatibility, still we need to create
+symlinks based on USB serial.
+
+Fixes #25179.
+---
+ rules.d/60-persistent-storage.rules | 10 +++++--
+ src/udev/udev-builtin-usb_id.c      | 55 +++++++++++++++++++++++++++++--------
+ 2 files changed, 51 insertions(+), 14 deletions(-)
+
+diff --git a/rules.d/60-persistent-storage.rules b/rules.d/60-persistent-storage.rules
+index fc7f733..99e0c9a 100644
+--- a/rules.d/60-persistent-storage.rules
++++ b/rules.d/60-persistent-storage.rules
+@@ -59,14 +59,20 @@ KERNEL=="sd*[!0-9]|sr*", ENV{ID_SERIAL}!="?*", SUBSYSTEMS=="scsi", ATTRS{type}==
+ # Run ata_id on non-removable USB Mass Storage (SATA/PATA disks in enclosures)
+ KERNEL=="sd*[!0-9]|sr*", ENV{ID_SERIAL}!="?*", ATTR{removable}=="0", SUBSYSTEMS=="usb", IMPORT{program}="ata_id --export $devnode"
+ 
+-# Fall back usb_id for USB devices
+-KERNEL=="sd*[!0-9]|sr*", ENV{ID_SERIAL}!="?*", SUBSYSTEMS=="usb", IMPORT{builtin}="usb_id"
++# Also import properties from usb_id for USB devices
++KERNEL=="sd*[!0-9]|sr*", SUBSYSTEMS=="usb", IMPORT{builtin}="usb_id"
+ 
+ # SCSI devices
+ KERNEL=="sd*[!0-9]|sr*", ENV{ID_SERIAL}!="?*", IMPORT{program}="scsi_id --export --whitelisted -d $devnode", ENV{ID_BUS}="scsi"
+ KERNEL=="cciss*", ENV{DEVTYPE}=="disk", ENV{ID_SERIAL}!="?*", IMPORT{program}="scsi_id --export --whitelisted -d $devnode", ENV{ID_BUS}="cciss"
+ KERNEL=="sd*|sr*|cciss*", ENV{DEVTYPE}=="disk", ENV{ID_SERIAL}=="?*", SYMLINK+="disk/by-id/$env{ID_BUS}-$env{ID_SERIAL}"
+ KERNEL=="sd*|cciss*", ENV{DEVTYPE}=="partition", ENV{ID_SERIAL}=="?*", SYMLINK+="disk/by-id/$env{ID_BUS}-$env{ID_SERIAL}-part%n"
++# Previously, ata_id in the above might not be able to retrieve attributes correctly,
++# and properties from usb_id were used as a fallback. See issue #24921 and PR #24923.
++# To keep backward compatibility, still we need to create symlinks based on USB serial.
++# See issue #25179.
++KERNEL=="sd*|sr*|cciss*", ENV{DEVTYPE}=="disk", ENV{ID_USB_SERIAL}=="?*", SYMLINK+="disk/by-id/usb-$env{ID_USB_SERIAL}"
++KERNEL=="sd*|cciss*", ENV{DEVTYPE}=="partition", ENV{ID_USB_SERIAL}=="?*", SYMLINK+="disk/by-id/usb-$env{ID_USB_SERIAL}-part%n"
+ 
+ # PMEM devices
+ KERNEL=="pmem*", ENV{DEVTYPE}=="disk", ATTRS{uuid}=="?*", SYMLINK+="disk/by-id/pmem-$attr{uuid}"
+diff --git a/src/udev/udev-builtin-usb_id.c b/src/udev/udev-builtin-usb_id.c
+index fa554e7..3910ffa 100644
+--- a/src/udev/udev-builtin-usb_id.c
++++ b/src/udev/udev-builtin-usb_id.c
+@@ -430,21 +430,52 @@ fallback:
+         if (!isempty(instance_str))
+                 strpcpyl(&s, l, "-", instance_str, NULL);
+ 
+-        udev_builtin_add_property(dev, test, "ID_VENDOR", vendor_str);
+-        udev_builtin_add_property(dev, test, "ID_VENDOR_ENC", vendor_str_enc);
+-        udev_builtin_add_property(dev, test, "ID_VENDOR_ID", vendor_id);
+-        udev_builtin_add_property(dev, test, "ID_MODEL", model_str);
+-        udev_builtin_add_property(dev, test, "ID_MODEL_ENC", model_str_enc);
+-        udev_builtin_add_property(dev, test, "ID_MODEL_ID", product_id);
+-        udev_builtin_add_property(dev, test, "ID_REVISION", revision_str);
+-        udev_builtin_add_property(dev, test, "ID_SERIAL", serial);
++        if (sd_device_get_property_value(dev, "ID_BUS", NULL) >= 0)
++                log_device_debug(dev, "ID_BUS property is already set, setting only properties prefixed with \"ID_USB_\".");
++        else {
++                udev_builtin_add_property(dev, test, "ID_BUS", "usb");
++
++                udev_builtin_add_property(dev, test, "ID_MODEL", model_str);
++                udev_builtin_add_property(dev, test, "ID_MODEL_ENC", model_str_enc);
++                udev_builtin_add_property(dev, test, "ID_MODEL_ID", product_id);
++
++                udev_builtin_add_property(dev, test, "ID_SERIAL", serial);
++                if (!isempty(serial_str))
++                        udev_builtin_add_property(dev, test, "ID_SERIAL_SHORT", serial_str);
++
++                udev_builtin_add_property(dev, test, "ID_VENDOR", vendor_str);
++                udev_builtin_add_property(dev, test, "ID_VENDOR_ENC", vendor_str_enc);
++                udev_builtin_add_property(dev, test, "ID_VENDOR_ID", vendor_id);
++
++                udev_builtin_add_property(dev, test, "ID_REVISION", revision_str);
++
++                if (!isempty(type_str))
++                        udev_builtin_add_property(dev, test, "ID_TYPE", type_str);
++
++                if (!isempty(instance_str))
++                        udev_builtin_add_property(dev, test, "ID_INSTANCE", instance_str);
++        }
++
++        /* Also export the same values in the above by prefixing ID_USB_. */
++        udev_builtin_add_property(dev, test, "ID_USB_MODEL", model_str);
++        udev_builtin_add_property(dev, test, "ID_USB_MODEL_ENC", model_str_enc);
++        udev_builtin_add_property(dev, test, "ID_USB_MODEL_ID", product_id);
++        udev_builtin_add_property(dev, test, "ID_USB_SERIAL", serial);
+         if (!isempty(serial_str))
+-                udev_builtin_add_property(dev, test, "ID_SERIAL_SHORT", serial_str);
++                udev_builtin_add_property(dev, test, "ID_USB_SERIAL_SHORT", serial_str);
++
++        udev_builtin_add_property(dev, test, "ID_USB_VENDOR", vendor_str);
++        udev_builtin_add_property(dev, test, "ID_USB_VENDOR_ENC", vendor_str_enc);
++        udev_builtin_add_property(dev, test, "ID_USB_VENDOR_ID", vendor_id);
++
++        udev_builtin_add_property(dev, test, "ID_USB_REVISION", revision_str);
++
+         if (!isempty(type_str))
+-                udev_builtin_add_property(dev, test, "ID_TYPE", type_str);
++                udev_builtin_add_property(dev, test, "ID_USB_TYPE", type_str);
++
+         if (!isempty(instance_str))
+-                udev_builtin_add_property(dev, test, "ID_INSTANCE", instance_str);
+-        udev_builtin_add_property(dev, test, "ID_BUS", "usb");
++                udev_builtin_add_property(dev, test, "ID_USB_INSTANCE", instance_str);
++
+         if (!isempty(packed_if_str))
+                 udev_builtin_add_property(dev, test, "ID_USB_INTERFACES", packed_if_str);
+         if (ifnum)

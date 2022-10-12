@@ -28,6 +28,8 @@ Drop-bundled-copy-of-linux-if_arp.h.patch
 virt-Support-detection-for-ARM64-Hyper-V-guests.patch
 virt-Fix-the-detection-for-Hyper-V-VMs.patch
 virt-detect-OpenStack-Nova-instance.patch
+ata_id-Fixed-getting-Response-Code-from-SCSI-Sense-Data-2.patch
+udev-always-create-device-symlinks-for-USB-disks.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
