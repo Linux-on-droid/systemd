@@ -1,0 +1,55 @@
+From: Yu Watanabe <watanabe.yu+github@gmail.com>
+Date: Thu, 7 Jul 2022 18:27:02 +0900
+Subject: time-util: fix buffer-over-run
+
+Fixes #23928.
+
+(cherry picked from commit 9102c625a673a3246d7e73d8737f3494446bad4e)
+(cherry picked from commit 72d4c15a946d20143cd4c6783c802124bc894dc7)
+(cherry picked from commit c32530f5bdd11c74e8f5a86eecd7c36b3bae739f)
+(cherry picked from commit b2a25b5e64345bd0bb7697a956d33afd6980286a)
+(cherry picked from commit 858dc1ad609290cc4ca288acf87046ee295c3d51)
+---
+ src/basic/time-util.c     | 2 +-
+ src/test/test-time-util.c | 8 ++++++++
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/src/basic/time-util.c b/src/basic/time-util.c
+index 5318d63..1909710 100644
+--- a/src/basic/time-util.c
++++ b/src/basic/time-util.c
+@@ -574,7 +574,7 @@ char *format_timespan(char *buf, size_t l, usec_t t, usec_t accuracy) {
+                         t = b;
+                 }
+ 
+-                n = MIN((size_t) k, l);
++                n = MIN((size_t) k, l-1);
+ 
+                 l -= n;
+                 p += n;
+diff --git a/src/test/test-time-util.c b/src/test/test-time-util.c
+index cc391e8..877b24c 100644
+--- a/src/test/test-time-util.c
++++ b/src/test/test-time-util.c
+@@ -243,6 +243,13 @@ static void test_format_timespan(usec_t accuracy) {
+         test_format_timespan_one(USEC_INFINITY, accuracy);
+ }
+ 
++static void test_format_timespan2(void) {
++        /* See issue #23928. */
++        _cleanup_free_ char *buf;
++        assert_se(buf = new(char, 5));
++        assert_se(buf == format_timespan(buf, 5, 100005, 1000));
++}
++
+ static void test_timezone_is_valid(void) {
+         log_info("/* %s */", __func__);
+ 
+@@ -533,6 +540,7 @@ int main(int argc, char *argv[]) {
+         test_format_timespan(1);
+         test_format_timespan(USEC_PER_MSEC);
+         test_format_timespan(USEC_PER_SEC);
++        test_format_timespan2();
+         test_timezone_is_valid();
+         test_get_timezones();
+         test_usec_add();
