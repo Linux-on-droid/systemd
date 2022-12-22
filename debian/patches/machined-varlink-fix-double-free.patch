@@ -1,0 +1,22 @@
+From: David Tardon <dtardon@redhat.com>
+Date: Mon, 2 Aug 2021 13:31:04 +0200
+Subject: machined-varlink: fix double free
+
+Fixes: #18599
+---
+ src/machine/machined-varlink.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/machine/machined-varlink.c b/src/machine/machined-varlink.c
+index 2d6c199..8c2e456 100644
+--- a/src/machine/machined-varlink.c
++++ b/src/machine/machined-varlink.c
+@@ -297,7 +297,7 @@ static int group_lookup_name(Manager *m, const char *name, gid_t *ret_gid, char
+                 desc = mfree(desc);
+ 
+         *ret_gid = converted_gid;
+-        *ret_description = desc;
++        *ret_description = TAKE_PTR(desc);
+         return 0;
+ }
+ 

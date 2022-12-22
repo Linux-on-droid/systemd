@@ -33,6 +33,7 @@ udev-always-create-device-symlinks-for-USB-disks.patch
 logind-fix-getting-property-OnExternalPower-via-D-Bus.patch
 coredump-do-not-allow-user-to-access-coredumps-with-chang.patch
 time-util-fix-buffer-over-run.patch
+machined-varlink-fix-double-free.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
