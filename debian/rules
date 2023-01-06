@@ -88,6 +88,7 @@ CONFFLAGS = \
 	-Dhwdb=true \
 	-Dsysusers=true \
 	-Dinstall-tests=$(if $(filter noinsttest,$(DEB_BUILD_PROFILES)),false,true) \
+	-Dlibcryptsetup-plugins=false \
 	-Defi=true \
 	-Dman=$(if $(filter nodoc,$(DEB_BUILD_PROFILES)),false,true) \
 	-Dtranslations=true \
@@ -102,7 +103,6 @@ ifeq (, $(filter stage1, $(DEB_BUILD_PROFILES)))
 CONFFLAGS += \
 	-Daudit=true \
 	-Dlibcryptsetup=true \
-	-Dlibcryptsetup-plugins=true \
 	-Dcoredump=true \
 	-Delfutils=true \
 	-Dapparmor=true \
@@ -125,7 +125,6 @@ else
 CONFFLAGS += \
 	-Daudit=false \
 	-Dlibcryptsetup=false \
-	-Dlibcryptsetup-plugins=false \
 	-Dcoredump=false \
 	-Delfutils=false \
 	-Dapparmor=false \
