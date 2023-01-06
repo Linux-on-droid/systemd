@@ -125,7 +125,6 @@ static int parse_argv(int argc, char *argv[]) {
 
 static int run(int argc, char *argv[]) {
         _cleanup_(loop_device_unrefp) LoopDevice *loop_device = NULL;
-        _cleanup_(decrypted_image_unrefp) DecryptedImage *decrypted_image = NULL;
         _cleanup_(umount_and_rmdir_and_freep) char *unlink_dir = NULL;
         sd_id128_t id;
         int r;
@@ -148,8 +147,7 @@ static int run(int argc, char *argv[]) {
                                 DISSECT_IMAGE_FSCK |
                                 DISSECT_IMAGE_GROWFS,
                                 &unlink_dir,
-                                &loop_device,
-                                &decrypted_image);
+                                &loop_device);
                 if (r < 0)
                         return r;
 
@@ -166,7 +164,7 @@ static int run(int argc, char *argv[]) {
                         return r;
 
                 etc_machine_id = prefix_roota(arg_root, "/etc/machine-id");
-                r = id128_read(etc_machine_id, ID128_PLAIN, &id);
+                r = id128_read(etc_machine_id, ID128_FORMAT_PLAIN, &id);
                 if (r < 0)
                         return log_error_errno(r, "Failed to read machine ID back: %m");
         } else {

@@ -20,6 +20,7 @@
 #define BUS_ERROR_UNIT_MASKED                  "org.freedesktop.systemd1.UnitMasked"
 #define BUS_ERROR_UNIT_GENERATED               "org.freedesktop.systemd1.UnitGenerated"
 #define BUS_ERROR_UNIT_LINKED                  "org.freedesktop.systemd1.UnitLinked"
+#define BUS_ERROR_UNIT_BAD_PATH                "org.freedesktop.systemd1.UnitBadPath"
 #define BUS_ERROR_JOB_TYPE_NOT_APPLICABLE      "org.freedesktop.systemd1.JobTypeNotApplicable"
 #define BUS_ERROR_NO_ISOLATION                 "org.freedesktop.systemd1.NoIsolation"
 #define BUS_ERROR_SHUTTING_DOWN                "org.freedesktop.systemd1.ShuttingDown"
@@ -30,6 +31,7 @@
 #define BUS_ERROR_NOTHING_TO_CLEAN             "org.freedesktop.systemd1.NothingToClean"
 #define BUS_ERROR_UNIT_BUSY                    "org.freedesktop.systemd1.UnitBusy"
 #define BUS_ERROR_UNIT_INACTIVE                "org.freedesktop.systemd1.UnitInactive"
+#define BUS_ERROR_FREEZE_CANCELLED             "org.freedesktop.systemd1.FreezeCancelled"
 
 #define BUS_ERROR_NO_SUCH_MACHINE              "org.freedesktop.machine1.NoSuchMachine"
 #define BUS_ERROR_NO_SUCH_IMAGE                "org.freedesktop.machine1.NoSuchImage"

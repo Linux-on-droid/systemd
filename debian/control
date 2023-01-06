@@ -8,12 +8,15 @@ Uploaders: Michael Biebl <biebl@debian.org>,
            Martin Pitt <mpitt@debian.org>,
            Felipe Sateler <fsateler@debian.org>,
            Luca Boccassi <bluca@debian.org>,
-Standards-Version: 4.6.1
+Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/systemd-team/systemd.git
 Vcs-Browser: https://salsa.debian.org/systemd-team/systemd
 Homepage: https://www.freedesktop.org/wiki/Software/systemd
 Build-Depends: debhelper-compat (= 13),
+               dh-exec,
+               dh-sequence-installnss,
+               dh-sequence-installsysusers,
                pkg-config,
                xsltproc <!nodoc>,
                docbook-xsl <!nodoc>,
@@ -21,15 +24,16 @@ Build-Depends: debhelper-compat (= 13),
                meson (>= 0.53.2),
                gettext,
                gperf,
-               gnu-efi [amd64 i386 arm64 armhf],
+               gnu-efi [amd64 i386 arm64 armhf riscv64],
                libcap-dev,
+               libcrypt-dev,
                libpam0g-dev,
                libapparmor-dev (>= 2.13) <!stage1>,
                libidn2-dev <!stage1>,
                libiptc-dev <!stage1>,
                libaudit-dev <!stage1>,
                libdbus-1-dev (>= 1.3.2) <!nocheck> <!noinsttest>,
-               libcryptsetup-dev (>= 2:1.6.0) <!stage1>,
+               libcryptsetup-dev (>= 2:2.4) <!stage1>,
                libselinux1-dev (>= 2.1.9),
                libacl1-dev,
                liblzma-dev,
@@ -51,13 +55,15 @@ Build-Depends: debhelper-compat (= 13),
                libzstd-dev (>= 1.4.0),
                libtss2-dev <!stage1>,
                libfido2-dev <!stage1>,
+               libp11-kit-dev <!stage1>,
                libssl-dev <!stage1>,
+               libqrencode-dev <!stage1>,
                linux-base <!nocheck>,
                acl <!nocheck>,
                python3:native,
                python3-jinja2:native,
                python3-lxml:native,
-               python3-pyparsing:native <!nocheck>,
+               python3-pyparsing <!nocheck>,
                python3-evdev:native <!nocheck>,
                tzdata <!nocheck>,
                libcap2-bin <!nocheck>,
@@ -76,18 +82,20 @@ Suggests: systemd-container,
           systemd-homed,
           systemd-userdbd,
           systemd-boot,
+          systemd-resolved,
           libfido2-1,
+          libp11-kit0,
+          libqrencode4,
           libtss2-esys-3.0.2-0,
           libtss2-mu0,
           libtss2-rc0,
-          policykit-1
+          polkitd | policykit-1,
 Pre-Depends: ${shlibs:Pre-Depends},
              ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          libsystemd0 (= ${binary:Version}),
          mount,
-         adduser,
 Conflicts: consolekit,
            libpam-ck-connector,
            systemd-shim,
@@ -158,7 +166,6 @@ Multi-Arch: foreign
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd,
-         adduser
 Description: tools for sending and receiving remote journal logs
  This package provides tools for sending and receiving remote journal logs:
   * systemd-journal-remote
@@ -171,7 +178,6 @@ Architecture: linux-any
 Multi-Arch: foreign
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         adduser,
          systemd
 Recommends: libdw1
 Conflicts: core-dump-handler
@@ -188,7 +194,6 @@ Multi-Arch: foreign
 Priority: standard
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         adduser,
          systemd
 Breaks: systemd (<< 245.4-2~),
 Conflicts: time-daemon
@@ -271,11 +276,11 @@ Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         systemd (= ${binary:Version}),
+         systemd-resolved (= ${binary:Version}),
 Description: nss module to resolve names via systemd-resolved
  nss-resolve is a plugin for the GNU Name Service Switch (NSS) functionality
  of the GNU C Library (glibc) providing DNS and LLMNR resolution to programs via
- the systemd-resolved daemon (provided in the systemd package).
+ the systemd-resolved daemon (provided in the systemd-resolved package).
  .
  Installing this package automatically adds resolve to /etc/nsswitch.conf.
 
@@ -428,7 +433,6 @@ Package: systemd-oomd
 Architecture: linux-any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         adduser,
 Breaks: systemd (<< 250.2-2~)
 Replaces: systemd (<< 250.2-2~)
 Description: userspace out-of-memory (OOM) killer
@@ -465,7 +469,7 @@ Description: home area manager
  directories on user login, tools and documentation.
 
 Package: systemd-boot
-Architecture: amd64 i386 arm64 armhf
+Architecture: amd64 i386 arm64 armhf riscv64
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          systemd-boot-efi (= ${binary:Version}),
@@ -483,7 +487,7 @@ Description: simple UEFI boot manager - tools and services
  systemd-boot.
 
 Package: systemd-boot-efi
-Architecture: amd64 i386 arm64 armhf
+Architecture: amd64 i386 arm64 armhf riscv64
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends},
 Depends: ${misc:Depends},
@@ -495,3 +499,26 @@ Description: simple UEFI boot manager - EFI binaries
  line. It supports systems with UEFI firmware only.
  .
  This package contains the EFI binaries.
+
+Package: systemd-resolved
+Multi-Arch: foreign
+Architecture: linux-any
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         systemd (= ${binary:Version}),
+         default-dbus-system-bus | dbus-system-bus
+Recommends: libnss-myhostname,
+            libnss-resolve,
+Suggests: polkitd | policykit-1,
+Provides: resolvconf
+Conflicts: resolvconf
+Replaces: resolvconf,
+          systemd (<< 251.3-2~)
+Breaks: systemd (<< 251.3-2~)
+Description: systemd DNS resolver
+ This package provides systemd's DNS resolver and the command line tool to
+ manage it.
+ .
+ Installing this package automatically overwrites /etc/resolv.conf and switches
+ it to be managed by systemd-resolved.

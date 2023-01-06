@@ -86,9 +86,8 @@ static uint32_t graceful_add_offset_1900_1970(time_t t) {
 
 static int manager_timeout(sd_event_source *source, usec_t usec, void *userdata) {
         _cleanup_free_ char *pretty = NULL;
-        Manager *m = userdata;
+        Manager *m = ASSERT_PTR(userdata);
 
-        assert(m);
         assert(m->current_server_name);
         assert(m->current_server_address);
 
@@ -120,8 +119,10 @@ static int manager_send_request(Manager *m) {
         m->event_timeout = sd_event_source_unref(m->event_timeout);
 
         r = manager_listen_setup(m);
-        if (r < 0)
-                return log_warning_errno(r, "Failed to set up connection socket: %m");
+        if (r < 0) {
+                log_warning_errno(r, "Failed to set up connection socket: %m");
+                return manager_connect(m);
+        }
 
         /*
          * Set transmit timestamp, remember it; the server will send that back
@@ -173,9 +174,7 @@ static int manager_send_request(Manager *m) {
 }
 
 static int manager_timer(sd_event_source *source, usec_t usec, void *userdata) {
-        Manager *m = userdata;
-
-        assert(m);
+        Manager *m = ASSERT_PTR(userdata);
 
         return manager_send_request(m);
 }
@@ -207,9 +206,7 @@ static int manager_arm_timer(Manager *m, usec_t next) {
 }
 
 static int manager_clock_watch(sd_event_source *source, int fd, uint32_t revents, void *userdata) {
-        Manager *m = userdata;
-
-        assert(m);
+        Manager *m = ASSERT_PTR(userdata);
 
         /* rearm timer */
         manager_clock_watch_setup(m);
@@ -395,7 +392,7 @@ static void manager_adjust_poll(Manager *m, double offset, bool spike) {
 }
 
 static int manager_receive_response(sd_event_source *source, int fd, uint32_t revents, void *userdata) {
-        Manager *m = userdata;
+        Manager *m = ASSERT_PTR(userdata);
         struct ntp_msg ntpmsg;
 
         struct iovec iov = {
@@ -421,7 +418,6 @@ static int manager_receive_response(sd_event_source *source, int fd, uint32_t re
         int leap_sec, r;
 
         assert(source);
-        assert(m);
 
         if (revents & (EPOLLHUP|EPOLLERR)) {
                 log_warning("Server connection returned error.");
@@ -536,11 +532,11 @@ static int manager_receive_response(sd_event_source *source, int fd, uint32_t re
         manager_adjust_poll(m, offset, spike);
 
         log_debug("NTP response:\n"
-                  "  leap         : %u\n"
-                  "  version      : %u\n"
-                  "  mode         : %u\n"
+                  "  leap         : %i\n"
+                  "  version      : %i\n"
+                  "  mode         : %i\n"
                   "  stratum      : %u\n"
-                  "  precision    : %.6f sec (%d)\n"
+                  "  precision    : %.6f sec (%i)\n"
                   "  root distance: %.6f sec\n"
                   "  reference    : %.4s\n"
                   "  origin       : %.3f\n"
@@ -758,7 +754,7 @@ static int manager_resolve_handler(sd_resolve_query *q, int ret, const struct ad
                 assert(ai->ai_addrlen >= offsetof(struct sockaddr, sa_data));
 
                 if (!IN_SET(ai->ai_addr->sa_family, AF_INET, AF_INET6)) {
-                        log_warning("Unsuitable address protocol for %s", m->current_server_name->string);
+                        log_debug("Ignoring unsuitable address protocol for %s.", m->current_server_name->string);
                         continue;
                 }
 
@@ -783,9 +779,7 @@ static int manager_resolve_handler(sd_resolve_query *q, int ret, const struct ad
 }
 
 static int manager_retry_connect(sd_event_source *source, usec_t usec, void *userdata) {
-        Manager *m = userdata;
-
-        assert(m);
+        Manager *m = ASSERT_PTR(userdata);
 
         return manager_connect(m);
 }
@@ -814,11 +808,6 @@ int manager_connect(Manager *m) {
         if (m->current_server_address && m->current_server_address->addresses_next)
                 manager_set_server_address(m, m->current_server_address->addresses_next);
         else {
-                static const struct addrinfo hints = {
-                        .ai_flags = AI_NUMERICSERV|AI_ADDRCONFIG,
-                        .ai_socktype = SOCK_DGRAM,
-                };
-
                 /* Hmm, we are through all addresses, let's look for the next host instead */
                 if (m->current_server_name && m->current_server_name->names_next)
                         manager_set_server_name(m, m->current_server_name->names_next);
@@ -885,6 +874,12 @@ int manager_connect(Manager *m) {
                 server_name_flush_addresses(m->current_server_name);
 
                 log_debug("Resolving %s...", m->current_server_name->string);
+
+                struct addrinfo hints = {
+                        .ai_flags = AI_NUMERICSERV|AI_ADDRCONFIG,
+                        .ai_socktype = SOCK_DGRAM,
+                        .ai_family = socket_ipv6_is_supported() ? AF_UNSPEC : AF_INET,
+                };
 
                 r = resolve_getaddrinfo(m->resolve, &m->resolve_query, m->current_server_name->string, "123", &hints, manager_resolve_handler, NULL, m);
                 if (r < 0)
@@ -980,7 +975,7 @@ static int manager_network_read_link_servers(Manager *m) {
         if (r < 0) {
                 if (r == -ENOMEM)
                         log_oom();
-                else
+                else if (r != -ENODATA)
                         log_debug_errno(r, "Failed to get link NTP servers: %m");
                 goto clear;
         }
@@ -1040,11 +1035,9 @@ bool manager_is_connected(Manager *m) {
 }
 
 static int manager_network_event_handler(sd_event_source *s, int fd, uint32_t revents, void *userdata) {
-        Manager *m = userdata;
+        Manager *m = ASSERT_PTR(userdata);
         bool changed, connected, online;
         int r;
-
-        assert(m);
 
         sd_network_monitor_flush(m->network_monitor);
 
@@ -1165,9 +1158,7 @@ int manager_new(Manager **ret) {
 }
 
 static int manager_save_time_handler(sd_event_source *s, uint64_t usec, void *userdata) {
-        Manager *m = userdata;
-
-        assert(m);
+        Manager *m = ASSERT_PTR(userdata);
 
         (void) manager_save_time_and_rearm(m, USEC_INFINITY);
         return 0;

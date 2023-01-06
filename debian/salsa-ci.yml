@@ -1,0 +1,13 @@
+include:
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+
+variables:
+  # some tests do not work in the salsa-ci infrastructure at build time,
+  # but work fine in the autopkgtest job anyway, so skip them in the build step
+  DEB_BUILD_OPTIONS: "nocheck"
+  RELEASE: 'bullseye-backports'
+  SALSA_CI_LINTIAN_SUPPRESS_TAGS: "backports-changes-missing,newer-standards-version"
+  SALSA_CI_DISABLE_VERSION_BUMP: 'true'
+  # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1011649
+  SALSA_CI_DISABLE_PIUPARTS: 1

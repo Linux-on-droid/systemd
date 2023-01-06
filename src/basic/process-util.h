@@ -150,6 +150,7 @@ typedef enum ForkFlags {
         FORK_STDOUT_TO_STDERR   = 1 << 11, /* Make stdout a copy of stderr */
         FORK_FLUSH_STDIO        = 1 << 12, /* fflush() stdout (and stderr) before forking */
         FORK_NEW_USERNS         = 1 << 13, /* Run child in its own user namespace */
+        FORK_CLOEXEC_OFF        = 1 << 14, /* In the child: turn off O_CLOEXEC on all fds in except_fds[] */
 } ForkFlags;
 
 int safe_fork_full(const char *name, const int except_fds[], size_t n_except_fds, ForkFlags flags, pid_t *ret_pid);
@@ -189,6 +190,8 @@ int pidfd_get_pid(int fd, pid_t *ret);
 int setpriority_closest(int priority);
 
 bool invoked_as(char *argv[], const char *token);
+
+bool invoked_by_systemd(void);
 
 _noreturn_ void freeze(void);
 

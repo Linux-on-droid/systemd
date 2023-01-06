@@ -19,14 +19,17 @@
 #include "util.h"
 
 _public_ char *sd_id128_to_string(sd_id128_t id, char s[_SD_ARRAY_STATIC SD_ID128_STRING_MAX]) {
+        size_t k = 0;
+
         assert_return(s, NULL);
 
-        for (size_t n = 0; n < 16; n++) {
-                s[n*2] = hexchar(id.bytes[n] >> 4);
-                s[n*2+1] = hexchar(id.bytes[n] & 0xF);
+        for (size_t n = 0; n < sizeof(sd_id128_t); n++) {
+                s[k++] = hexchar(id.bytes[n] >> 4);
+                s[k++] = hexchar(id.bytes[n] & 0xF);
         }
 
-        s[SD_ID128_STRING_MAX-1] = 0;
+        assert(k == SD_ID128_STRING_MAX - 1);
+        s[k] = 0;
 
         return s;
 }
@@ -38,7 +41,7 @@ _public_ char *sd_id128_to_uuid_string(sd_id128_t id, char s[_SD_ARRAY_STATIC SD
 
         /* Similar to sd_id128_to_string() but formats the result as UUID instead of plain hex chars */
 
-        for (size_t n = 0; n < 16; n++) {
+        for (size_t n = 0; n < sizeof(sd_id128_t); n++) {
 
                 if (IN_SET(n, 4, 6, 8, 10))
                         s[k++] = '-';
@@ -53,14 +56,14 @@ _public_ char *sd_id128_to_uuid_string(sd_id128_t id, char s[_SD_ARRAY_STATIC SD
         return s;
 }
 
-_public_ int sd_id128_from_string(const char s[], sd_id128_t *ret) {
-        unsigned n, i;
+_public_ int sd_id128_from_string(const char *s, sd_id128_t *ret) {
+        size_t n, i;
         sd_id128_t t;
         bool is_guid = false;
 
         assert_return(s, -EINVAL);
 
-        for (n = 0, i = 0; n < 16;) {
+        for (n = 0, i = 0; n < sizeof(sd_id128_t);) {
                 int a, b;
 
                 if (s[i] == '-') {
@@ -90,7 +93,7 @@ _public_ int sd_id128_from_string(const char s[], sd_id128_t *ret) {
                 t.bytes[n++] = (a << 4) | b;
         }
 
-        if (i != (is_guid ? 36 : 32))
+        if (i != (is_guid ? SD_ID128_UUID_STRING_MAX : SD_ID128_STRING_MAX) - 1)
                 return -EINVAL;
 
         if (s[i] != 0)
@@ -101,6 +104,22 @@ _public_ int sd_id128_from_string(const char s[], sd_id128_t *ret) {
         return 0;
 }
 
+_public_ int sd_id128_string_equal(const char *s, sd_id128_t id) {
+        sd_id128_t parsed;
+        int r;
+
+        if (!s)
+                return false;
+
+        /* Checks if the specified string matches a valid string representation of the specified 128 bit ID/uuid */
+
+        r = sd_id128_from_string(s, &parsed);
+        if (r < 0)
+                return r;
+
+        return sd_id128_equal(parsed, id);
+}
+
 _public_ int sd_id128_get_machine(sd_id128_t *ret) {
         static thread_local sd_id128_t saved_machine_id = {};
         int r;
@@ -108,7 +127,7 @@ _public_ int sd_id128_get_machine(sd_id128_t *ret) {
         assert_return(ret, -EINVAL);
 
         if (sd_id128_is_null(saved_machine_id)) {
-                r = id128_read("/etc/machine-id", ID128_PLAIN, &saved_machine_id);
+                r = id128_read("/etc/machine-id", ID128_FORMAT_PLAIN, &saved_machine_id);
                 if (r < 0)
                         return r;
 
@@ -127,7 +146,7 @@ _public_ int sd_id128_get_boot(sd_id128_t *ret) {
         assert_return(ret, -EINVAL);
 
         if (sd_id128_is_null(saved_boot_id)) {
-                r = id128_read("/proc/sys/kernel/random/boot_id", ID128_UUID, &saved_boot_id);
+                r = id128_read("/proc/sys/kernel/random/boot_id", ID128_FORMAT_UUID, &saved_boot_id);
                 if (r < 0)
                         return r;
         }
@@ -256,7 +275,10 @@ _public_ int sd_id128_get_invocation(sd_id128_t *ret) {
                 /* We first check the environment. The environment variable is primarily relevant for user
                  * services, and sufficiently safe as long as no privilege boundary is involved. */
                 r = get_invocation_from_environment(&saved_invocation_id);
-                if (r < 0 && r != -ENXIO)
+                if (r >= 0) {
+                        *ret = saved_invocation_id;
+                        return 0;
+                } else if (r != -ENXIO)
                         return r;
 
                 /* The kernel keyring is relevant for system services (as for user services we don't store
@@ -272,13 +294,10 @@ _public_ int sd_id128_get_invocation(sd_id128_t *ret) {
 
 _public_ int sd_id128_randomize(sd_id128_t *ret) {
         sd_id128_t t;
-        int r;
 
         assert_return(ret, -EINVAL);
 
-        r = genuine_random_bytes(&t, sizeof(t), 0);
-        if (r < 0)
-                return r;
+        random_bytes(&t, sizeof(t));
 
         /* Turn this into a valid v4 UUID, to be nice. Note that we
          * only guarantee this for newly generated UUIDs, not for

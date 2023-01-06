@@ -51,6 +51,9 @@ All tools:
 * `$SYSTEMD_FSTAB` — if set, use this path instead of `/etc/fstab`. Only useful
   for debugging.
 
+* `$SYSTEMD_SYSROOT_FSTAB` — if set, use this path instead of
+  `/sysroot/etc/fstab`. Only useful for debugging `systemd-fstab-generator`.
+
 * `$SYSTEMD_CRYPTTAB` — if set, use this path instead of `/etc/crypttab`. Only
   useful for debugging. Currently only supported by
   `systemd-cryptsetup-generator`.
@@ -70,13 +73,9 @@ All tools:
   (relevant in particular for the system manager and `systemd-hostnamed`).
   Must be a valid hostname (either a single label or a FQDN).
 
-* `$SYSTEMD_IN_INITRD=[auto|lenient|0|1]` — if set, specifies initrd detection
-  method. Defaults to `auto`. Behavior is defined as follows:
-  `auto`: Checks if `/etc/initrd-release` exists, and a temporary fs is mounted
-          on `/`. If both conditions meet, then it's in initrd.
-  `lenient`: Similar to `auto`, but the rootfs check is skipped.
-  `0|1`: Simply overrides initrd detection. This is useful for debugging and
-         testing initrd-only programs in the main system.
+* `$SYSTEMD_IN_INITRD` — takes a boolean. If set, overrides initrd detection.
+  This is useful for debugging and testing initrd-only programs in the main
+  system.
 
 * `$SYSTEMD_BUS_TIMEOUT=SECS` — specifies the maximum time to wait for method call
   completion. If no time unit is specified, assumes seconds. The usual other units
@@ -269,6 +268,13 @@ All tools:
   it is either set to `system` or `user` depending on whether the NSS/PAM
   module is called by systemd in `--system` or `--user` mode.
 
+* `$SYSTEMD_DEFAULT_MOUNT_RATE_LIMIT_BURST` — can be set to override the mount
+  units burst rate limit for parsing `/proc/self/mountinfo`. On a system with
+  few resources but many mounts the rate limit may be hit, which will cause the
+  processing of mount units to stall. The burst limit may be adjusted when the
+  default is not appropriate for a given system. Defaults to `5`, accepts
+  positive integers.
+
 `systemd-remount-fs`:
 
 * `$SYSTEMD_REMOUNT_ROOT_RW=1` — if set and no entry for the root directory
@@ -282,6 +288,11 @@ All tools:
 * `$SYSTEMD_LIST_NON_UTF8_LOCALES=1` — if set, non-UTF-8 locales are listed among
   the installed ones. By default non-UTF-8 locales are suppressed from the
   selection, since we are living in the 21st century.
+
+`systemd-resolved`:
+
+* `$SYSTEMD_RESOLVED_SYNTHESIZE_HOSTNAME` — if set to "0", `systemd-resolved`
+  won't synthesize system hostname on both regular and reverse lookups.
 
 `systemd-sysext`:
 
@@ -301,6 +312,16 @@ All tools:
   (or another value interpreted as true), these lines will always create
   subvolumes if the backing filesystem supports them. If set to `0`, these
   lines will always create directories.
+
+`systemd-sysusers`
+
+* `SOURCE_DATE_EPOCH` — if unset, the field of the date of last password change
+  in `/etc/shadow` will be the number of days from Jan 1, 1970 00:00 UTC until
+  today. If SOURCE_DATE_EPOCH is set to a valid UNIX epoch value in seconds,
+  then the field will be the number of days until that time instead. This is to
+  support creating bit-by-bit reproducible system images by choosing a
+  reproducible value for the field of the date of last password change in
+  `/etc/shadow`. See: https://reproducible-builds.org/specs/source-date-epoch/
 
 `systemd-sysv-generator`:
 
@@ -376,6 +397,9 @@ disk images with `--image=` or similar:
   directories in `/usr/lib/`, `/run`, …) or passed to the kernel for validation
   against its built-in certificates.
 
+* `$SYSTEMD_DISSECT_VERITY_TIMEOUT_SEC=sec` — takes a timespan, which controls
+  the timeout waiting for the image to be configured. Defaults to 100 msec.
+
 * `$SYSTEMD_LOOP_DIRECT_IO` – takes a boolean, which controls whether to enable
   LO_FLAGS_DIRECT_IO (i.e. direct IO + asynchronous IO) on loopback block
   devices when opening them. Defaults to on, set this to "0" to disable this
@@ -447,3 +471,10 @@ SYSTEMD_HOME_DEBUG_SUFFIX=foo \
   when kernel-install is invoked. This can be useful if kernel-install is invoked
   unconditionally as a child process by another tool, such as package managers
   running kernel-install in a postinstall script.
+
+`systemd-journald`:
+
+* `$SYSTEMD_JOURNAL_COMPACT` - Takes a boolean. If enabled, journal files are written
+  in a more compact format that reduces the amount of disk space required by the
+  journal. Note that journal files in compact mode are limited to 4G to allow use of
+  32-bit offsets. Enabled by default.

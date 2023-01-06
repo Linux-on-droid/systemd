@@ -269,7 +269,7 @@ int reset_terminal_fd(int fd, bool switch_to_text) {
 
         termios.c_iflag &= ~(IGNBRK | BRKINT | ISTRIP | INLCR | IGNCR | IUCLC);
         termios.c_iflag |= ICRNL | IMAXBEL | IUTF8;
-        termios.c_oflag |= ONLCR;
+        termios.c_oflag |= ONLCR | OPOST;
         termios.c_cflag |= CREAD;
         termios.c_lflag = ISIG | ICANON | IEXTEN | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOPRT | ECHOKE;
 
@@ -624,7 +624,7 @@ int vtnr_from_tty(const char *tty) {
         if (!startswith(tty, "tty") )
                 return -EINVAL;
 
-        if (tty[3] < '0' || tty[3] > '9')
+        if (!ascii_isdigit(tty[3]))
                 return -EINVAL;
 
         r = safe_atoi(tty+3, &i);

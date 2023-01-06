@@ -33,7 +33,7 @@ static void test_xescape_full_one(bool eight_bits) {
 
                 assert_se(t = xescape_full("abc\\\"\b\f\n\r\t\v\a\003\177\234\313", "b", i, flags));
 
-                log_info("%02d: <%s>", i, t);
+                log_info("%02u: <%s>", i, t);
 
                 if (i >= full_fit)
                         assert_se(streq(t, escaped));
@@ -51,7 +51,7 @@ static void test_xescape_full_one(bool eight_bits) {
                 assert_se(q = xescape_full("abc\\\"\b\f\n\r\t\v\a\003\177\234\313", "b", i,
                                            flags | XESCAPE_FORCE_ELLIPSIS));
 
-                log_info("%02d: <%s>", i, q);
+                log_info("%02u: <%s>", i, q);
                 if (i > 0)
                         assert_se(endswith(q, "."));
                 assert_se(strlen(q) <= i);
@@ -217,6 +217,22 @@ TEST(quote_command_line) {
                                     "true \"with a \\\"quote\\\"\"");
         test_quote_command_line_one(STRV_MAKE("true", "$dollar"),
                                     "true \"\\$dollar\"");
+}
+
+static void test_octescape_one(const char *s, const char *expected) {
+        _cleanup_free_ char *ret;
+
+        assert_se(ret = octescape(s, strlen_ptr(s)));
+        log_debug("octescape(\"%s\") → \"%s\" (expected: \"%s\")", strnull(s), ret, expected);
+        assert_se(streq(ret, expected));
+}
+
+TEST(octescape) {
+        test_octescape_one(NULL, "");
+        test_octescape_one("", "");
+        test_octescape_one("foo", "foo");
+        test_octescape_one("\"\\\"", "\\042\\134\\042");
+        test_octescape_one("\123\213\222", "\123\\213\\222");
 }
 
 DEFINE_TEST_MAIN(LOG_DEBUG);

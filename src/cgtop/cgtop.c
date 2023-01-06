@@ -55,6 +55,12 @@ typedef struct Group {
         uint64_t io_input_bps, io_output_bps;
 } Group;
 
+typedef enum PidsCount {
+        COUNT_USERSPACE_PROCESSES,
+        COUNT_ALL_PROCESSES,
+        COUNT_PIDS,
+} PidsCount;
+
 static unsigned arg_depth = 3;
 static unsigned arg_iterations = UINT_MAX;
 static bool arg_batch = false;
@@ -65,11 +71,7 @@ static char* arg_root = NULL;
 static bool arg_recursive = true;
 static bool arg_recursive_unset = false;
 
-static enum {
-        COUNT_PIDS,
-        COUNT_USERSPACE_PROCESSES,
-        COUNT_ALL_PROCESSES,
-} arg_count = COUNT_PIDS;
+static PidsCount arg_count = COUNT_PIDS;
 
 static enum {
         ORDER_PATH,
@@ -631,7 +633,7 @@ static void display(Hashmap *a) {
 
         if (on_tty()) {
                 const char *on, *off;
-                unsigned cpu_len = arg_cpu_type == CPU_PERCENT ? 6 : maxtcpu;
+                int cpu_len = arg_cpu_type == CPU_PERCENT ? 6 : maxtcpu;
 
                 path_columns = columns() - 36 - cpu_len;
                 if (path_columns < 10)
@@ -685,7 +687,9 @@ static void display(Hashmap *a) {
                         else
                                 fputs("      -", stdout);
                 } else
-                        printf(" %*s", maxtcpu, MAYBE_FORMAT_TIMESPAN((usec_t) (g->cpu_usage / NSEC_PER_USEC), 0));
+                        printf(" %*s",
+                               (int) maxtcpu,
+                               MAYBE_FORMAT_TIMESPAN((usec_t) (g->cpu_usage / NSEC_PER_USEC), 0));
 
                 printf(" %8s", MAYBE_FORMAT_BYTES(g->memory_valid, g->memory));
                 printf(" %8s", MAYBE_FORMAT_BYTES(g->io_valid, g->io_input_bps));
@@ -913,6 +917,7 @@ static int run(int argc, char *argv[]) {
         usec_t last_refresh = 0;
         bool quit = false, immediate_refresh = false;
         _cleanup_free_ char *root = NULL;
+        PidsCount possible_count;
         CGroupMask mask;
         int r;
 
@@ -926,7 +931,8 @@ static int run(int argc, char *argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Failed to determine supported controllers: %m");
 
-        arg_count = (mask & CGROUP_MASK_PIDS) ? COUNT_PIDS : COUNT_USERSPACE_PROCESSES;
+        possible_count = (mask & CGROUP_MASK_PIDS) ? COUNT_PIDS : COUNT_ALL_PROCESSES;
+        arg_count = MIN(possible_count, arg_count);
 
         if (arg_recursive_unset && arg_count == COUNT_PIDS)
                 return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
@@ -1086,7 +1092,7 @@ static int run(int argc, char *argv[]) {
 
                 default:
                         if (key < ' ')
-                                fprintf(stdout, "\nUnknown key '\\x%x'. Ignoring.", key);
+                                fprintf(stdout, "\nUnknown key '\\x%x'. Ignoring.", (unsigned) key);
                         else
                                 fprintf(stdout, "\nUnknown key '%c'. Ignoring.", key);
                         fflush(stdout);

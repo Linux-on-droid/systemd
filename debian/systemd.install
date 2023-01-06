@@ -1,3 +1,4 @@
+#!/usr/bin/dh-exec
 etc/
 bin/
 lib/modprobe.d/
@@ -14,10 +15,10 @@ usr/lib/sysctl.d/
 usr/lib/sysusers.d/basic.conf
 usr/lib/sysusers.d/systemd-journal.conf
 usr/lib/sysusers.d/systemd-network.conf
-usr/lib/sysusers.d/systemd-resolve.conf
 usr/lib/systemd/
 usr/lib/tmpfiles.d/
 usr/lib/kernel
+<!stage1> usr/lib/*/cryptsetup/
 usr/share/bash-completion/
 usr/share/zsh/vendor-completions/
 usr/share/dbus-1/
