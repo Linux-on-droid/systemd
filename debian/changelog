@@ -1,3 +1,16 @@
+systemd (252.4-1~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports
+  * Revert "Conditionalize installation of cryptsetup plugins in stage1 using
+    dh-exec"
+    This reverts commit 4e94dd6bb1b3054398337a4d00fefee641e126c9.
+  * Revert "Build and install libcryptsetup token plugins"
+    This requires a newer version of cryptsetup which is not available in
+    bullseye or bullseye-backports.
+    This reverts commit 71d9fe8aabd2e4af54f99dfa4f769719ed021d39.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 19 Jan 2023 18:03:48 +0100
+
 systemd (252.4-1) unstable; urgency=medium
 
   * Enable p11kit. Backport patch to dlopen-ify p11kit support and enable
