@@ -1,3 +1,9 @@
+systemd (252.5-2~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 08 Feb 2023 21:22:29 +0100
+
 systemd (252.5-2) unstable; urgency=medium
 
   * Fix boot-and-services autopkgtest.
