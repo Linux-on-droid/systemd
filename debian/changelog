@@ -1,3 +1,11 @@
+systemd (247.3-7+deb11u3) bullseye; urgency=medium
+
+  * udev: fix creating /dev/serial/by-id/ symlinks for USB devices.
+    (Closes: #1035094)
+  * Fix memory leak on daemon-reload
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 30 Apr 2023 13:56:31 +0100
+
 systemd (247.3-7+deb11u2) bullseye; urgency=medium
 
   [ Michael Biebl ]
