@@ -1,0 +1,25 @@
+From: Ali Abdallah <ali.abdallah@suse.com>
+Date: Thu, 21 Jan 2021 07:37:21 +0100
+Subject: Always free deserialized_subscribed on reload
+
+Otherwise, it will keep consuming memory on systemctl daemon-reload.
+
+(cherry picked from commit 3deed59afdc2c18ecb76fe90b9bba0cd66045dfa)
+---
+ src/core/manager.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/core/manager.c b/src/core/manager.c
+index a1d6f7c..6858950 100644
+--- a/src/core/manager.c
++++ b/src/core/manager.c
+@@ -3842,6 +3842,9 @@ int manager_reload(Manager *m) {
+         /* Clean up runtime objects no longer referenced */
+         manager_vacuum(m);
+ 
++        /* Clean up deserialized tracked clients */
++        m->deserialized_subscribed = strv_free(m->deserialized_subscribed);
++
+         /* Consider the reload process complete now. */
+         assert(m->n_reloading > 0);
+         m->n_reloading--;
