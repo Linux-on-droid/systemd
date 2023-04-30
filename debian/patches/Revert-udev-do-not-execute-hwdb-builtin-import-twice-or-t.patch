@@ -1,0 +1,52 @@
+From: =?utf-8?q?Zbigniew_J=C4=99drzejewski-Szmek?= <zbyszek@in.waw.pl>
+Date: Wed, 10 Mar 2021 10:17:23 +0100
+Subject: Revert "udev: do not execute hwdb builtin import twice or thrice"
+
+This reverts commit 876c75fe870846b09b54423a6b719d80bc879b27.
+
+The patch seems to cause usb devices to get some attributes set from the parent
+PCI device. 'hwdb' builtin has support for breaking iteration upwards on usb
+devices. But when '--subsystem=foo' is specified, iteration is continued. I'm
+sure it *could* be figured out, but it seems hard to get all the combinations
+correct. So let's revert to functional status quo ante, even if does the lookup
+more than once unnecessarily.
+
+Fixes #18125.
+
+(cherry picked from commit 451ba55fecd8b494add2001b3ca3c1915c8fd655)
+---
+ rules.d/50-udev-default.rules.in | 3 +--
+ rules.d/60-serial.rules          | 5 ++---
+ 2 files changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/rules.d/50-udev-default.rules.in b/rules.d/50-udev-default.rules.in
+index cef78f9..50747a1 100644
+--- a/rules.d/50-udev-default.rules.in
++++ b/rules.d/50-udev-default.rules.in
+@@ -10,9 +10,8 @@ SUBSYSTEM=="virtio-ports", KERNEL=="vport*", ATTR{name}=="?*", SYMLINK+="virtio-
+ SUBSYSTEM=="rtc", ATTR{hctosys}=="1", SYMLINK+="rtc"
+ SUBSYSTEM=="rtc", KERNEL=="rtc0", SYMLINK+="rtc", OPTIONS+="link_priority=-100"
+ 
+-SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", IMPORT{builtin}="usb_id", IMPORT{builtin}="hwdb --subsystem=usb", GOTO="default_hwdb_imported"
++SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", IMPORT{builtin}="usb_id", IMPORT{builtin}="hwdb --subsystem=usb"
+ ENV{MODALIAS}!="", IMPORT{builtin}="hwdb --subsystem=$env{SUBSYSTEM}"
+-LABEL="default_hwdb_imported"
+ 
+ ACTION!="add", GOTO="default_end"
+ 
+diff --git a/rules.d/60-serial.rules b/rules.d/60-serial.rules
+index b162665..f303e27 100644
+--- a/rules.d/60-serial.rules
++++ b/rules.d/60-serial.rules
+@@ -4,9 +4,8 @@ ACTION=="remove", GOTO="serial_end"
+ SUBSYSTEM!="tty", GOTO="serial_end"
+ 
+ SUBSYSTEMS=="pci", ENV{ID_BUS}="pci", ENV{ID_VENDOR_ID}="$attr{vendor}", ENV{ID_MODEL_ID}="$attr{device}"
+-# We already ran the hwdb builtin for devices with MODALIAS in 50-default.rules.
+-# Let's cover the remaining case here, where we walk up the tree to find a node with $MODALIAS.
+-ENV{MODALIAS}=="", SUBSYSTEMS=="pci", IMPORT{builtin}="hwdb --subsystem=pci"
++SUBSYSTEMS=="pci", IMPORT{builtin}="hwdb --subsystem=pci"
++SUBSYSTEMS=="usb", IMPORT{builtin}="usb_id", IMPORT{builtin}="hwdb --subsystem=usb"
+ 
+ # /dev/serial/by-path/, /dev/serial/by-id/ for USB devices
+ KERNEL!="ttyUSB[0-9]*|ttyACM[0-9]*", GOTO="serial_end"

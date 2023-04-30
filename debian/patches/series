@@ -30,6 +30,8 @@ virt-Fix-the-detection-for-Hyper-V-VMs.patch
 virt-detect-OpenStack-Nova-instance.patch
 ata_id-Fixed-getting-Response-Code-from-SCSI-Sense-Data-2.patch
 udev-always-create-device-symlinks-for-USB-disks.patch
+Revert-udev-do-not-execute-hwdb-builtin-import-twice-or-t.patch
+udev-first-set-properties-based-on-usb-subsystem.patch
 logind-fix-getting-property-OnExternalPower-via-D-Bus.patch
 coredump-do-not-allow-user-to-access-coredumps-with-chang.patch
 time-util-fix-buffer-over-run.patch
