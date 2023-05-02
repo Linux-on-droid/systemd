@@ -37,6 +37,8 @@ coredump-do-not-allow-user-to-access-coredumps-with-chang.patch
 time-util-fix-buffer-over-run.patch
 machined-varlink-fix-double-free.patch
 Always-free-deserialized_subscribed-on-reload.patch
+shared-calendarspec-abort-calculation-after-1000-iteratio.patch
+shared-calendarspec-when-mktime-moves-us-backwards-jump-f.patch
 debian/Use-Debian-specific-config-files.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
