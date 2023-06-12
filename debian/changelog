@@ -1,3 +1,9 @@
+systemd (252.11-1~deb12u1) bookworm; urgency=medium
+
+  * Upload to bookworm.
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 12 Jun 2023 15:27:27 +0100
+
 systemd (252.11-1) unstable; urgency=medium
 
   * New upstream version 252.11
