@@ -8,3 +8,4 @@ variables:
   DEB_BUILD_OPTIONS: "nocheck"
   # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1011649
   SALSA_CI_DISABLE_PIUPARTS: 1
+  RELEASE: 'bookworm'
