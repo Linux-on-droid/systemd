@@ -1,3 +1,10 @@
+systemd (247.3-7+deb11u4) bullseye; urgency=medium
+
+  * backport patches to fix a calendar spec calculation hang on DST change
+    if TZ=Europe/Dublin (Closes: #1033540)
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 18 Jun 2023 15:55:54 +0100
+
 systemd (247.3-7+deb11u3) bullseye; urgency=medium
 
   * udev: fix creating /dev/serial/by-id/ symlinks for USB devices.
