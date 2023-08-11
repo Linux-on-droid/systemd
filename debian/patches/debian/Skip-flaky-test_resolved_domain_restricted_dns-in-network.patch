@@ -10,9 +10,11 @@ Closes: #1025908
  test/networkd-test.py | 1 +
  1 file changed, 1 insertion(+)
 
+diff --git a/test/networkd-test.py b/test/networkd-test.py
+index 84013e7..172b3b3 100755
 --- a/test/networkd-test.py
 +++ b/test/networkd-test.py
-@@ -633,6 +633,7 @@
+@@ -633,6 +633,7 @@ class DnsmasqClientTest(ClientTestBase, unittest.TestCase):
          with open(path) as f:
              sys.stdout.write('\n\n---- {} ----\n{}\n------\n\n'.format(os.path.basename(path), f.read()))
  

@@ -13,10 +13,10 @@ Subject: p11kit: switch to dlopen()
  7 files changed, 202 insertions(+), 60 deletions(-)
 
 diff --git a/meson.build b/meson.build
-index 616493e..39b101b 100644
+index 3bef553..c108004 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -1448,8 +1448,10 @@ if want_p11kit != 'false' and not skip_deps
+@@ -1461,8 +1461,10 @@ if want_p11kit != 'false' and not skip_deps
                                 version : '>= 0.23.3',
                                 required : want_p11kit == 'true')
          have = libp11kit.found()
@@ -28,7 +28,7 @@ index 616493e..39b101b 100644
  endif
  conf.set10('HAVE_P11KIT', have)
 diff --git a/src/shared/meson.build b/src/shared/meson.build
-index 9e11e13..0fb2afd 100644
+index 3e2f327..9c47d2d 100644
 --- a/src/shared/meson.build
 +++ b/src/shared/meson.build
 @@ -459,7 +459,7 @@ libshared_deps = [threads,
@@ -718,10 +718,10 @@ index 85dbb81..55728c2 100644
  }
  
 diff --git a/test/test-functions b/test/test-functions
-index 41925b4..be14dd5 100644
+index 4bdd2a9..f0423dd 100644
 --- a/test/test-functions
 +++ b/test/test-functions
-@@ -1280,7 +1280,7 @@ install_missing_libraries() {
+@@ -1356,7 +1356,7 @@ install_missing_libraries() {
      local lib path
      # A number of dependencies is now optional via dlopen, so the install
      # script will not pick them up, since it looks at linkage.
@@ -730,7 +730,7 @@ index 41925b4..be14dd5 100644
          ddebug "Searching for $lib via pkg-config"
          if pkg-config --exists "$lib"; then
                  path="$(pkg-config --variable=libdir "$lib")"
-@@ -1292,6 +1292,10 @@ install_missing_libraries() {
+@@ -1368,6 +1368,10 @@ install_missing_libraries() {
                  if ! [[ ${lib} =~ ^lib ]]; then
                          lib="lib${lib}"
                  fi
