@@ -41,7 +41,7 @@ index 3e2f327..9c47d2d 100644
                    librt,
                    libseccomp,
 diff --git a/src/shared/pkcs11-util.c b/src/shared/pkcs11-util.c
-index f5f6617..4d7edf8 100644
+index 11cdccc..daee267 100644
 --- a/src/shared/pkcs11-util.c
 +++ b/src/shared/pkcs11-util.c
 @@ -3,6 +3,7 @@
