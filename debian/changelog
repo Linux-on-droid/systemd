@@ -1,3 +1,11 @@
+systemd (252.17-1~deb12u1) bookworm; urgency=medium
+
+  * New upstream version 252.17. Fixes minor security issue in arm64
+    and riscv64 systemd-boot (EFI) with device tree blobs loading:
+    https://github.com/systemd/systemd/security/advisories/GHSA-6m6p-rjcq-334c
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 20 Sep 2023 13:15:14 +0100
+
 systemd (252.16-1~deb12u1) bookworm; urgency=medium
 
   * New upstream version 252.16
