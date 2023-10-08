@@ -29,10 +29,10 @@ index 185e1dc..d963a1d 100644
  
        <varlistentry>
 diff --git a/src/journal/journald-server.c b/src/journal/journald-server.c
-index bced165..6356be2 100644
+index 3e55795..314f684 100644
 --- a/src/journal/journald-server.c
 +++ b/src/journal/journald-server.c
-@@ -2275,7 +2275,7 @@ int server_init(Server *s, const char *namespace) {
+@@ -2273,7 +2273,7 @@ int server_init(Server *s, const char *namespace) {
                  .compress.threshold_bytes = UINT64_MAX,
                  .seal = true,
  

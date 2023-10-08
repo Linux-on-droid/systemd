@@ -19,7 +19,7 @@ Bug-Debian: https://bugs.debian.org/815020
  2 files changed, 1 insertion(+), 21 deletions(-)
 
 diff --git a/src/core/main.c b/src/core/main.c
-index a84fafa..5e61df8 100644
+index c3b1a35..59ea0c6 100644
 --- a/src/core/main.c
 +++ b/src/core/main.c
 @@ -1650,24 +1650,6 @@ static void cmdline_take_random_seed(void) {
