@@ -106,6 +106,7 @@ Breaks: resolvconf (<< 1.83~),
         sicherboot (<< 0.1.6),
 Provides: systemd-sysusers (= ${binary:Version}),
           systemd-tmpfiles (= ${binary:Version}),
+          systemd-dev (= ${binary:Version}),
 Description: system and service manager
  systemd is a system and service manager for Linux. It provides aggressive
  parallelization capabilities, uses socket and D-Bus activation for starting
