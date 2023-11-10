@@ -41,7 +41,7 @@ index 3e2f327..9c47d2d 100644
                    librt,
                    libseccomp,
 diff --git a/src/shared/pkcs11-util.c b/src/shared/pkcs11-util.c
-index 11cdccc..daee267 100644
+index 752a21d..5f5dbae 100644
 --- a/src/shared/pkcs11-util.c
 +++ b/src/shared/pkcs11-util.c
 @@ -3,6 +3,7 @@
@@ -197,7 +197,7 @@ index 11cdccc..daee267 100644
  
          return log_notice_errno(SYNTHETIC_ERRNO(ENOLCK),
                                  "PIN for token '%s' is incorrect, please try again.",
-@@ -238,7 +295,7 @@ int pkcs11_token_login(
+@@ -239,7 +296,7 @@ int pkcs11_token_login(
                  char **ret_used_pin) {
  
          _cleanup_free_ char *token_uri_string = NULL, *token_uri_escaped = NULL, *id = NULL, *token_label = NULL;
@@ -206,7 +206,7 @@ index 11cdccc..daee267 100644
          CK_TOKEN_INFO updated_token_info;
          int uri_result, r;
          CK_RV rv;
-@@ -246,6 +303,10 @@ int pkcs11_token_login(
+@@ -247,6 +304,10 @@ int pkcs11_token_login(
          assert(m);
          assert(token_info);
  
@@ -217,7 +217,7 @@ index 11cdccc..daee267 100644
          token_label = pkcs11_token_label(token_info);
          if (!token_label)
                  return log_oom();
-@@ -254,9 +315,9 @@ int pkcs11_token_login(
+@@ -255,9 +316,9 @@ int pkcs11_token_login(
          if (!token_uri)
                  return log_oom();
  
@@ -229,7 +229,7 @@ index 11cdccc..daee267 100644
  
          r = pkcs11_token_login_by_pin(m, session, token_info, token_label, /* pin= */ NULL, 0);
          if (r == 0 && ret_used_pin)
-@@ -335,7 +396,7 @@ int pkcs11_token_login(
+@@ -336,7 +397,7 @@ int pkcs11_token_login(
                          if (rv != CKR_OK)
                                  return log_error_errno(SYNTHETIC_ERRNO(EIO),
                                                         "Failed to acquire updated security token information for slot %lu: %s",
@@ -238,7 +238,7 @@ index 11cdccc..daee267 100644
  
                          token_info = &updated_token_info;
                  }
-@@ -356,12 +417,17 @@ int pkcs11_token_find_x509_certificate(
+@@ -357,12 +418,17 @@ int pkcs11_token_find_x509_certificate(
          CK_ATTRIBUTE *attributes = NULL;
          CK_OBJECT_HANDLE objects[2];
          CK_RV rv, rv2;
@@ -257,7 +257,7 @@ index 11cdccc..daee267 100644
          for (a = 0; a < n_attributes; a++) {
  
                  /* We use the URI's included match attributes, but make them more strict. This allows users
-@@ -434,16 +500,16 @@ int pkcs11_token_find_x509_certificate(
+@@ -435,16 +501,16 @@ int pkcs11_token_find_x509_certificate(
          rv = m->C_FindObjectsInit(session, attributes, n_attributes);
          if (rv != CKR_OK)
                  return log_error_errno(SYNTHETIC_ERRNO(EIO),
@@ -277,7 +277,7 @@ index 11cdccc..daee267 100644
          if (n_objects == 0)
                  return log_error_errno(SYNTHETIC_ERRNO(ENOENT),
                                         "Failed to find selected X509 certificate on token.");
-@@ -471,11 +537,16 @@ int pkcs11_token_read_x509_certificate(
+@@ -472,11 +538,16 @@ int pkcs11_token_read_x509_certificate(
          _cleanup_(X509_freep) X509 *x509 = NULL;
          X509_NAME *name = NULL;
          const unsigned char *p;
@@ -295,7 +295,7 @@ index 11cdccc..daee267 100644
  
          buffer = malloc(attribute.ulValueLen);
          if (!buffer)
-@@ -486,7 +557,7 @@ int pkcs11_token_read_x509_certificate(
+@@ -487,7 +558,7 @@ int pkcs11_token_read_x509_certificate(
          rv = m->C_GetAttributeValue(session, object, &attribute, 1);
          if (rv != CKR_OK)
                  return log_error_errno(SYNTHETIC_ERRNO(EIO),
@@ -304,7 +304,7 @@ index 11cdccc..daee267 100644
  
          p = attribute.pValue;
          x509 = d2i_X509(NULL, &p, attribute.ulValueLen);
-@@ -520,12 +591,17 @@ int pkcs11_token_find_private_key(
+@@ -521,12 +592,17 @@ int pkcs11_token_find_private_key(
          CK_ATTRIBUTE *attributes = NULL;
          CK_OBJECT_HANDLE objects[2];
          CK_RV rv, rv2;
@@ -323,7 +323,7 @@ index 11cdccc..daee267 100644
          for (a = 0; a < n_attributes; a++) {
  
                  /* We use the URI's included match attributes, but make them more strict. This allows users
-@@ -624,16 +700,16 @@ int pkcs11_token_find_private_key(
+@@ -625,16 +701,16 @@ int pkcs11_token_find_private_key(
          rv = m->C_FindObjectsInit(session, attributes, n_attributes);
          if (rv != CKR_OK)
                  return log_error_errno(SYNTHETIC_ERRNO(EIO),
@@ -343,7 +343,7 @@ index 11cdccc..daee267 100644
          if (n_objects == 0)
                  return log_error_errno(SYNTHETIC_ERRNO(ENOENT),
                                         "Failed to find selected private key suitable for decryption on token.");
-@@ -660,6 +736,7 @@ int pkcs11_token_decrypt_data(
+@@ -661,6 +737,7 @@ int pkcs11_token_decrypt_data(
          _cleanup_(erase_and_freep) CK_BYTE *dbuffer = NULL;
          CK_ULONG dbuffer_size = 0;
          CK_RV rv;
@@ -351,7 +351,7 @@ index 11cdccc..daee267 100644
  
          assert(m);
          assert(encrypted_data);
-@@ -667,10 +744,14 @@ int pkcs11_token_decrypt_data(
+@@ -668,10 +745,14 @@ int pkcs11_token_decrypt_data(
          assert(ret_decrypted_data);
          assert(ret_decrypted_data_size);
  
@@ -367,7 +367,7 @@ index 11cdccc..daee267 100644
  
          dbuffer_size = encrypted_data_size; /* Start with something reasonable */
          dbuffer = malloc(dbuffer_size);
-@@ -689,7 +770,7 @@ int pkcs11_token_decrypt_data(
+@@ -690,7 +771,7 @@ int pkcs11_token_decrypt_data(
          }
          if (rv != CKR_OK)
                  return log_error_errno(SYNTHETIC_ERRNO(EIO),
@@ -376,7 +376,7 @@ index 11cdccc..daee267 100644
  
          log_info("Successfully decrypted key with security token.");
  
-@@ -709,6 +790,10 @@ int pkcs11_token_acquire_rng(
+@@ -710,6 +791,10 @@ int pkcs11_token_acquire_rng(
  
          assert(m);
  
@@ -387,7 +387,7 @@ index 11cdccc..daee267 100644
          /* While we are at it, let's read some RNG data from the PKCS#11 token and pass it to the kernel
           * random pool. This should be cheap if we are talking to the device already. Note that we don't
           * credit any entropy, since we don't know about the quality of the pkcs#11 token's RNG. Why bother
-@@ -725,7 +810,7 @@ int pkcs11_token_acquire_rng(
+@@ -726,7 +811,7 @@ int pkcs11_token_acquire_rng(
          rv = m->C_GenerateRandom(session, buffer, rps);
          if (rv != CKR_OK)
                  return log_debug_errno(SYNTHETIC_ERRNO(EOPNOTSUPP),
@@ -396,7 +396,7 @@ index 11cdccc..daee267 100644
  
          r = random_write_entropy(-1, buffer, rps, false);
          if (r < 0)
-@@ -761,7 +846,7 @@ static int token_process(
+@@ -762,7 +847,7 @@ static int token_process(
          rv = m->C_OpenSession(slotid, CKF_SERIAL_SESSION, NULL, NULL, &session);
          if (rv != CKR_OK)
                  return log_error_errno(SYNTHETIC_ERRNO(EIO),
@@ -405,7 +405,7 @@ index 11cdccc..daee267 100644
  
          if (callback)
                  r = callback(m, session, slotid, slot_info, token_info, search_uri, userdata);
-@@ -770,7 +855,7 @@ static int token_process(
+@@ -771,7 +856,7 @@ static int token_process(
  
          rv = m->C_CloseSession(session);
          if (rv != CKR_OK)
@@ -414,7 +414,7 @@ index 11cdccc..daee267 100644
  
          return r;
  }
-@@ -782,21 +867,25 @@ static int slot_process(
+@@ -783,21 +868,25 @@ static int slot_process(
                  pkcs11_find_token_callback_t callback,
                  void *userdata) {
  
@@ -443,7 +443,7 @@ index 11cdccc..daee267 100644
                  return -EAGAIN;
          }
  
-@@ -807,9 +896,9 @@ static int slot_process(
+@@ -808,9 +897,9 @@ static int slot_process(
          if (DEBUG_LOGGING) {
                  _cleanup_free_ char *slot_uri_string = NULL;
  
@@ -455,7 +455,7 @@ index 11cdccc..daee267 100644
                          return -EAGAIN;
                  }
  
-@@ -821,7 +910,7 @@ static int slot_process(
+@@ -822,7 +911,7 @@ static int slot_process(
                  return log_debug_errno(SYNTHETIC_ERRNO(EAGAIN),
                                         "Token not present in slot, ignoring.");
          } else if (rv != CKR_OK) {
@@ -464,7 +464,7 @@ index 11cdccc..daee267 100644
                  return -EAGAIN;
          }
  
-@@ -829,13 +918,13 @@ static int slot_process(
+@@ -830,13 +919,13 @@ static int slot_process(
          if (!token_uri)
                  return log_oom();
  
@@ -481,7 +481,7 @@ index 11cdccc..daee267 100644
                  return log_debug_errno(SYNTHETIC_ERRNO(EAGAIN),
                                         "Found non-matching token with URI %s.",
                                         token_uri_string);
-@@ -858,8 +947,8 @@ static int module_process(
+@@ -859,8 +948,8 @@ static int module_process(
                  pkcs11_find_token_callback_t callback,
                  void *userdata) {
  
@@ -491,7 +491,7 @@ index 11cdccc..daee267 100644
          _cleanup_free_ CK_SLOT_ID *slotids = NULL;
          CK_ULONG n_slotids = 0;
          int uri_result;
-@@ -870,11 +959,15 @@ static int module_process(
+@@ -871,11 +960,15 @@ static int module_process(
  
          assert(m);
  
@@ -508,7 +508,7 @@ index 11cdccc..daee267 100644
          if (!name)
                  return log_oom();
  
-@@ -882,7 +975,7 @@ static int module_process(
+@@ -883,7 +976,7 @@ static int module_process(
  
          rv = m->C_GetInfo(&info);
          if (rv != CKR_OK) {
@@ -517,7 +517,7 @@ index 11cdccc..daee267 100644
                  return -EAGAIN;
          }
  
-@@ -890,9 +983,9 @@ static int module_process(
+@@ -891,9 +984,9 @@ static int module_process(
          if (!module_uri)
                  return log_oom();
  
@@ -529,7 +529,7 @@ index 11cdccc..daee267 100644
                  return -EAGAIN;
          }
  
-@@ -900,7 +993,7 @@ static int module_process(
+@@ -901,7 +994,7 @@ static int module_process(
  
          rv = pkcs11_get_slot_list_malloc(m, &slotids, &n_slotids);
          if (rv != CKR_OK) {
@@ -538,7 +538,7 @@ index 11cdccc..daee267 100644
                  return -EAGAIN;
          }
          if (n_slotids == 0)
-@@ -926,10 +1019,14 @@ int pkcs11_find_token(
+@@ -927,10 +1020,14 @@ int pkcs11_find_token(
                  pkcs11_find_token_callback_t callback,
                  void *userdata) {
  
@@ -555,7 +555,7 @@ index 11cdccc..daee267 100644
          /* Execute the specified callback for each matching token found. If nothing is found returns
           * -EAGAIN. Logs about all errors, except for EAGAIN, which the caller has to log about. */
  
-@@ -939,7 +1036,7 @@ int pkcs11_find_token(
+@@ -940,7 +1037,7 @@ int pkcs11_find_token(
                          return log_error_errno(r, "Failed to parse PKCS#11 URI '%s': %m", pkcs11_uri);
          }
  
@@ -564,7 +564,7 @@ index 11cdccc..daee267 100644
          if (!modules)
                  return log_error_errno(SYNTHETIC_ERRNO(EIO), "Failed to initialize pkcs11 modules");
  
-@@ -1053,13 +1150,17 @@ static int list_callback(
+@@ -1068,13 +1165,17 @@ static int list_callback(
                  void *userdata) {
  
          _cleanup_free_ char *token_uri_string = NULL, *token_label = NULL, *token_manufacturer_id = NULL, *token_model = NULL;
@@ -583,7 +583,7 @@ index 11cdccc..daee267 100644
          /* We only care about hardware devices here with a token inserted. Let's filter everything else
           * out. (Note that the user can explicitly specify non-hardware tokens if they like, but during
           * enumeration we'll filter those, since software tokens are typically the system certificate store
-@@ -1083,9 +1184,9 @@ static int list_callback(
+@@ -1098,9 +1199,9 @@ static int list_callback(
          if (!token_uri)
                  return log_oom();
  
@@ -595,7 +595,7 @@ index 11cdccc..daee267 100644
  
          r = table_add_many(
                          t,
-@@ -1139,13 +1240,17 @@ static int auto_callback(
+@@ -1154,13 +1255,17 @@ static int auto_callback(
                  P11KitUri *uri,
                  void *userdata) {
  
@@ -615,7 +615,7 @@ index 11cdccc..daee267 100644
          if (!FLAGS_SET(token_info->flags, CKF_HW_SLOT|CKF_TOKEN_PRESENT))
                  return -EAGAIN;
  
-@@ -1157,9 +1262,9 @@ static int auto_callback(
+@@ -1172,9 +1277,9 @@ static int auto_callback(
          if (!token_uri)
                  return log_oom();
  
@@ -628,10 +628,10 @@ index 11cdccc..daee267 100644
          return 0;
  }
 diff --git a/src/shared/pkcs11-util.h b/src/shared/pkcs11-util.h
-index f8195d7..ac2ee08 100644
+index 7c88848..5bc23c1 100644
 --- a/src/shared/pkcs11-util.h
 +++ b/src/shared/pkcs11-util.h
-@@ -15,14 +15,30 @@
+@@ -16,14 +16,30 @@
  bool pkcs11_uri_valid(const char *uri);
  
  #if HAVE_P11KIT
@@ -664,7 +664,7 @@ index f8195d7..ac2ee08 100644
  
  CK_RV pkcs11_get_slot_list_malloc(CK_FUNCTION_LIST *m, CK_SLOT_ID **ret_slotids, CK_ULONG *ret_n_slotids);
  
-@@ -72,6 +88,14 @@ int pkcs11_crypt_device_callback(
+@@ -74,6 +90,14 @@ int pkcs11_crypt_device_callback(
                  P11KitUri *uri,
                  void *userdata);
  
@@ -718,10 +718,10 @@ index 85dbb81..55728c2 100644
  }
  
 diff --git a/test/test-functions b/test/test-functions
-index f801d49..9b9ddcb 100644
+index 345dc66..5d0a421 100644
 --- a/test/test-functions
 +++ b/test/test-functions
-@@ -1360,7 +1360,7 @@ install_missing_libraries() {
+@@ -1361,7 +1361,7 @@ install_missing_libraries() {
      local lib path
      # A number of dependencies is now optional via dlopen, so the install
      # script will not pick them up, since it looks at linkage.
@@ -730,7 +730,7 @@ index f801d49..9b9ddcb 100644
          ddebug "Searching for $lib via pkg-config"
          if pkg-config --exists "$lib"; then
                  path="$(pkg-config --variable=libdir "$lib")"
-@@ -1372,6 +1372,10 @@ install_missing_libraries() {
+@@ -1373,6 +1373,10 @@ install_missing_libraries() {
                  if ! [[ ${lib} =~ ^lib ]]; then
                          lib="lib${lib}"
                  fi

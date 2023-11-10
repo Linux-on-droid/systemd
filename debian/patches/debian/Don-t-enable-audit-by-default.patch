@@ -16,7 +16,7 @@ Bug-Debian: https://bugs.debian.org/773528
  3 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/man/journald.conf.xml b/man/journald.conf.xml
-index 185e1dc..d963a1d 100644
+index 6510afe..45eae3a 100644
 --- a/man/journald.conf.xml
 +++ b/man/journald.conf.xml
 @@ -429,7 +429,7 @@
