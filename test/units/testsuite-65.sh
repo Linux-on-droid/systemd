@@ -230,6 +230,18 @@ set -e
 rm /tmp/testfile.service
 rm /tmp/testfile2.service
 
+cat <<EOF >/tmp/sample.service
+[Unit]
+Description = A Sample Service
+
+[Service]
+ExecStart = echo hello
+Slice=support.slice
+EOF
+
+# Zero exit status since no additional dependencies are recursively loaded when the unit file is loaded
+systemd-analyze verify --recursive-errors=no /tmp/sample.service
+
 cat <<EOF >/tmp/testfile.service
 [Service]
 ExecStart = echo hello
@@ -537,6 +549,12 @@ cat <<EOF >/tmp/testfile.json
 "CapabilityBoundingSet_CAP_SYS_PACCT":
     {"description_good": "Service cannot use acct()",
     "description_bad": "Service may use acct()",
+    "weight": 25,
+    "range": 1
+    },
+"CapabilityBoundingSet_CAP_BPF":
+    {"description_good": "Service may load BPF programs",
+    "description_bad": "Service may not load BPF programs",
     "weight": 25,
     "range": 1
     },
