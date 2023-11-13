@@ -340,6 +340,8 @@ Depends: ${shlibs:Depends},
          libudev1 (= ${binary:Version}),
          systemd-dev (>= ${source:Version}),
          s390-tools [s390],
+Breaks: systemd (<< 254.5-1~bpo12+2~),
+Replaces: systemd (<< 254.5-1~bpo12+2~),
 Description: /dev/ and hotplug management daemon
  udev is a daemon which dynamically creates and removes device nodes from
  /dev/, handles hotplug events and loads drivers at boot time.
