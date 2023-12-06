@@ -13,10 +13,10 @@ keyboard configuration.
  3 files changed, 108 insertions(+), 117 deletions(-)
 
 diff --git a/src/firstboot/firstboot.c b/src/firstboot/firstboot.c
-index 8db73c2..fa41931 100644
+index dee2742..d66cf87 100644
 --- a/src/firstboot/firstboot.c
 +++ b/src/firstboot/firstboot.c
-@@ -309,12 +309,16 @@ static int prompt_locale(void) {
+@@ -311,12 +311,16 @@ static int prompt_locale(void) {
  }
  
  static int process_locale(void) {
@@ -36,7 +36,7 @@ index 8db73c2..fa41931 100644
          if (laccess(etc_localeconf, F_OK) >= 0 && !arg_force) {
                  log_debug("Found %s, assuming locale information has been configured.",
                            etc_localeconf);
-@@ -324,7 +328,7 @@ static int process_locale(void) {
+@@ -326,7 +330,7 @@ static int process_locale(void) {
          if (arg_copy_locale && arg_root) {
  
                  (void) mkdir_parents(etc_localeconf, 0755);

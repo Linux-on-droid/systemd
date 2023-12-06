@@ -13,7 +13,7 @@ Subject: p11kit: switch to dlopen()
  7 files changed, 202 insertions(+), 60 deletions(-)
 
 diff --git a/meson.build b/meson.build
-index 3bef553..c108004 100644
+index b250474..b9f2c7e 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -1461,8 +1461,10 @@ if want_p11kit != 'false' and not skip_deps
