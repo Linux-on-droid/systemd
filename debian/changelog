@@ -1,3 +1,9 @@
+systemd (254.5-1~bpo12+3) bookworm-backports; urgency=medium
+
+  * Backport patch to fix CVE-2023-7008 (Closes: #1059278)
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 24 Dec 2023 16:37:14 +0100
+
 systemd (254.5-1~bpo12+2) bookworm-backports; urgency=medium
 
   * Move systemd-hwdb-update.service to udev package. Commit a12cf5d187cb
