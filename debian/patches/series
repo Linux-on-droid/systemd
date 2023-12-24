@@ -1,4 +1,5 @@
 test-skip-test-path-on-Salsa-CI.patch
+resolved-actually-check-authenticated-flag-of-SOA-tr.patch
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
 debian/Only-start-logind-if-dbus-is-installed.patch
