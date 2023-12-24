@@ -1,3 +1,11 @@
+systemd (252.21-1~deb12u1) bookworm; urgency=medium
+
+  * New upstream version 252.21
+    CVE-2023-7008 (Closes: #1059278)
+  * Refresh patches
+
+ -- Luca Boccassi <bluca@debian.org>  Sun, 24 Dec 2023 15:29:22 +0100
+
 systemd (252.20-1~deb12u1) bookworm; urgency=medium
 
   * New upstream version 252.20
