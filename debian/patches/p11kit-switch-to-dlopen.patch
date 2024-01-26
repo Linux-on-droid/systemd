@@ -13,10 +13,10 @@ Subject: p11kit: switch to dlopen()
  7 files changed, 202 insertions(+), 60 deletions(-)
 
 diff --git a/meson.build b/meson.build
-index b250474..b9f2c7e 100644
+index 9de2309..27d95e7 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -1461,8 +1461,10 @@ if want_p11kit != 'false' and not skip_deps
+@@ -1462,8 +1462,10 @@ if want_p11kit != 'false' and not skip_deps
                                 version : '>= 0.23.3',
                                 required : want_p11kit == 'true')
          have = libp11kit.found()
@@ -718,10 +718,10 @@ index 85dbb81..55728c2 100644
  }
  
 diff --git a/test/test-functions b/test/test-functions
-index 29f346f..c169635 100644
+index 73fbef8..0ba7ce2 100644
 --- a/test/test-functions
 +++ b/test/test-functions
-@@ -1369,7 +1369,7 @@ install_missing_libraries() {
+@@ -1386,7 +1386,7 @@ install_missing_libraries() {
      local lib path
      # A number of dependencies is now optional via dlopen, so the install
      # script will not pick them up, since it looks at linkage.
@@ -730,7 +730,7 @@ index 29f346f..c169635 100644
          ddebug "Searching for $lib via pkg-config"
          if pkg-config --exists "$lib"; then
                  path="$(pkg-config --variable=libdir "$lib")"
-@@ -1381,6 +1381,10 @@ install_missing_libraries() {
+@@ -1398,6 +1398,10 @@ install_missing_libraries() {
                  if ! [[ ${lib} =~ ^lib ]]; then
                          lib="lib${lib}"
                  fi
