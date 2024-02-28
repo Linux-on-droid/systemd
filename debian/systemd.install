@@ -251,7 +251,6 @@ usr/lib/systemd/system/sleep.target
 usr/lib/systemd/system/slices.target
 usr/lib/systemd/system/smartcard.target
 usr/lib/systemd/system/sockets.target
-[amd64 i386 arm64 armhf riscv64] <pkg.systemd.upstream> usr/lib/systemd/system/sockets.target.wants/systemd-bootctl.socket
 <pkg.systemd.upstream> usr/lib/systemd/system/sockets.target.wants/systemd-creds.socket
 usr/lib/systemd/system/sockets.target.wants/systemd-initctl.socket
 <pkg.systemd.upstream> usr/lib/systemd/system/sockets.target.wants/systemd-hostnamed.socket
@@ -313,8 +312,6 @@ usr/lib/systemd/system/systemd-ask-password-wall.service
 usr/lib/systemd/system/systemd-backlight@.service
 usr/lib/systemd/system/systemd-battery-check.service
 usr/lib/systemd/system/systemd-binfmt.service
-[amd64 i386 arm64 armhf riscv64] <pkg.systemd.upstream> usr/lib/systemd/system/systemd-bootctl.socket
-[amd64 i386 arm64 armhf riscv64] <pkg.systemd.upstream> usr/lib/systemd/system/systemd-bootctl@.service
 usr/lib/systemd/system/systemd-boot-check-no-failures.service
 <!stage1> usr/lib/systemd/system/systemd-bsod.service
 usr/lib/systemd/system/systemd-confext.service
