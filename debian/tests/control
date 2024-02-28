@@ -7,7 +7,7 @@ Depends: systemd,
   acl,
   locales,
   evemu-tools,
-Restrictions: needs-root, isolation-container, skippable
+Restrictions: needs-root, isolation-container, skippable, breaks-testbed
 
 Tests: unit-config
 Depends: systemd,
@@ -19,7 +19,7 @@ Depends: systemd,
   evemu-tools,
   python3,
   pkgconf,
-Restrictions: needs-root, allow-stderr
+Restrictions: needs-root, allow-stderr, breaks-testbed
 
 Tests: storage
 Depends: systemd,
@@ -32,7 +32,7 @@ Depends: systemd,
   python3,
   pkgconf,
   cryptsetup-bin,
-Restrictions: needs-root, isolation-machine
+Restrictions: needs-root, isolation-machine, breaks-testbed
 
 Tests: networkd-test.py
 Tests-Directory: test
