@@ -1,5 +1,9 @@
+#!/usr/bin/dh-exec
+<pkg.systemd.upstream> etc/ssh/sshd_config.d/20-systemd-userdb.conf
 usr/bin/userdbctl
 usr/lib/systemd/systemd-userdbd
 usr/lib/systemd/systemd-userwork
 usr/lib/systemd/system/systemd-userdbd.service
 usr/lib/systemd/system/systemd-userdbd.socket
+<pkg.systemd.upstream> usr/lib/systemd/sshd_config.d/20-systemd-userdb.conf
+<pkg.systemd.upstream> usr/lib/tmpfiles.d/20-systemd-userdb.conf
