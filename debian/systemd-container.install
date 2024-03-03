@@ -1,3 +1,5 @@
+#!/usr/bin/dh-exec
+<pkg.systemd.upstream> usr/bin/importctl
 usr/bin/machinectl
 usr/bin/portablectl
 usr/lib/systemd/import-pubring.gpg
