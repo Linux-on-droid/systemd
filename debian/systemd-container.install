@@ -1,5 +1,7 @@
 #!/usr/bin/dh-exec
 <pkg.systemd.upstream> usr/bin/importctl
+<pkg.systemd.upstream> usr/bin/systemd-vmspawn
+<pkg.systemd.upstream> usr/lib/systemd/system/systemd-vmspawn@.service
 usr/bin/machinectl
 usr/bin/portablectl
 usr/lib/systemd/import-pubring.gpg
