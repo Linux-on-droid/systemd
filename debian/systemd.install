@@ -226,9 +226,7 @@ usr/lib/systemd/system-preset/90-systemd.preset
 usr/lib/systemd/system/printer.target
 usr/lib/systemd/system/proc-sys-fs-binfmt_misc.automount
 usr/lib/systemd/system/proc-sys-fs-binfmt_misc.mount
-<!pkg.systemd.upstream> usr/lib/systemd/system/quotaon.service
-<pkg.systemd.upstream> usr/lib/systemd/system/quotaon-root.service
-<pkg.systemd.upstream> usr/lib/systemd/system/quotaon@.service
+usr/lib/systemd/system/quotaon*.service
 usr/lib/systemd/system/rc-local.service
 usr/lib/systemd/system/reboot.target
 <!stage1> usr/lib/systemd/system/remote-cryptsetup.target
@@ -373,9 +371,7 @@ usr/lib/systemd/system/systemd-network-generator.service
 [amd64 i386 arm64 armhf riscv64] <!stage1> usr/lib/systemd/system/systemd-pcrphase-sysinit.service
 usr/lib/systemd/system/systemd-poweroff.service
 usr/lib/systemd/system/systemd-pstore.service
-<!pkg.systemd.upstream> usr/lib/systemd/system/systemd-quotacheck.service
-<pkg.systemd.upstream> usr/lib/systemd/system/systemd-quotacheck@.service
-<pkg.systemd.upstream> usr/lib/systemd/system/systemd-quotacheck-root.service
+usr/lib/systemd/system/systemd-quotacheck*.service
 usr/lib/systemd/system/systemd-random-seed.service
 usr/lib/systemd/system/systemd-reboot.service
 usr/lib/systemd/system/systemd-remount-fs.service
