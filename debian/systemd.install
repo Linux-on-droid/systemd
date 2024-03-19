@@ -54,9 +54,9 @@ usr/bin/systemd-sysusers
 usr/bin/systemd-tmpfiles
 usr/bin/systemd-tty-ask-password-agent
 usr/bin/systemd-umount
+<pkg.systemd.upstream> usr/bin/run0
 <pkg.systemd.upstream> usr/bin/systemd-vpick
 usr/bin/timedatectl
-<pkg.systemd.upstream> usr/bin/uid0
 usr/bin/varlinkctl
 usr/lib/environment.d/99-environment.conf
 usr/lib/kernel/install.conf
