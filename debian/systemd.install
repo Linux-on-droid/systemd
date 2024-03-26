@@ -91,6 +91,8 @@ usr/lib/systemd/system/basic.target
 usr/lib/systemd/system/blockdev@.target
 usr/lib/systemd/system/bluetooth.target
 usr/lib/systemd/system/boot-complete.target
+<pkg.systemd.upstream> usr/lib/systemd/system/capsule.slice
+<pkg.systemd.upstream> usr/lib/systemd/system/capsule@.service
 usr/lib/systemd/system/console-getty.service
 usr/lib/systemd/system/container-getty@.service
 <!stage1> usr/lib/systemd/system/cryptsetup-pre.target
@@ -427,6 +429,7 @@ usr/lib/systemd/user/app.slice
 usr/lib/systemd/user/background.slice
 usr/lib/systemd/user/basic.target
 usr/lib/systemd/user/bluetooth.target
+<pkg.systemd.upstream> usr/lib/systemd/user/capsule@.target
 usr/lib/systemd/user/default.target
 usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator
 usr/lib/systemd/user/exit.target
