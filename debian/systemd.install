@@ -263,6 +263,7 @@ usr/lib/systemd/system/sockets.target.wants/systemd-journald.socket
 usr/lib/systemd/system/sockets.target.wants/systemd-sysext.socket
 usr/lib/systemd/system/soft-reboot.target
 usr/lib/systemd/system/sound.target
+<pkg.systemd.upstream> usr/lib/systemd/system/ssh-access.target
 usr/lib/systemd/system/storage-target-mode.target
 usr/lib/systemd/system/suspend.target
 usr/lib/systemd/system/suspend-then-hibernate.target
