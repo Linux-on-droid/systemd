@@ -312,6 +312,7 @@ Multi-Arch: same
 Section: libs
 Depends: ${shlibs:Depends},
          ${misc:Depends}
+Recommends: libgcrypt20,
 Description: systemd utility library
  This library provides APIs to interface with various system components such as
  the system journal, the system service manager, D-Bus and more.
