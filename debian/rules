@@ -162,6 +162,42 @@ CONFFLAGS += \
 	-Dsysupdate=disabled
 endif
 
+ifneq (, $(filter pkg.systemd.upstream, $(DEB_BUILD_PROFILES)))
+# Ubuntu does not yet ship vmlinux.h, generate it at build time for now, until
+# https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2050083 is solved
+ifeq ($(DEB_VENDOR),Ubuntu)
+# Source: https://git.launchpad.net/ubuntu/+source/xdp-tools/tree/debian/rules
+# On Ubuntu, the `bpftool` in path is a shell wrapper pointing at
+# the binary corresponding to runtime kernel version.
+#
+# We do not know the kernel version being used on the system building
+# this package, and in sbuild/container environments uname might not
+# even match anything available to the build.
+# Gladly for the build we only need the tool to generate skeleton code.
+#
+# If any /usr/lib/linux-tools/*/bpftool exists, locate the most recent
+# version and point to that, otherwise `bpftool` from PATH will be
+# used.
+bpftool_binary := $(shell find /usr/lib/linux-tools/ -name 'bpftool' -perm /u=x 2>/dev/null | sort | head -n1)
+ifneq ($(bpftool_binary),)
+export PATH := $(shell dirname $(bpftool_binary)):$(PATH)
+endif
+CONFFLAGS += \
+	-Dbpf-framework=enabled \
+	-Dbpf-compiler=clang \
+	-Dvmlinux-h=auto
+else
+# The vmlinux.h we want is in the headers package that linux-headers-ARCH depends on,
+# which itself is the package that provides linux-headers-generic that we build depend on.
+HEADERS_PACKAGE = $(shell dpkg-query --showformat='$${Depends}' --show linux-headers-$(DEB_HOST_ARCH) | sed "s/.*\(linux-headers-.*-$(DEB_HOST_ARCH)\).*/\1/")
+CONFFLAGS += \
+	-Dbpf-framework=enabled \
+	-Dbpf-compiler=clang \
+	-Dvmlinux-h=provided \
+	-Dvmlinux-h-path=/usr/src/$(HEADERS_PACKAGE)/vmlinux.h
+endif
+endif
+
 override_dh_auto_configure:
 	dh_auto_configure \
 		-- $(CONFFLAGS) $(CONFFLAGS_DISTRO) $(CONFFLAGS_UPSTREAM)
