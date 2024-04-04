@@ -169,6 +169,7 @@ debian/tmp/usr/share/man/man8/systemd-growfs.8
 debian/tmp/usr/share/man/man8/systemd-growfs-root.service.8
 debian/tmp/usr/share/man/man8/systemd-growfs@.service.8
 debian/tmp/usr/share/man/man8/systemd-halt.service.8
+<pkg.systemd.upstream> debian/tmp/usr/share/man/man8/systemd-hibernate-clear.service.8
 debian/tmp/usr/share/man/man8/systemd-hibernate-resume.8
 debian/tmp/usr/share/man/man8/systemd-hibernate-resume-generator.8
 debian/tmp/usr/share/man/man8/systemd-hibernate-resume.service.8

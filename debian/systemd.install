@@ -271,6 +271,7 @@ usr/lib/systemd/system/swap.target
 usr/lib/systemd/system/sys-fs-fuse-connections.mount
 usr/lib/systemd/system/sysinit.target
 <!stage1> usr/lib/systemd/system/sysinit.target.wants/cryptsetup.target
+<pkg.systemd.upstream> usr/lib/systemd/system/sysinit.target.wants/systemd-hibernate-clear.service
 usr/lib/systemd/system/sysinit.target.wants/dev-hugepages.mount
 usr/lib/systemd/system/sysinit.target.wants/dev-mqueue.mount
 <!stage1> usr/lib/systemd/system/sysinit.target.wants/integritysetup.target
@@ -329,6 +330,7 @@ usr/lib/systemd/system/systemd-fsck@.service
 usr/lib/systemd/system/systemd-growfs-root.service
 usr/lib/systemd/system/systemd-growfs@.service
 usr/lib/systemd/system/systemd-halt.service
+<pkg.systemd.upstream> usr/lib/systemd/system/systemd-hibernate-clear.service
 usr/lib/systemd/system/systemd-hibernate-resume.service
 usr/lib/systemd/system/systemd-hibernate.service
 usr/lib/systemd/system/systemd-hostnamed.service
