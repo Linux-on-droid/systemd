@@ -163,6 +163,10 @@ CONFFLAGS += \
 endif
 
 ifneq (, $(filter pkg.systemd.upstream, $(DEB_BUILD_PROFILES)))
+CONFFLAGS += \
+	-Dbpf-framework=enabled \
+	-Dbpf-compiler=clang
+
 # Ubuntu does not yet ship vmlinux.h, generate it at build time for now, until
 # https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2050083 is solved
 ifeq ($(DEB_VENDOR),Ubuntu)
@@ -182,19 +186,17 @@ bpftool_binary := $(shell find /usr/lib/linux-tools/ -name 'bpftool' -perm /u=x 
 ifneq ($(bpftool_binary),)
 export PATH := $(shell dirname $(bpftool_binary)):$(PATH)
 endif
-CONFFLAGS += \
-	-Dbpf-framework=enabled \
-	-Dbpf-compiler=clang \
-	-Dvmlinux-h=auto
+CONFFLAGS += -Dvmlinux-h=auto
 else
 # The vmlinux.h we want is in the headers package that linux-headers-ARCH depends on,
 # which itself is the package that provides linux-headers-generic that we build depend on.
+# This is available since Trixie.
 HEADERS_PACKAGE = $(shell dpkg-query --showformat='$${Depends}' --show linux-headers-$(DEB_HOST_ARCH) | sed "s/.*\(linux-headers-.*-$(DEB_HOST_ARCH)\).*/\1/")
-CONFFLAGS += \
-	-Dbpf-framework=enabled \
-	-Dbpf-compiler=clang \
-	-Dvmlinux-h=provided \
-	-Dvmlinux-h-path=/usr/src/$(HEADERS_PACKAGE)/vmlinux.h
+ifneq ("$(wildcard /usr/src/$(HEADERS_PACKAGE)/vmlinux.h)","")
+CONFFLAGS += -Dvmlinux-h=provided -Dvmlinux-h-path=/usr/src/$(HEADERS_PACKAGE)/vmlinux.h
+else
+CONFFLAGS += -Dvmlinux-h=auto
+endif
 endif
 endif
 
