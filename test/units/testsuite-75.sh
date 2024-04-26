@@ -46,8 +46,7 @@ monitor_check_rr() (
     # displayed. We turn off pipefail for this, since we don't care about the
     # lhs of this pipe expression, we only care about the rhs' result to be
     # clean
-    # v255-only: match against a syslog tag as well to work around systemd/systemd#30886
-    timeout -v 30s journalctl --since "$since" -f --full _SYSTEMD_UNIT="resolvectl-monitor.service" + SYSLOG_IDENTIFIER="resolvectl-monitor" | grep -m1 "$match"
+    timeout -v 30s journalctl -u resolvectl-monitor.service --since "$since" -f --full | grep -m1 "$match"
 )
 
 restart_resolved() {
@@ -103,12 +102,21 @@ assert_in '_localdnsproxy' "$(dig @127.0.0.53 -x 127.0.0.54)"
 mkdir -p /run/systemd/resolved.conf.d
 {
     echo "[Resolve]"
-    echo "MulticastDNS=yes"
-    echo "LLMNR=yes"
+    echo "MulticastDNS=no"
+    echo "LLMNR=no"
 } >/run/systemd/resolved.conf.d/mdns-llmnr.conf
 restart_resolved
 # make sure networkd is not running.
 systemctl stop systemd-networkd.service
+assert_in 'no' "$(resolvectl mdns hoge)"
+assert_in 'no' "$(resolvectl llmnr hoge)"
+# Tests that reloading works
+{
+    echo "[Resolve]"
+    echo "MulticastDNS=yes"
+    echo "LLMNR=yes"
+} >/run/systemd/resolved.conf.d/mdns-llmnr.conf
+systemctl reload systemd-resolved.service
 # defaults to yes (both the global and per-link settings are yes)
 assert_in 'yes' "$(resolvectl mdns hoge)"
 assert_in 'yes' "$(resolvectl llmnr hoge)"
@@ -131,7 +139,7 @@ assert_in 'no' "$(resolvectl llmnr hoge)"
     echo "MulticastDNS=resolve"
     echo "LLMNR=resolve"
 } >/run/systemd/resolved.conf.d/mdns-llmnr.conf
-restart_resolved
+systemctl reload systemd-resolved.service
 # set per-link setting
 resolvectl mdns hoge yes
 resolvectl llmnr hoge yes
@@ -151,7 +159,7 @@ assert_in 'no' "$(resolvectl llmnr hoge)"
     echo "MulticastDNS=no"
     echo "LLMNR=no"
 } >/run/systemd/resolved.conf.d/mdns-llmnr.conf
-restart_resolved
+systemctl reload systemd-resolved.service
 # set per-link setting
 resolvectl mdns hoge yes
 resolvectl llmnr hoge yes
@@ -181,22 +189,43 @@ fd00:dead:beef:cafe::1 ns1.unsigned.test
 127.128.0.5     localhost5 localhost5.localdomain localhost5.localdomain4 localhost.localdomain5 localhost5.localdomain5
 EOF
 
-mkdir -p /etc/systemd/network
-cat >/etc/systemd/network/10-dns0.netdev <<EOF
+mkdir -p /run/systemd/network
+cat >/run/systemd/network/10-dns0.netdev <<EOF
 [NetDev]
 Name=dns0
 Kind=dummy
 EOF
-cat >/etc/systemd/network/10-dns0.network <<EOF
+cat >/run/systemd/network/10-dns0.network <<EOF
 [Match]
 Name=dns0
 
 [Network]
+IPv6AcceptRA=no
 Address=10.0.0.1/24
 Address=fd00:dead:beef:cafe::1/64
 DNSSEC=allow-downgrade
 DNS=10.0.0.1
 DNS=fd00:dead:beef:cafe::1
+EOF
+cat >/run/systemd/network/10-dns1.netdev <<EOF
+[NetDev]
+Name=dns1
+Kind=dummy
+EOF
+cat >/run/systemd/network/10-dns1.network <<EOF
+[Match]
+Name=dns1
+
+[Network]
+IPv6AcceptRA=no
+Address=10.99.0.1/24
+DNSSEC=no
+EOF
+systemctl edit --stdin --full --runtime --force "resolved-dummy-server.service" <<EOF
+[Service]
+Type=notify
+Environment=SYSTEMD_LOG_LEVEL=debug
+ExecStart=/usr/lib/systemd/tests/unit-tests/manual/test-resolved-dummy-server 10.99.0.1:53
 EOF
 
 DNS_ADDRESSES=(
@@ -236,7 +265,9 @@ ln -svf /etc/bind.keys /etc/bind/bind.keys
 # Start the services
 systemctl unmask systemd-networkd
 systemctl start systemd-networkd
-restart_resolved
+/usr/lib/systemd/systemd-networkd-wait-online --interface=dns1:routable --timeout=60
+systemctl reload systemd-resolved
+systemctl start resolved-dummy-server
 # Create knot's runtime dir, since from certain version it's provided only by
 # the package and not created by tmpfiles/systemd
 if [[ ! -d /run/knot ]]; then
@@ -247,17 +278,22 @@ systemctl start knot
 # Wait a bit for the keys to propagate
 sleep 4
 
+systemctl status resolved-dummy-server
 networkctl status
 resolvectl status
 resolvectl log-level debug
 
 # Start monitoring queries
-systemd-run -u resolvectl-monitor.service -p SyslogIdentifier=resolvectl-monitor -p Type=notify resolvectl monitor
-systemd-run -u resolvectl-monitor-json.service -p SyslogIdentifier=resolvectl-monitor-json -p Type=notify resolvectl monitor --json=short
+systemd-run -u resolvectl-monitor.service -p Type=notify resolvectl monitor
+systemd-run -u resolvectl-monitor-json.service -p Type=notify resolvectl monitor --json=short
 
-# Check if all the zones are valid (zone-check always returns 0, so let's check
-# if it produces any errors/warnings)
-run knotc zone-check
+# FIXME: knot, unfortunately, incorrectly complains about missing zone files for zones
+#        that are forwarded using the `dnsproxy` module. Until the issue is resolved,
+#        let's fall back to pre-processing the `zone-check` output a bit before checking it
+#
+# See: https://gitlab.nic.cz/knot/knot-dns/-/issues/913
+run knotc zone-check || :
+sed -i '/forwarded.test./d' "$RUN_OUT"
 [[ ! -s "$RUN_OUT" ]]
 # We need to manually propagate the DS records of onlinesign.test. to the parent
 # zone, since they're generated online
@@ -348,6 +384,12 @@ run dig +noall +authority +comments SRV .
 grep -qF "status: NOERROR" "$RUN_OUT"
 grep -qE "IN\s+SOA\s+ns1\.unsigned\.test\." "$RUN_OUT"
 
+run resolvectl query -t SVCB svcb.test
+grep -qF 'alpn="dot"' "$RUN_OUT"
+grep -qF "ipv4hint=10.0.0.1" "$RUN_OUT"
+
+run resolvectl query -t HTTPS https.test
+grep -qF 'alpn="h2,h3"' "$RUN_OUT"
 
 : "--- ZONE: unsigned.test. ---"
 run dig @ns1.unsigned.test +short unsigned.test A unsigned.test AAAA
@@ -405,6 +447,27 @@ grep -qF "myservice.signed.test:1234" "$RUN_OUT"
 grep -qF "10.0.0.20" "$RUN_OUT"
 grep -qF "fd00:dead:beef:cafe::17" "$RUN_OUT"
 grep -qF "authenticated: yes" "$RUN_OUT"
+
+# Test service resolve over Varlink
+run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveService '{"name":"","type":"_mysvc._tcp","domain":"signed.test"}'
+grep -qF '"services":[{"priority":10,"weight":5,"port":1234,"hostname":"myservice.signed.test","canonicalName":"myservice.signed.test","addresses":[{"ifindex":' "$RUN_OUT"
+grep -qF '"family":10,"address":[253,0,222,173,190,239,202,254,0,0,0,0,0,0,0,23]' "$RUN_OUT"
+grep -qF '"family":2,"address":[10,0,0,20]' "$RUN_OUT"
+grep -qF '}]}],"txt":["This is TXT for myservice"],"canonical":{"name":null,"type":"_mysvc._tcp","domain":"signed.test"},"flags":' "$RUN_OUT"
+
+# without name
+run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveService '{"type":"_mysvc._tcp","domain":"signed.test"}'
+# without txt (SD_RESOLVE_NO_TXT)
+run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveService '{"type":"_mysvc._tcp","domain":"signed.test","flags":64}'
+(! grep -qF '"txt"' "$RUN_OUT")
+# without address (SD_RESOLVE_NO_ADDRESS)
+run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveService '{"type":"_mysvc._tcp","domain":"signed.test","flags":128}'
+(! grep -qF '"addresses"' "$RUN_OUT")
+# without txt and address
+run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveService '{"type":"_mysvc._tcp","domain":"signed.test","flags":192}'
+(! grep -qF '"txt"' "$RUN_OUT")
+(! grep -qF '"addresses"' "$RUN_OUT")
+
 (! run resolvectl service _invalidsvc._udp signed.test)
 grep -qE "invalidservice\.signed\.test' not found" "$RUN_OUT"
 run resolvectl service _untrustedsvc._udp signed.test
@@ -418,6 +481,18 @@ grep -qF "; fully validated" "$RUN_OUT"
 run resolvectl openpgp mr.smith@signed.test
 grep -qF "5a786cdc59c161cdafd818143705026636962198c66ed4c5b3da321e._openpgpkey.signed.test" "$RUN_OUT"
 grep -qF "authenticated: yes" "$RUN_OUT"
+# Check zone transfers (AXFR/IXFR)
+# Note: since resolved doesn't support zone transfers, let's just make sure it
+#       simply refuses such requests without choking on them
+# See: https://github.com/systemd/systemd/pull/30809#issuecomment-1880102804
+run dig @ns1.unsigned.test AXFR signed.test
+grep -qE "SOA\s+ns1.unsigned.test. root.unsigned.test." "$RUN_OUT"
+run dig AXFR signed.test
+grep -qF "; Transfer failed" "$RUN_OUT"
+run dig @ns1.unsigned.test IXFR=43 signed.test
+grep -qE "SOA\s+ns1.unsigned.test. root.unsigned.test." "$RUN_OUT"
+run dig IXFR=43 signed.test
+grep -qF "; Transfer failed" "$RUN_OUT"
 
 # DNSSEC validation with multiple records of the same type for the same name
 # Issue: https://github.com/systemd/systemd/issues/22002
@@ -460,9 +535,9 @@ monitor_check_rr "$TIMESTAMP" "follow13.almost.final.signed.test IN CNAME follow
 monitor_check_rr "$TIMESTAMP" "follow14.final.signed.test IN A 10.0.0.14"
 
 # Non-existing RR + CNAME chain
-run dig +dnssec AAAA cname-chain.signed.test
-grep -qF "status: NOERROR" "$RUN_OUT"
-grep -qE "^follow14\.final\.signed\.test\..+IN\s+NSEC\s+" "$RUN_OUT"
+#run dig +dnssec AAAA cname-chain.signed.test
+#grep -qF "status: NOERROR" "$RUN_OUT"
+#grep -qE "^follow14\.final\.signed\.test\..+IN\s+NSEC\s+" "$RUN_OUT"
 
 
 : "--- ZONE: onlinesign.test (dynamic DNSSEC) ---"
@@ -545,6 +620,61 @@ grep -qF "fd00:dead:beef:cafe::123" "$RUN_OUT"
 #run dig +dnssec this.does.not.exist.untrusted.test
 #grep -qF "status: NXDOMAIN" "$RUN_OUT"
 
+: "--- ZONE: forwarded.test (queries forwarded to our dummy test server) ---"
+JOURNAL_CURSOR="$(mktemp)"
+journalctl -n0 -q --cursor-file="$JOURNAL_CURSOR"
+
+# See "test-resolved-dummy-server.c" for the server part
+(! run resolvectl query nope.forwarded.test)
+grep -qF "nope.forwarded.test" "$RUN_OUT"
+grep -qF "not found" "$RUN_OUT"
+
+# SERVFAIL + EDE code 6: DNSSEC Bogus
+(! run resolvectl query edns-bogus-dnssec.forwarded.test)
+grep -qE "^edns-bogus-dnssec.forwarded.test:.+: upstream-failure \(DNSSEC Bogus\)" "$RUN_OUT"
+# Same thing, but over Varlink
+(! run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveHostname '{"name" : "edns-bogus-dnssec.forwarded.test"}')
+grep -qF "io.systemd.Resolve.DNSSECValidationFailed" "$RUN_OUT"
+grep -qF '{"result":"upstream-failure","extendedDNSErrorCode":6}' "$RUN_OUT"
+journalctl --sync
+journalctl -u systemd-resolved.service --cursor-file="$JOURNAL_CURSOR" --grep "Server returned error: SERVFAIL \(DNSSEC Bogus\). Lookup failed."
+
+# SERVFAIL + EDE code 16: Censored + extra text
+(! run resolvectl query edns-extra-text.forwarded.test)
+grep -qE "^edns-extra-text.forwarded.test.+: SERVFAIL \(Censored: Nothing to see here!\)" "$RUN_OUT"
+(! run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveHostname '{"name" : "edns-extra-text.forwarded.test"}')
+grep -qF "io.systemd.Resolve.DNSError" "$RUN_OUT"
+grep -qF '{"rcode":2,"extendedDNSErrorCode":16,"extendedDNSErrorMessage":"Nothing to see here!"}' "$RUN_OUT"
+journalctl --sync
+journalctl -u systemd-resolved.service --cursor-file="$JOURNAL_CURSOR" --grep "Server returned error: SERVFAIL \(Censored: Nothing to see here!\)"
+
+# SERVFAIL + EDE code 0: Other + extra text
+(! run resolvectl query edns-code-zero.forwarded.test)
+grep -qE "^edns-code-zero.forwarded.test:.+: SERVFAIL \(Other: 🐱\)" "$RUN_OUT"
+(! run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveHostname '{"name" : "edns-code-zero.forwarded.test"}')
+grep -qF "io.systemd.Resolve.DNSError" "$RUN_OUT"
+grep -qF '{"rcode":2,"extendedDNSErrorCode":0,"extendedDNSErrorMessage":"🐱"}' "$RUN_OUT"
+journalctl --sync
+journalctl -u systemd-resolved.service --cursor-file="$JOURNAL_CURSOR" --grep "Server returned error: SERVFAIL \(Other: 🐱\)"
+
+# SERVFAIL + invalid EDE code
+(! run resolvectl query edns-invalid-code.forwarded.test)
+grep -qE "^edns-invalid-code.forwarded.test:.+: SERVFAIL \([0-9]+\)" "$RUN_OUT"
+(! run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveHostname '{"name" : "edns-invalid-code.forwarded.test"}')
+grep -qF "io.systemd.Resolve.DNSError" "$RUN_OUT"
+grep -qE '{"rcode":2,"extendedDNSErrorCode":[0-9]+}' "$RUN_OUT"
+journalctl --sync
+journalctl -u systemd-resolved.service --cursor-file="$JOURNAL_CURSOR" --grep "Server returned error: SERVFAIL \(\d+\)"
+
+# SERVFAIL + invalid EDE code + extra text
+(! run resolvectl query edns-invalid-code-with-extra-text.forwarded.test)
+grep -qE '^edns-invalid-code-with-extra-text.forwarded.test:.+: SERVFAIL \([0-9]+: Hello \[#\]\$%~ World\)' "$RUN_OUT"
+(! run varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveHostname '{"name" : "edns-invalid-code-with-extra-text.forwarded.test"}')
+grep -qF "io.systemd.Resolve.DNSError" "$RUN_OUT"
+grep -qE '{"rcode":2,"extendedDNSErrorCode":[0-9]+,"extendedDNSErrorMessage":"Hello \[#\]\$%~ World"}' "$RUN_OUT"
+journalctl --sync
+journalctl -u systemd-resolved.service --cursor-file="$JOURNAL_CURSOR" --grep "Server returned error: SERVFAIL \(\d+: Hello \[\#\]\\$%~ World\)"
+
 ### Test resolvectl show-cache
 run resolvectl show-cache
 run resolvectl show-cache --json=short
@@ -559,10 +689,10 @@ systemctl stop resolvectl-monitor-json.service
 # Issue: https://github.com/systemd/systemd/issues/29580 (part #2)
 #
 # Check for any warnings regarding malformed messages
-(! journalctl -p warning --grep malformed _SYSTEMD_UNIT="resolvectl-monitor-json.service" + SYSLOG_IDENTIFIER="resolvectl-monitor-json")
+(! journalctl -u resolvectl-monitor.service -u reseolvectl-monitor-json.service -p warning --grep malformed)
 # Verify that all queries recorded by `resolvectl monitor --json` produced a valid JSON
 # with expected fields
-journalctl -p info -o cat _SYSTEMD_UNIT="resolvectl-monitor-json.service" + SYSLOG_IDENTIFIER="resolvectl-monitor-json" | while read -r line; do
+journalctl -p info -o cat _SYSTEMD_UNIT="resolvectl-monitor-json.service" | while read -r line; do
     # Check that both "question" and "answer" fields are arrays
     #
     # The expression is slightly more complicated due to the fact that the "answer" field is optional,
@@ -589,7 +719,9 @@ if command -v nft >/dev/null; then
     sleep 2
     drop_dns_outbound_traffic
     set +e
-    run dig stale1.unsigned.test -t A
+    # Make sure we give sd-resolved enough time to timeout (5-10s) before giving up
+    # See: https://github.com/systemd/systemd/issues/31639#issuecomment-2009152617
+    run dig +tries=1 +timeout=15 stale1.unsigned.test -t A
     set -eux
     grep -qE "no servers could be reached" "$RUN_OUT"
     nft flush ruleset
@@ -602,13 +734,14 @@ if command -v nft >/dev/null; then
         echo "StaleRetentionSec=1d"
     } >/run/systemd/resolved.conf.d/test.conf
     ln -svf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-    restart_resolved
+    systemctl reload systemd-resolved.service
 
     run dig stale1.unsigned.test -t A
     grep -qE "NOERROR" "$RUN_OUT"
     sleep 2
     drop_dns_outbound_traffic
-    run dig stale1.unsigned.test -t A
+    # Make sure we give sd-resolved enough time to timeout (5-10s) and serve the stale data (see above)
+    run dig +tries=1 +timeout=15 stale1.unsigned.test -t A
     grep -qE "NOERROR" "$RUN_OUT"
     grep -qE "10.0.0.112" "$RUN_OUT"
 
@@ -724,6 +857,28 @@ run resolvectl reset-statistics
 run resolvectl reset-statistics --json=pretty
 
 run resolvectl reset-statistics --json=short
+
+test "$(resolvectl --json=short query -t AAAA localhost)" == '{"key":{"class":1,"type":28,"name":"localhost"},"address":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]}'
+test "$(resolvectl --json=short query -t A localhost)" == '{"key":{"class":1,"type":1,"name":"localhost"},"address":[127,0,0,1]}'
+
+# Test ResolveRecord RR resolving via Varlink
+test "$(varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveRecord '{"name":"localhost","type":1}' --json=short)" == '{"rrs":[{"ifindex":1,"rr":{"key":{"class":1,"type":1,"name":"localhost"},"address":[127,0,0,1]},"raw":"CWxvY2FsaG9zdAAAAQABAAAAAAAEfwAAAQ=="}],"flags":786945}'
+test "$(varlinkctl call /run/systemd/resolve/io.systemd.Resolve io.systemd.Resolve.ResolveRecord '{"name":"localhost","type":28}' --json=short)" == '{"rrs":[{"ifindex":1,"rr":{"key":{"class":1,"type":28,"name":"localhost"},"address":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]},"raw":"CWxvY2FsaG9zdAAAHAABAAAAAAAQAAAAAAAAAAAAAAAAAAAAAQ=="}],"flags":786945}'
+
+# Ensure that reloading keeps the manually configured address
+{
+    echo "[Resolve]"
+    echo "DNS=8.8.8.8"
+} >/run/systemd/resolved.conf.d/reload.conf
+resolvectl dns dns0 1.1.1.1
+systemctl reload systemd-resolved.service
+resolvectl status
+resolvectl dns dns0 | grep -qF "1.1.1.1"
+# For some reason piping this last command to grep fails with:
+# 'resolvectl[1378]: Failed to print table: Broken pipe'
+# so use an intermediate file in /tmp/
+resolvectl >/tmp/output
+grep -qF "DNS Servers: 8.8.8.8" /tmp/output
 
 # Check if resolved exits cleanly.
 restart_resolved

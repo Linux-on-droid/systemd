@@ -7,6 +7,7 @@
  * This protocol is guaranteed to be stable as per:
  * https://systemd.io/PORTABILITY_AND_STABILITY/ */
 
+#define _GNU_SOURCE 1
 #include <errno.h>
 #include <inttypes.h>
 #include <signal.h>
@@ -40,16 +41,18 @@ static int notify(const char *message) {
   _cleanup_(closep) int fd = -1;
   const char *socket_path;
 
-  socket_path = getenv("NOTIFY_SOCKET");
-  if (!socket_path)
-    return 0; /* Not running under systemd? Nothing to do */
-
+  /* Verify the argument first */
   if (!message)
     return -EINVAL;
 
   message_length = strlen(message);
   if (message_length == 0)
     return -EINVAL;
+
+  /* If the variable is not set, the protocol is a noop */
+  socket_path = getenv("NOTIFY_SOCKET");
+  if (!socket_path)
+    return 0; /* Not set? Nothing to do */
 
   /* Only AF_UNIX is supported, with path or abstract sockets */
   if (socket_path[0] != '/' && socket_path[0] != '@')
@@ -106,6 +109,10 @@ static int notify_reloading(void) {
     return -EINVAL;
 
   return notify(reload_message);
+}
+
+static int notify_stopping(void) {
+  return notify("STOPPING=1");
 }
 
 static volatile sig_atomic_t reloading = 0;
@@ -168,6 +175,14 @@ int main(int argc, char **argv) {
     /* Do some daemon work here … */
     sleep(5);
   }
+
+  r = notify_stopping();
+  if (r < 0) {
+    fprintf(stderr, "Failed to report termination to $NOTIFY_SOCKET: %s\n", strerror(-r));
+    return EXIT_FAILURE;
+  }
+
+  /* Do some shutdown work here … */
 
   return EXIT_SUCCESS;
 }

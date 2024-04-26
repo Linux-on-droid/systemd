@@ -1165,10 +1165,10 @@ static int source_set_pending(sd_event_source *s, bool b) {
                 assert(s->inotify.inode_data->inotify_data);
 
                 if (b)
-                        s->inotify.inode_data->inotify_data->n_pending ++;
+                        s->inotify.inode_data->inotify_data->n_pending++;
                 else {
                         assert(s->inotify.inode_data->inotify_data->n_pending > 0);
-                        s->inotify.inode_data->inotify_data->n_pending --;
+                        s->inotify.inode_data->inotify_data->n_pending--;
                 }
         }
 
@@ -1574,7 +1574,7 @@ static int child_exit_callback(sd_event_source *s, const siginfo_t *si, void *us
 
 static bool shall_use_pidfd(void) {
         /* Mostly relevant for debugging, i.e. this is used in test-event.c to test the event loop once with and once without pidfd */
-        return getenv_bool_secure("SYSTEMD_PIDFD") != 0;
+        return secure_getenv_bool("SYSTEMD_PIDFD") != 0;
 }
 
 _public_ int sd_event_add_child(
@@ -1976,7 +1976,7 @@ _public_ int sd_event_add_memory_pressure(
 
                 env = secure_getenv("MEMORY_PRESSURE_WRITE");
                 if (env) {
-                        r = unbase64mem(env, SIZE_MAX, &write_buffer, &write_buffer_size);
+                        r = unbase64mem(env, &write_buffer, &write_buffer_size);
                         if (r < 0)
                                 return r;
                 }
@@ -2231,8 +2231,8 @@ static int inode_data_compare(const struct inode_data *x, const struct inode_dat
 static void inode_data_hash_func(const struct inode_data *d, struct siphash *state) {
         assert(d);
 
-        siphash24_compress(&d->dev, sizeof(d->dev), state);
-        siphash24_compress(&d->ino, sizeof(d->ino), state);
+        siphash24_compress_typesafe(d->dev, state);
+        siphash24_compress_typesafe(d->ino, state);
 }
 
 DEFINE_PRIVATE_HASH_OPS(inode_data_hash_ops, struct inode_data, inode_data_hash_func, inode_data_compare);
@@ -2272,6 +2272,7 @@ static void event_free_inode_data(
                 assert_se(hashmap_remove(d->inotify_data->inodes, d) == d);
         }
 
+        free(d->path);
         free(d);
 }
 
@@ -2512,6 +2513,15 @@ static int event_add_inotify_fd_internal(
                 }
 
                 LIST_PREPEND(to_close, e->inode_data_to_close_list, inode_data);
+
+                _cleanup_free_ char *path = NULL;
+                r = fd_get_path(inode_data->fd, &path);
+                if (r < 0 && r != -ENOSYS) { /* The path is optional, hence ignore -ENOSYS. */
+                        event_gc_inode_data(e, inode_data);
+                        return r;
+                }
+
+                free_and_replace(inode_data->path, path);
         }
 
         /* Link our event source to the inode data object */
@@ -2797,6 +2807,13 @@ _public_ int sd_event_source_set_priority(sd_event_source *s, int64_t priority) 
                         }
 
                         LIST_PREPEND(to_close, s->event->inode_data_to_close_list, new_inode_data);
+
+                        _cleanup_free_ char *path = NULL;
+                        r = fd_get_path(new_inode_data->fd, &path);
+                        if (r < 0 && r != -ENOSYS)
+                                goto fail;
+
+                        free_and_replace(new_inode_data->path, path);
                 }
 
                 /* Move the event source to the new inode data structure */
@@ -3281,13 +3298,29 @@ _public_ int sd_event_source_set_child_process_own(sd_event_source *s, int own) 
         return 0;
 }
 
-_public_ int sd_event_source_get_inotify_mask(sd_event_source *s, uint32_t *mask) {
+_public_ int sd_event_source_get_inotify_mask(sd_event_source *s, uint32_t *ret) {
         assert_return(s, -EINVAL);
-        assert_return(mask, -EINVAL);
+        assert_return(ret, -EINVAL);
         assert_return(s->type == SOURCE_INOTIFY, -EDOM);
         assert_return(!event_origin_changed(s->event), -ECHILD);
 
-        *mask = s->inotify.mask;
+        *ret = s->inotify.mask;
+        return 0;
+}
+
+_public_ int sd_event_source_get_inotify_path(sd_event_source *s, const char **ret) {
+        assert_return(s, -EINVAL);
+        assert_return(ret, -EINVAL);
+        assert_return(s->type == SOURCE_INOTIFY, -EDOM);
+        assert_return(!event_origin_changed(s->event), -ECHILD);
+
+        if (!s->inotify.inode_data)
+                return -ESTALE; /* already disconnected. */
+
+        if (!s->inotify.inode_data->path)
+                return -ENOSYS; /* /proc was not mounted? */
+
+        *ret = s->inotify.inode_data->path;
         return 0;
 }
 
@@ -3999,7 +4032,7 @@ static int process_inotify(sd_event *e) {
                 if (r < 0)
                         return r;
                 if (r > 0)
-                        done ++;
+                        done++;
         }
 
         return done;
@@ -4914,13 +4947,13 @@ _public_ int sd_event_get_state(sd_event *e) {
 _public_ int sd_event_get_exit_code(sd_event *e, int *code) {
         assert_return(e, -EINVAL);
         assert_return(e = event_resolve(e), -ENOPKG);
-        assert_return(code, -EINVAL);
         assert_return(!event_origin_changed(e), -ECHILD);
 
         if (!e->exit_requested)
                 return -ENODATA;
 
-        *code = e->exit_code;
+        if (code)
+                *code = e->exit_code;
         return 0;
 }
 
@@ -5037,7 +5070,7 @@ _public_ int sd_event_set_watchdog(sd_event *e, int b) {
                 }
         }
 
-        e->watchdog = !!b;
+        e->watchdog = b;
         return e->watchdog;
 
 fail:

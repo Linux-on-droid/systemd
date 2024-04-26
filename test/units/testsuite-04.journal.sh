@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# shellcheck disable=SC2317
 set -eux
 set -o pipefail
 
@@ -108,6 +107,16 @@ systemctl start silent-success
 journalctl --sync
 [[ -z "$(journalctl -b -q -u silent-success.service)" ]]
 
+# Test syslog identifiers exclusion
+systemctl start verbose-success.service
+timeout 30 bash -xec 'while systemctl -q is-active verbose-success.service; do sleep 1; done'
+journalctl --sync
+[[ -n "$(journalctl -b -q -u verbose-success.service -t systemd)" ]]
+[[ -n "$(journalctl -b -q -u verbose-success.service -t echo)" ]]
+[[ -n "$(journalctl -b -q -u verbose-success.service -T systemd)" ]]
+[[ -n "$(journalctl -b -q -u verbose-success.service -T echo)" ]]
+[[ -z "$(journalctl -b -q -u verbose-success.service -T echo -T '(echo)' -T systemd -T '(systemd)' -T systemd-executor)" ]]
+
 # Exercise the matching machinery
 SYSTEMD_LOG_LEVEL=debug journalctl -b -n 1 /dev/null /dev/zero /dev/null /dev/null /dev/null
 journalctl -b -n 1 /bin/true /bin/false
@@ -124,6 +133,8 @@ journalctl -b -n 1 -r --user-unit "*"
 
 # Facilities & priorities
 journalctl --facility help
+journalctl --facility help | grep -F 'kern'
+journalctl --facility help | grep -F 'mail'
 journalctl --facility kern -n 1
 journalctl --facility syslog --priority 0..3 -n 1
 journalctl --facility syslog --priority 3..0 -n 1
@@ -135,6 +146,8 @@ journalctl --facility daemon --priority 5..crit -n 1
 
 # Assorted combinations
 journalctl -o help
+journalctl -o help | grep -F 'short'
+journalctl -o help | grep -F 'export'
 journalctl -q -n all -a | grep . >/dev/null
 journalctl -q --no-full | grep . >/dev/null
 journalctl -q --user --system | grep . >/dev/null
@@ -235,16 +248,13 @@ JOURNAL_DIR="$(mktemp -d)"
 while read -r file; do
     filename="${file##*/}"
     unzstd "$file" -o "$JOURNAL_DIR/${filename%*.zst}"
-done < <(find /test-journals/no-rtc -name "*.zst")
+done < <(find /usr/lib/systemd/tests/testdata/test-journals/no-rtc -name "*.zst")
 
 journalctl --directory="$JOURNAL_DIR" --list-boots --output=json >/tmp/lb1
 diff -u /tmp/lb1 - <<'EOF'
 [{"index":-3,"boot_id":"5ea5fc4f82a14186b5332a788ef9435e","first_entry":1666569600994371,"last_entry":1666584266223608},{"index":-2,"boot_id":"bea6864f21ad4c9594c04a99d89948b0","first_entry":1666569601005945,"last_entry":1666584347230411},{"index":-1,"boot_id":"4c708e1fd0744336be16f3931aa861fb","first_entry":1666569601017222,"last_entry":1666584354649355},{"index":0,"boot_id":"35e8501129134edd9df5267c49f744a4","first_entry":1666569601009823,"last_entry":1666584438086856}]
 EOF
 rm -rf "$JOURNAL_DIR" /tmp/lb1
-
-# v255-only: skip the following test case, as it suffers from systemd/systemd#30886
-exit 0
 
 # Check that using --after-cursor/--cursor-file= together with journal filters doesn't
 # skip over entries matched by the filter
