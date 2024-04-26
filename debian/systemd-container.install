@@ -1,5 +1,5 @@
 #!/usr/bin/dh-exec
-<pkg.systemd.upstream> usr/bin/importctl
+usr/bin/importctl
 <pkg.systemd.upstream> usr/bin/systemd-vmspawn
 <pkg.systemd.upstream> usr/lib/systemd/system/systemd-vmspawn@.service
 usr/bin/machinectl
