@@ -24,6 +24,7 @@ int device_get_sysattr_unsigned_full(sd_device *device, const char *sysattr, uns
 static inline int device_get_sysattr_unsigned(sd_device *device, const char *sysattr, unsigned *ret_value) {
         return device_get_sysattr_unsigned_full(device, sysattr, 0, ret_value);
 }
+int device_get_sysattr_u32(sd_device *device, const char *sysattr, uint32_t *ret_value);
 int device_get_sysattr_bool(sd_device *device, const char *sysattr);
 int device_get_device_id(sd_device *device, const char **ret);
 int device_get_devlink_priority(sd_device *device, int *ret);
@@ -61,6 +62,8 @@ int device_get_properties_strv(sd_device *device, char ***ret);
 int device_clone_with_db(sd_device *device, sd_device **ret);
 
 int device_tag_index(sd_device *dev, sd_device *dev_old, bool add);
+bool device_should_have_db(sd_device *device);
+int device_has_db(sd_device *device);
 int device_update_db(sd_device *device);
 int device_delete_db(sd_device *device);
 int device_read_db_internal_filename(sd_device *device, const char *filename); /* For fuzzer */

@@ -393,6 +393,8 @@ static void dns_query_reset_answer(DnsQuery *q) {
 
         q->answer = dns_answer_unref(q->answer);
         q->answer_rcode = 0;
+        q->answer_ede_rcode = _DNS_EDE_RCODE_INVALID;
+        q->answer_ede_msg = mfree(q->answer_ede_msg);
         q->answer_dnssec_result = _DNSSEC_RESULT_INVALID;
         q->answer_errno = 0;
         q->answer_query_flags = 0;
@@ -539,6 +541,7 @@ int dns_query_new(
                 .question_bypass = dns_packet_ref(question_bypass),
                 .ifindex = ifindex,
                 .flags = flags,
+                .answer_ede_rcode = _DNS_EDE_RCODE_INVALID,
                 .answer_dnssec_result = _DNSSEC_RESULT_INVALID,
                 .answer_protocol = _DNS_PROTOCOL_INVALID,
                 .answer_family = AF_UNSPEC,
@@ -611,7 +614,7 @@ void dns_query_complete(DnsQuery *q, DnsTransactionState state) {
 
         q->state = state;
 
-        (void) manager_monitor_send(q->manager, q->state, q->answer_rcode, q->answer_errno, q->question_idna, q->question_utf8, q->question_bypass, q->collected_questions, q->answer);
+        (void) manager_monitor_send(q->manager, q);
 
         dns_query_abandon(q);
         if (q->complete)
@@ -694,6 +697,8 @@ static int dns_query_synthesize_reply(DnsQuery *q, DnsTransactionState *state) {
                 q->answer_query_flags = SD_RESOLVED_AUTHENTICATED|SD_RESOLVED_CONFIDENTIAL|SD_RESOLVED_SYNTHETIC;
                 *state = DNS_TRANSACTION_RCODE_FAILURE;
 
+                log_debug("Found synthetic NXDOMAIN response.");
+
                 return 0;
         }
         if (r <= 0)
@@ -708,6 +713,8 @@ static int dns_query_synthesize_reply(DnsQuery *q, DnsTransactionState *state) {
         q->answer_query_flags = SD_RESOLVED_AUTHENTICATED|SD_RESOLVED_CONFIDENTIAL|SD_RESOLVED_SYNTHETIC;
 
         *state = DNS_TRANSACTION_SUCCESS;
+
+        log_debug("Found synthetic success response.");
 
         return 1;
 }
@@ -763,7 +770,7 @@ int dns_query_go(DnsQuery *q) {
         LIST_FOREACH(scopes, s, q->manager->dns_scopes) {
                 DnsScopeMatch match;
 
-                match = dns_scope_good_domain(s, q);
+                match = dns_scope_good_domain(s, q, q->flags);
                 assert(match >= 0);
                 if (match > found) { /* Does this match better? If so, remember how well it matched, and the first one
                                       * that matches this well */
@@ -790,7 +797,7 @@ int dns_query_go(DnsQuery *q) {
         LIST_FOREACH(scopes, s, first->scopes_next) {
                 DnsScopeMatch match;
 
-                match = dns_scope_good_domain(s, q);
+                match = dns_scope_good_domain(s, q, q->flags);
                 assert(match >= 0);
                 if (match < found)
                         continue;
@@ -923,6 +930,10 @@ static void dns_query_accept(DnsQuery *q, DnsQueryCandidate *c) {
 
                         DNS_ANSWER_REPLACE(q->answer, dns_answer_ref(t->answer));
                         q->answer_rcode = t->answer_rcode;
+                        q->answer_ede_rcode = t->answer_ede_rcode;
+                        r = free_and_strdup_warn(&q->answer_ede_msg, t->answer_ede_msg);
+                        if (r < 0)
+                                goto fail;
                         q->answer_dnssec_result = t->answer_dnssec_result;
                         q->answer_query_flags = t->answer_query_flags | dns_transaction_source_to_query_flags(t->answer_source);
                         q->answer_errno = t->answer_errno;

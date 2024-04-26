@@ -51,7 +51,7 @@ from typing import (Any,
 
 import pefile  # type: ignore
 
-__version__ = '{{PROJECT_VERSION}} ({{GIT_VERSION}})'
+__version__ = '{{PROJECT_VERSION_FULL}} ({{VERSION_TAG}})'
 
 EFI_ARCH_MAP = {
     # host_arch glob : [efi_arch, 32_bit_efi_arch if mixed mode is supported]
@@ -68,7 +68,7 @@ EFI_ARCHES: list[str] = sum(EFI_ARCH_MAP.values(), [])
 
 # Default configuration directories and file name.
 # When the user does not specify one, the directories are searched in this order and the first file found is used.
-DEFAULT_CONFIG_DIRS = ['/run/systemd', '/etc/systemd', '/usr/local/lib/systemd', '/usr/lib/systemd']
+DEFAULT_CONFIG_DIRS = ['/etc/systemd', '/run/systemd', '/usr/local/lib/systemd', '/usr/lib/systemd']
 DEFAULT_CONFIG_FILE = 'ukify.conf'
 
 class Style:
@@ -236,7 +236,7 @@ class Uname:
     @classmethod
     def scrape_x86(cls, filename, opts=None):
         # Based on https://gitlab.archlinux.org/archlinux/mkinitcpio/mkinitcpio/-/blob/master/functions#L136
-        # and https://www.kernel.org/doc/html/latest/x86/boot.html#the-real-mode-kernel-header
+        # and https://docs.kernel.org/arch/x86/boot.html#the-real-mode-kernel-header
         with open(filename, 'rb') as f:
             f.seek(0x202)
             magic = f.read(4)
@@ -303,6 +303,7 @@ class Uname:
 DEFAULT_SECTIONS_TO_SHOW = {
         '.linux'    : 'binary',
         '.initrd'   : 'binary',
+        '.ucode'    : 'binary',
         '.splash'   : 'binary',
         '.dtb'      : 'binary',
         '.cmdline'  : 'text',
@@ -449,7 +450,7 @@ def check_cert_and_keys_nonexistent(opts):
         *((priv_key, pub_key)
           for priv_key, pub_key, _ in key_path_groups(opts)))
     for path in paths:
-        if path and path.exists():
+        if path and pathlib.Path(path).exists():
             raise ValueError(f'{path} is present')
 
 
@@ -539,7 +540,11 @@ def call_systemd_measure(uki, linux, opts):
 
         for priv_key, pub_key, group in key_path_groups(opts):
             extra = [f'--private-key={priv_key}']
-            if pub_key:
+            if opts.signing_engine is not None:
+                assert pub_key
+                extra += [f'--private-key-source=engine:{opts.signing_engine}']
+                extra += [f'--certificate={pub_key}']
+            elif pub_key:
                 extra += [f'--public-key={pub_key}']
             extra += [f'--phase={phase_path}' for phase_path in group or ()]
 
@@ -728,11 +733,13 @@ def sbsign_sign(sbsign_tool, input_f, output_f, opts=None):
         sbsign_tool,
         '--key', opts.sb_key,
         '--cert', opts.sb_cert,
-        input_f,
-        '--output', output_f,
     ]
     if opts.signing_engine is not None:
         sign_invocation += ['--engine', opts.signing_engine]
+    sign_invocation += [
+        input_f,
+        '--output', output_f,
+    ]
     signer_sign(sign_invocation)
 
 def find_pesign(opts=None):
@@ -818,9 +825,23 @@ def make_uki(opts):
     if pcrpkey is None:
         if opts.pcr_public_keys and len(opts.pcr_public_keys) == 1:
             pcrpkey = opts.pcr_public_keys[0]
+            # If we are getting a certificate when using an engine, we need to convert it to public key format
+            if opts.signing_engine is not None and pathlib.Path(pcrpkey).exists():
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.x509 import load_pem_x509_certificate
+
+                try:
+                    cert = load_pem_x509_certificate(pathlib.Path(pcrpkey).read_bytes())
+                except ValueError:
+                    raise ValueError(f'{pcrpkey} must be an X.509 certificate when signing with an engine')
+                else:
+                    pcrpkey = cert.public_key().public_bytes(
+                        encoding=serialization.Encoding.PEM,
+                        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                    )
         elif opts.pcr_private_keys and len(opts.pcr_private_keys) == 1:
-            import cryptography.hazmat.primitives.serialization as serialization
-            privkey = serialization.load_pem_private_key(opts.pcr_private_keys[0].read_bytes(), password=None)
+            from cryptography.hazmat.primitives import serialization
+            privkey = serialization.load_pem_private_key(pathlib.Path(opts.pcr_private_keys[0]).read_bytes(), password=None)
             pcrpkey = privkey.public_key().public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -835,6 +856,7 @@ def make_uki(opts):
         ('.splash',  opts.splash,     True ),
         ('.pcrpkey', pcrpkey,         True ),
         ('.initrd',  initrd,          True ),
+        ('.ucode',   opts.microcode,  True ),
 
         # linux shall be last to leave breathing room for decompression.
         # We'll add it later.
@@ -895,7 +917,6 @@ uki-addon,1,UKI Addon,addon,1,https://www.freedesktop.org/software/systemd/man/l
         os.chmod(opts.output, 0o777 & ~umask)
 
     print(f"Wrote {'signed' if sign_args_present else 'unsigned'} {opts.output}")
-
 
 
 @contextlib.contextmanager
@@ -1008,7 +1029,7 @@ def generate_keys(opts):
 
         print(f'Writing private key for PCR signing to {priv_key}')
         with temporary_umask(0o077):
-            priv_key.write_bytes(priv_key_pem)
+            pathlib.Path(priv_key).write_bytes(priv_key_pem)
         if pub_key:
             print(f'Writing public key for PCR signing to {pub_key}')
             pub_key.write_bytes(pub_key_pem)
@@ -1261,6 +1282,14 @@ CONFIG_ITEMS = [
     ),
 
     ConfigItem(
+        '--microcode',
+        metavar = 'UCODE',
+        type = pathlib.Path,
+        help = 'microcode file [.ucode section]',
+        config_key = 'UKI/Microcode',
+    ),
+
+    ConfigItem(
         ('--config', '-c'),
         metavar = 'PATH',
         type = pathlib.Path,
@@ -1411,10 +1440,8 @@ CONFIG_ITEMS = [
     ConfigItem(
         '--pcr-private-key',
         dest = 'pcr_private_keys',
-        metavar = 'PATH',
-        type = pathlib.Path,
         action = 'append',
-        help = 'private part of the keypair for signing PCR signatures',
+        help = 'private part of the keypair or engine-specific designation for signing PCR signatures',
         config_key = 'PCRSignature:/PCRPrivateKey',
         config_push = ConfigItem.config_set_group,
     ),
@@ -1424,7 +1451,7 @@ CONFIG_ITEMS = [
         metavar = 'PATH',
         type = pathlib.Path,
         action = 'append',
-        help = 'public part of the keypair for signing PCR signatures',
+        help = 'public part of the keypair or engine-specific designation for signing PCR signatures',
         config_key = 'PCRSignature:/PCRPublicKey',
         config_push = ConfigItem.config_set_group,
     ),
