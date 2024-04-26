@@ -1,3 +1,20 @@
+systemd (256~rc1-1~exp) experimental; urgency=medium
+
+  * d/watch: switch to main repository
+  * New upstream version 256~rc1
+  * Drop Downgrade-a-couple-of-warnings-to-debug.patch. It is time to
+    start noticeably warning about these legacy setups
+  * Refresh patches for v256
+  * Build depend on libarchive-dev
+  * Install new tools, units and manpages
+  * Enable bpf and new nsresourced/mountfsd services. Requires vmlinux.h
+    from linux-headers-$ARCH, disable if not found
+  * Backport patch to fix unit test failure in build environment
+  * Update libsystemd symbols file
+  * Update Lintian overrides
+
+ -- Luca Boccassi <bluca@debian.org>  Fri, 26 Apr 2024 12:22:04 +0100
+
 systemd (255.5-1) sid; urgency=medium
 
   [ Michael Biebl ]
