@@ -162,13 +162,13 @@ CONFFLAGS += \
 	-Dsysupdate=disabled
 endif
 
-ifneq (, $(filter pkg.systemd.upstream, $(DEB_BUILD_PROFILES)))
+# BPF/BTF are only enabled and usable on a few architectures
+ifeq (, $(filter $(DEB_BUILD_PROFILES), stage1 pkg.systemd.nobpf))
+ifneq (,$(filter $(DEB_TARGET_ARCH), amd64 arm64 ppc64el riscv64 s390x))
 CONFFLAGS += \
 	-Dbpf-framework=enabled \
 	-Dbpf-compiler=clang
 
-# Ubuntu does not yet ship vmlinux.h, generate it at build time for now, until
-# https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2050083 is solved
 ifeq ($(DEB_VENDOR),Ubuntu)
 # Source: https://git.launchpad.net/ubuntu/+source/xdp-tools/tree/debian/rules
 # On Ubuntu, the `bpftool` in path is a shell wrapper pointing at
@@ -186,16 +186,27 @@ bpftool_binary := $(shell find /usr/lib/linux-tools/ -name 'bpftool' -perm /u=x 
 ifneq ($(bpftool_binary),)
 export PATH := $(shell dirname $(bpftool_binary)):$(PATH)
 endif
-CONFFLAGS += -Dvmlinux-h=auto
-else
+endif
+
 # The vmlinux.h we want is in the headers package that linux-headers-ARCH depends on,
 # which itself is the package that provides linux-headers-generic that we build depend on.
-# This is available since Trixie.
+# This is available since Trixie. If we can't find it, default to auto for the upstream CI
+# so that it is generated at build time, or disabled for distribution builds, as we don't
+# want to depend on the buildd kernels.
+ifeq ($(DEB_VENDOR),Ubuntu)
+HEADERS_PACKAGE = $(shell dpkg-query --showformat='$${Depends}' --show linux-headers-generic | sed "s/.*\(linux-headers-.*)\)-generic.*/\1/")
+else
 HEADERS_PACKAGE = $(shell dpkg-query --showformat='$${Depends}' --show linux-headers-$(DEB_HOST_ARCH) | sed "s/.*\(linux-headers-.*-$(DEB_HOST_ARCH)\).*/\1/")
+endif
+
 ifneq ("$(wildcard /usr/src/$(HEADERS_PACKAGE)/vmlinux.h)","")
 CONFFLAGS += -Dvmlinux-h=provided -Dvmlinux-h-path=/usr/src/$(HEADERS_PACKAGE)/vmlinux.h
 else
+ifneq (, $(filter pkg.systemd.upstream, $(DEB_BUILD_PROFILES)))
 CONFFLAGS += -Dvmlinux-h=auto
+else
+CONFFLAGS += -Dvmlinux-h=disabled
+endif
 endif
 endif
 endif
