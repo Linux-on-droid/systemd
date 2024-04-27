@@ -9,10 +9,10 @@ variables:
   # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1011649
   SALSA_CI_DISABLE_PIUPARTS: 1
   RELEASE: 'bookworm'
+  SALSA_CI_IMAGES_LINTIAN: ${SALSA_CI_IMAGES}/lintian:stable
   SALSA_CI_LINTIAN_SUPPRESS_TAGS: "bad-distribution-in-changes-file"
   # The following jobs all run on unstable, and cannot work because they expect
   # overrides, compiler flags, dependencies, etc to work as in unstable, but this
   # is a stable branch
-  SALSA_CI_DISABLE_LINTIAN: 1
   SALSA_CI_DISABLE_BLHC: 1
   SALSA_CI_DISABLE_REPROTEST: 1
