@@ -6,3 +6,4 @@ debian/Revert-core-set-RLIMIT_CORE-to-unlimited-by-default.patch
 debian/systemctl-do-not-shutdown-immediately-on-scheduled-shutdo.patch
 debian/localectl-disable-keymap-support.patch
 test-do-not-fail-if-mknod-fails-in-a-build-system.patch
+build-path-fix-SIGEGV-on-RISC-V.patch
