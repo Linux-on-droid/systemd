@@ -1,3 +1,11 @@
+systemd (256~rc1-1~exp2) experimental; urgency=medium
+
+  * Backport patch to fix test-build-path on RISC-V/MIPS
+  * Backport patch to fix build reproducibility
+  * Backport patch to fix BPF build on s390x
+
+ -- Luca Boccassi <bluca@debian.org>  Sat, 27 Apr 2024 18:14:25 +0100
+
 systemd (256~rc1-1~exp) experimental; urgency=medium
 
   * d/watch: switch to main repository
