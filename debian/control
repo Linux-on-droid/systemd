@@ -88,6 +88,7 @@ Multi-Arch: foreign
 Priority: important
 Recommends: default-dbus-system-bus | dbus-system-bus,
             systemd-timesyncd | time-daemon,
+            libzstd1,
 Suggests: systemd-container,
           systemd-homed,
           systemd-userdbd,
@@ -104,6 +105,9 @@ Suggests: systemd-container,
           libtss2-mu-4.0.1-0,
           libtss2-rc0,
           libtss2-tcti-device0,
+          liblz4-1,
+          liblzma5,
+          libgcrypt20,
           polkitd,
 Pre-Depends: ${shlibs:Pre-Depends},
              ${misc:Pre-Depends}
