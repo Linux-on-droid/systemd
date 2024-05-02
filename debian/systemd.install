@@ -345,6 +345,7 @@ usr/lib/systemd/system/systemd-journald.service
 usr/lib/systemd/system/systemd-journald@.service
 usr/lib/systemd/system/systemd-journald.socket
 usr/lib/systemd/system/systemd-journald@.socket
+<pkg.systemd.upstream> usr/lib/systemd/system/systemd-journald-sync@.service
 usr/lib/systemd/system/systemd-journald-varlink@.socket
 usr/lib/systemd/system/systemd-journal-flush.service
 usr/lib/systemd/system/systemd-kexec.service
