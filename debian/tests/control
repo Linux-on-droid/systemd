@@ -220,6 +220,7 @@ Depends: systemd-tests,
   softhsm2,
   openssh-client,
   openssh-server,
+  polkitd,
 Restrictions: needs-root, allow-stderr, isolation-machine
 
 Tests: boot-smoke
