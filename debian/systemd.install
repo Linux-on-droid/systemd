@@ -208,6 +208,7 @@ usr/lib/systemd/system/kmod-static-nodes.service
 usr/lib/systemd/system/ldconfig.service
 usr/lib/systemd/system/local-fs-pre.target
 usr/lib/systemd/system/local-fs.target
+usr/lib/systemd/system/local-fs.target.wants/tmp.mount
 usr/lib/systemd/system/machine.slice
 usr/lib/systemd/system/modprobe@.service
 usr/lib/systemd/system/multi-user.target
@@ -415,6 +416,7 @@ usr/lib/systemd/system/timers.target
 usr/lib/systemd/system/timers.target.wants/systemd-tmpfiles-clean.timer
 usr/lib/systemd/system/time-set.target
 usr/lib/systemd/system/time-sync.target
+usr/lib/systemd/system/tmp.mount
 usr/lib/systemd/system/tpm2.target
 usr/lib/systemd/system/umount.target
 usr/lib/systemd/system/usb-gadget.target
