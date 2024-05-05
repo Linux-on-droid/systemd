@@ -140,9 +140,8 @@ class ServicesTest(unittest.TestCase):
             self.assertFalse(os.path.exists('/tmp/oldfile.test'))
         self.assertFalse(os.path.exists('/tmp/newfile.test'))
         # files in /var/tmp/ older than 30d should get cleaned up
-        # XXX FIXME: /var/tmp/ cleanup was disabled in #675422
-        # if not is_container:
-        #     self.assertFalse(os.path.exists('/var/tmp/oldfile.test'))
+        if not is_container:
+            self.assertFalse(os.path.exists('/var/tmp/oldfile.test'))
         self.assertTrue(os.path.exists('/var/tmp/newfile.test'))
 
         # next run should leave the recent ones

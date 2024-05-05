@@ -55,6 +55,13 @@ if [ -f "$DPKG_ROOT/etc/default/locale" ] && [ ! -L "$DPKG_ROOT/etc/default/loca
     mv "$DPKG_ROOT/etc/default/locale" "$DPKG_ROOT/etc/locale.conf"
 fi
 
+# On upgrade for now keep the current tmpfiles.d (as it used to be after patches),
+# drop in Forky
+if [ -n "$2" ] && dpkg --compare-versions "$2" lt 256~rc3-3 && [ ! -f "$DPKG_ROOT/etc/tmpfiles.d/tmp.conf" ]; then
+    mkdir -p "$DPKG_ROOT/etc/tmpfiles.d/"
+    echo 'D /tmp 1777 root root -' > "$DPKG_ROOT/etc/tmpfiles.d/tmp.conf"
+fi
+
 #DEBHELPER#
 
 if [ -n "$2" ]; then
