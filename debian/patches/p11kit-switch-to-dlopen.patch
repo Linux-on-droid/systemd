@@ -718,7 +718,7 @@ index 85dbb81..55728c2 100644
  }
  
 diff --git a/test/test-functions b/test/test-functions
-index da17bff..58257d4 100644
+index 097babf..dfb8db3 100644
 --- a/test/test-functions
 +++ b/test/test-functions
 @@ -1391,7 +1391,7 @@ install_missing_libraries() {

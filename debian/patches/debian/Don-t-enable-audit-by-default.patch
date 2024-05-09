@@ -29,7 +29,7 @@ index 160544a..7e6f175 100644
  
        <varlistentry>
 diff --git a/src/journal/journald-server.c b/src/journal/journald-server.c
-index a78e2c0..efeb50c 100644
+index 863575c..1b9b8e1 100644
 --- a/src/journal/journald-server.c
 +++ b/src/journal/journald-server.c
 @@ -2279,7 +2279,7 @@ int server_init(Server *s, const char *namespace) {
