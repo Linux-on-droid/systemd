@@ -338,4 +338,4 @@ ifeq (, $(filter nocheck, $(DEB_BUILD_OPTIONS)))
 endif
 
 %:
-	dh $@ --without autoreconf --buildsystem=meson
+	dh $@
