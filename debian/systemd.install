@@ -558,3 +558,5 @@ var/lib/systemd/
 ../extra/units/rc-local.service.d usr/lib/systemd/system/
 ../extra/units/systemd-localed.service.d usr/lib/systemd/system/
 ../extra/units/systemd-logind.service.d usr/lib/systemd/system/
+../extra/system.conf.d/10-coredump-debian.conf usr/lib/systemd/system.conf.d/
+../extra/sysctl.d/10-coredump-debian.conf usr/lib/sysctl.d/
