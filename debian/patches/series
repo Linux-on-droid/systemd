@@ -1,6 +1,5 @@
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
-debian/fsckd-daemon-for-inter-fsckd-communication.patch
 debian/Skip-filesystem-check-if-already-done-by-the-initram.patch
 debian/systemctl-do-not-shutdown-immediately-on-scheduled-shutdo.patch
 debian/localectl-disable-keymap-support.patch

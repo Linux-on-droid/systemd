@@ -44,12 +44,12 @@ index b4df9d2..78630bb 100644
  
          r = generator_write_blockdev_dependency(f, what);
 diff --git a/units/systemd-fsck-root.service.in b/units/systemd-fsck-root.service.in
-index ca9c7ce..27783a9 100644
+index ebe8262..d6335c7 100644
 --- a/units/systemd-fsck-root.service.in
 +++ b/units/systemd-fsck-root.service.in
-@@ -16,6 +16,7 @@ Before=local-fs.target shutdown.target
- Wants=systemd-fsckd.socket
- After=systemd-fsckd.socket
+@@ -14,6 +14,7 @@ DefaultDependencies=no
+ Conflicts=shutdown.target
+ Before=local-fs.target shutdown.target
  ConditionPathIsReadWrite=!/
 +ConditionPathExists=!/run/initramfs/fsck-root
  OnFailure=emergency.target
