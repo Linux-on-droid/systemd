@@ -1,2 +1,1 @@
-debian/Make-run-lock-tmpfs-an-API-fs.patch
 debian/localectl-disable-keymap-support.patch
