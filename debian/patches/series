@@ -1,7 +1,3 @@
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
 debian/localectl-disable-keymap-support.patch
-test-do-not-fail-if-mknod-fails-in-a-build-system.patch
-build-path-fix-SIGEGV-on-RISC-V.patch
-meson-copy-prefix-mapping-CFLAGS-when-building-BPF-object.patch
-meson-define-s390-for-s390x-when-building-BPF-objects.patch
