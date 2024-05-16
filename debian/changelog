@@ -1,3 +1,12 @@
+systemd (256~rc2-2) unstable; urgency=medium
+
+  * Build depend on dh-dlopenlibdeps and dynamically generate dlopen
+    dependencies
+  * Backport patches to fix journald asserts Compress=yes (Closes:
+    #1071201)
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 16 May 2024 17:40:43 +0100
+
 systemd (256~rc2-1) unstable; urgency=medium
 
   [ Luca Boccassi ]
