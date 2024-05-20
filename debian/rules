@@ -93,6 +93,7 @@ CONFFLAGS = \
 	-Dsysusers=true \
 	-Dinstall-tests=$(if $(filter noinsttest,$(DEB_BUILD_PROFILES)),false,true) \
 	-Dman=$(if $(filter nodoc,$(DEB_BUILD_PROFILES)),disabled,enabled) \
+	-Ddbus-interfaces-dir=$(if $(filter nodoc,$(DEB_BUILD_PROFILES)),no,yes) \
 	-Dtranslations=true \
 	-Dnss-myhostname=true \
 	-Dnss-mymachines=enabled \
