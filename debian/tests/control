@@ -128,6 +128,7 @@ Restrictions: needs-root, isolation-container, breaks-testbed
 
 Tests: upstream
 Depends: systemd-tests,
+  systemd-dev,
   systemd-journal-remote,
   systemd-container,
   systemd-coredump,
