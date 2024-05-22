@@ -1,5 +1,3 @@
 debian/Bring-tmpfiles.d-tmp.conf-in-line-with-Debian-defaul.patch
 debian/Make-run-lock-tmpfs-an-API-fs.patch
 debian/localectl-disable-keymap-support.patch
-journald-server-drop-invalid-assert.patch
-journald-server-drop-another-invalid-assert.patch
