@@ -82,7 +82,7 @@ Depends: systemd-sysv,
   libelf-dev,
   xserver-xorg-video-dummy,
   xserver-xorg,
-  gdm3 [!s390x],
+  gdm3 [!s390x !riscv64],
   cron,
   network-manager,
   busybox-static,
@@ -230,7 +230,7 @@ Tests: boot-smoke
 Depends: systemd-sysv,
   systemd-resolved,
   network-manager,
-  gdm3 [!s390x],
+  gdm3 [!s390x !riscv64],
   xserver-xorg-video-dummy,
 Restrictions: needs-root, isolation-container, allow-stderr, breaks-testbed
 
