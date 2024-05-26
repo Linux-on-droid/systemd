@@ -74,7 +74,6 @@ CONFFLAGS = \
 	-Dgnutls=disabled \
 	-Dlink-udev-shared=false \
 	-Dlink-systemctl-shared=false \
-	-Dbump-proc-sys-fs-nr-open=false \
 	-Dntp-servers="$(DEFAULT_NTP_SERVERS)" \
 	-Ddns-servers='' \
 	-Dsystem-uid-max=999 \
