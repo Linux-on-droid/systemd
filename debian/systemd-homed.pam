@@ -1,0 +1,16 @@
+# Integrate systemd-homed into PAM
+
+-auth [success=2 default=ignore] pam_systemd_home.so
+@include common-auth
+
+-account [success=2 default=ignore] pam_systemd_home.so
+@include common-account
+
+-password [success=2 default=ignore] pam_systemd_home.so
+@include common-password
+
+-session optional pam_systemd_home.so
+@include common-session-noninteractive
+
+-session optional pam_systemd_home.so
+@include common-session
