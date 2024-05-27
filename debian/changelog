@@ -1,3 +1,9 @@
+systemd (247.3-7+deb11u5) bullseye; urgency=medium
+
+  * Backport patches to fix build reproducibility
+
+ -- Luca Boccassi <bluca@debian.org>  Mon, 27 May 2024 14:02:03 +0100
+
 systemd (247.3-7+deb11u4) bullseye; urgency=medium
 
   * backport patches to fix a calendar spec calculation hang on DST change
