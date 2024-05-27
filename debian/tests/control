@@ -225,6 +225,8 @@ Depends: systemd-tests,
   openssh-client,
   openssh-server,
   polkitd,
+  open-iscsi,
+  tgt,
 Restrictions: needs-root, allow-stderr, isolation-machine
 
 Tests: boot-smoke
