@@ -139,8 +139,9 @@ class ServicesTest(unittest.TestCase):
             # all files in /tmp/ should get cleaned up on boot
             self.assertFalse(os.path.exists('/tmp/oldfile.test'))
         self.assertFalse(os.path.exists('/tmp/newfile.test'))
-        # files in /var/tmp/ older than 30d should get cleaned up
-        if not is_container:
+        # files in /var/tmp/ older than 30d should get cleaned up, unless legacy
+        # compat tmpfiles.d is installed
+        if not is_container and not os.path.exists('/etc/tmpfiles.d/tmp.conf'):
             self.assertFalse(os.path.exists('/var/tmp/oldfile.test'))
         self.assertTrue(os.path.exists('/var/tmp/newfile.test'))
 
