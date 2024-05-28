@@ -1,3 +1,10 @@
+systemd (256~rc3-4) unstable; urgency=medium
+
+  * autopkgtest: take into account compat tmp.conf in tmpfiles.d test.
+  * Backport patch to fix TEST-64-UDEV-STORAGE autopkgtest.
+
+ -- Luca Boccassi <bluca@debian.org>  Tue, 28 May 2024 12:11:36 +0100
+
 systemd (256~rc3-3) unstable; urgency=medium
 
   [ Zbigniew Jędrzejewski-Szmek ]
