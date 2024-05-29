@@ -62,6 +62,12 @@ if [ -n "$2" ] && dpkg --compare-versions "$2" lt 256~rc3-3 && [ ! -f "$DPKG_ROO
     echo 'D /tmp 1777 root root -' > "$DPKG_ROOT/etc/tmpfiles.d/tmp.conf"
 fi
 
+# We used to ship tmp.mount in /usr/share as an example, and some users link it in /etc/,
+# remove the link as a workaround until Trixie ships
+if [ -n "$2" ] && [ -L "$DPKG_ROOT/etc/systemd/system/tmp.mount" ] && [ "$(readlink "$DPKG_ROOT/etc/systemd/system/tmp.mount")" = "/usr/share/systemd/tmp.mount" ]; then
+    rm -f "$DPKG_ROOT/etc/systemd/system/tmp.mount"
+fi
+
 # Unless it's already running, ensure /tmp/ does not get overwritten by
 # the tmpfs from tmp.mount in case a unit is later activated that implicitly
 # depends on it (for example with PrivateTmp=yes) by runtime masking it
