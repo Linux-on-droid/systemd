@@ -1,3 +1,13 @@
+systemd (256~rc3-5) unstable; urgency=medium
+
+  * homed: fixup pam-auth-update file via trigger pam-auth-update assumes
+    nothing comes after a password module, but this is not true for
+    pam_systemd_home, which is a no-op for users not managed by homed.
+    Fixup common-password accordingly, using a trigger watching for pam-
+    auth-update files being installed.
+
+ -- Luca Boccassi <bluca@debian.org>  Wed, 29 May 2024 01:04:53 +0100
+
 systemd (256~rc3-4) unstable; urgency=medium
 
   * autopkgtest: take into account compat tmp.conf in tmpfiles.d test.
