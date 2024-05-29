@@ -16,9 +16,10 @@ systemd (256~rc3-3) unstable; urgency=medium
     to be explicitly ordered with After=run-lock.mount. The two known cases
     where this happens in the archive have a bug+MR filed already.
 
-  - On new installations, tmpfiles.d will now cleanup by default /tmp/ every
-    10 days, and /var/tmp/ every 30 days. The legacy behaviour can be configured
-    with a local override if needed:
+  - On new installations, tmpfiles.d will now cleanup by default files
+    that have not been changed or accessed on /tmp/ for 10 days, and /var/tmp/
+    for 30 days. The legacy behaviour can be configured with a local override
+    if needed:
 
     echo 'D /tmp 1777' > /etc/tmpfiles.d/tmp.conf
 
