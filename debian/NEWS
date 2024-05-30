@@ -9,6 +9,13 @@ systemd (256~rc3-3) unstable; urgency=medium
 
     touch /etc/systemd/system/tmp.mount
 
+    It is recommended to check /tmp/ for any leftover files before rebooting
+    after installing this update and manually cleaning up, as the directory
+    will longer be cleaned up automatically on boot, as it is overmounted. It
+    is always possible to remount the root filesystem in a local directory
+    and remove leftovers manually after rebooting, but this will not be done
+    automatically to avoid unintential removals.
+
   - /run/lock/ is no longer created with a patch before units start, but by
     a standard early-boot run-lock.mount unit that is ordered before
     local-fs.target. Any service needing to use /run/lock/ and running before
