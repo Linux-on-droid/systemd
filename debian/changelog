@@ -1,3 +1,14 @@
+systemd (256~rc3-6) unstable; urgency=medium
+
+  * NEWS: clarify tmpfiles.d entry (Closes: #1072155)
+  * Override false positive Lintian warning
+  * Add workaround for links to legacy /usr/share/systemd/tmp.mount
+    placeholder. Some users apparently link to the placeholder in
+    /usr/share/ so delete any such links, given we don't ship it anymore
+    (Closes: #1072187)
+
+ -- Luca Boccassi <bluca@debian.org>  Thu, 30 May 2024 18:11:19 +0100
+
 systemd (256~rc3-5) unstable; urgency=medium
 
   * homed: fixup pam-auth-update file via trigger pam-auth-update assumes
