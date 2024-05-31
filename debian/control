@@ -551,7 +551,7 @@ Description: simple UEFI boot manager - EFI binaries
  This package contains the EFI binaries.
 
 Package: systemd-ukify
-Build-Profiles: <!stage1>
+Build-Profiles: <!stage1 !pkg.systemd.noukify>
 Architecture: all
 Multi-Arch: foreign
 Depends: ${misc:Depends},
