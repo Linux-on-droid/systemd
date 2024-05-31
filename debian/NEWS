@@ -1,7 +1,8 @@
 systemd (256~rc3-3) unstable; urgency=medium
 
   - /tmp/ is now by default a tmpfs, via the tmp.mount unit provided upstream.
-    The previous setup can be retained simply by masking the unit locally with:
+    The old default setup can be retained simply by masking the unit locally
+    with (do not do this if you are defining /tmp/ manually in /etc/fstab):
 
     systemctl mask tmp.mount
 
