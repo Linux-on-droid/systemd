@@ -27,11 +27,11 @@ TEST_TIMEOUT_MULTIPLIER = "-t 10"
 # unnecessary rebuilds all the time.
 ifeq (, $(filter pkg.systemd.upstream, $(DEB_BUILD_PROFILES)))
     DH_MISSING ?= --fail-missing
-    GENSYMBOLS_LEVEL = 4
+    GENSYMBOLS_LEVEL ?= 4
     VERSION_TAG = $(DEB_VERSION)
 else
     DH_MISSING ?= --list-missing
-    GENSYMBOLS_LEVEL = 1
+    GENSYMBOLS_LEVEL ?= 1
     VERSION_TAG = $(DEB_VERSION_UPSTREAM)
 endif
 
