@@ -1,3 +1,15 @@
+systemd (256~rc3-7) unstable; urgency=medium
+
+  * NEWS: note that any leftover file in /tmp/ will be invisible due to
+    the tmpfs and other clarifications (Closes: #1072249)
+  * Add pkg.systemd.noukify profile. Will be useful for i386 reduced
+    builds
+  * d/rules: be more robust against non-existing dirs when deleting files
+  * Allow setting GENSYMBOLS_LEVEL from the environment. Needed when
+    building with llvm to work around #986746
+
+ -- Luca Boccassi <bluca@debian.org>  Sat, 01 Jun 2024 12:30:39 +0100
+
 systemd (256~rc3-6) unstable; urgency=medium
 
   * NEWS: clarify tmpfiles.d entry (Closes: #1072155)
