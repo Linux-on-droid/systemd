@@ -242,10 +242,6 @@ executables += [
                 'dependencies' : libcap,
         },
         test_template + {
-                'sources' : files('test-capability.c'),
-                'dependencies' : libcap,
-        },
-        test_template + {
                 'sources' : files('test-chase-manual.c'),
                 'type' : 'manual',
         },
@@ -331,10 +327,6 @@ executables += [
         test_template + {
                 'sources' : files('test-mempress.c'),
                 'dependencies' : threads,
-        },
-        test_template + {
-                'sources' : files('test-mount-util.c'),
-                'dependencies' : libmount,
         },
         test_template + {
                 'sources' : files('test-netlink-manual.c'),

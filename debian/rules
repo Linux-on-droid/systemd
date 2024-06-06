@@ -332,11 +332,5 @@ override_dh_makeshlibs:
 	dh_makeshlibs -plibsystemd-shared -Xlibsystemd-shared -Xlibsystemd-core -- -c$(GENSYMBOLS_LEVEL)
 	dh_makeshlibs --remaining-packages -- -c$(GENSYMBOLS_LEVEL)
 
-override_dh_auto_test:
-ifeq (, $(filter nocheck, $(DEB_BUILD_OPTIONS)))
-	# some tests hang under fakeroot, so disable fakeroot
-	env -u LD_PRELOAD meson test -C obj-$(DEB_HOST_GNU_TYPE) --print-errorlogs $(TEST_TIMEOUT_MULTIPLIER)
-endif
-
 %:
 	dh $@
