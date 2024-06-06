@@ -3110,8 +3110,7 @@ int main(int argc, char *argv[]) {
                                 goto finish;
                         }
                         if (r > 0) {
-                                log_full(LOG_CRIT, "Legacy cgroup v1 support selected. This is no longer supported. Will proceed anyway after 30s.");
-                                (void) usleep_safe(30 * USEC_PER_SEC);
+                                log_full(LOG_CRIT, "Legacy cgroup v1 support selected. This is no longer supported. Will proceed anyway after 0s.");
                         }
                 }
 
