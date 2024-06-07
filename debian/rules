@@ -20,6 +20,8 @@ endif
 
 TEST_TIMEOUT_MULTIPLIER = "-t 10"
 
+DEB_VERSION := $(shell dpkg-parsechangelog --show-field Version)
+
 # Fail on missing files and symbol changes on distro builds, but not if we
 # build/test upstream master. Also, don't put the debian revision in the version
 # tag when we build/test upstream as it doesn't have any meaning in that case
