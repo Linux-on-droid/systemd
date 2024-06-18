@@ -1,4 +1,4 @@
-systemd (256~rc3-7) unstable; urgency=medium
+systemd (256~rc3) unstable; urgency=medium
 
   * NEWS: note that any leftover file in /tmp/ will be invisible due to
     the tmpfs and other clarifications (Closes: #1072249)
